@@ -1,4 +1,6 @@
 # central place for configs
+import requests
+import os
 
 # general settings 
 
@@ -7,6 +9,9 @@ Use_VOICE  = False #toggle speech mode
 MEMORY_ENALED = True # toggle memory module
 
 # when setting an api key choose deepseek or openai 
+api_key = os.getenv("MY_API_KEY")
+url = f"https://api.example.com/data?param=value&apiKey={api_key}"
+response = requests.get(url)
 
 # evaluate the pros and cons ogf both of them and choose that one thta best fits your need 
 # settings.py - Define your work domains
