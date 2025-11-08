@@ -36,13 +36,17 @@ import threading
 import time
 from typing import Callable, Optional
 
-try:
-	from PIL import ImageGrab
-except Exception:  # Pillow may not be installed
-	ImageGrab = None  # type: ignore
+import tkinter as tk
+from tkinter import ttk
 
 try:
-	import sounddevice as sd
+	from PIL import ImageGrab
+	from PIL import ImageTk
+except Exception:  # Pillow may not be installed
+	ImageGrab = None  # type: ignore
+	ImageTk = None   # type: ignore
+
+try:
 	import numpy as np
 except Exception:  # sounddevice or numpy may not be installed
 	sd = None  # type: ignore
@@ -150,21 +154,133 @@ class SpiriWidget:
 			time.sleep(self.audio_interval)
 
 
+class SpiriGUI(tk.Tk):
+	"""A simple GUI window demonstrating the SpiriWidget capabilities.
+    
+	Shows live screen capture preview and audio levels in a window with
+	start/stop controls.
+	"""
+    
+	def __init__(self):
+		super().__init__()
+        
+		self.title("Spiri Widget Demo")
+		self.geometry("800x600")
+        
+		# Main content
+		self.content = ttk.Frame(self)
+		self.content.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+		# Preview area (shows latest screenshot)
+		self.preview = ttk.Label(self.content)
+		self.preview.pack(fill=tk.BOTH, expand=True)
+        
+		# Audio meter frame
+		meter_frame = ttk.Frame(self.content)
+		meter_frame.pack(fill=tk.X, pady=10)
+        
+		ttk.Label(meter_frame, text="Audio Level:").pack(side=tk.LEFT)
+		self.level_bar = ttk.Progressbar(
+			meter_frame, length=200, mode='determinate'
+		)
+		self.level_bar.pack(side=tk.LEFT, padx=5)
+        
+		# Controls frame
+		controls = ttk.Frame(self.content)
+		controls.pack(fill=tk.X, pady=10)
+        
+		self.start_btn = ttk.Button(
+			controls, text="Start", command=self._start
+		)
+		self.start_btn.pack(side=tk.LEFT, padx=5)
+        
+		self.stop_btn = ttk.Button(
+			controls, text="Stop", command=self._stop, state=tk.DISABLED
+		)
+		self.stop_btn.pack(side=tk.LEFT, padx=5)
+        
+		# Status labels
+		self.image_status = ttk.Label(controls, text="Screen: Unknown")
+		self.image_status.pack(side=tk.RIGHT, padx=5)
+		self.audio_status = ttk.Label(controls, text="Audio: Unknown")
+		self.audio_status.pack(side=tk.RIGHT, padx=5)
+        
+		self._last_preview: Optional[ImageTk.PhotoImage] = None
+		self.widget: Optional[SpiriWidget] = None
+    
+	def _on_image(self, img):
+		"""Called when SpiriWidget captures a new screenshot."""
+		# Scale down to fit our window (preserve aspect ratio)
+		w, h = img.size
+		scale = min(700/w, 500/h)
+		if scale < 1:
+			w, h = int(w*scale), int(h*scale)
+			img = img.resize((w, h))
+        
+		# Convert to tkinter-compatible image
+		self._last_preview = ImageTk.PhotoImage(img)
+		self.preview.configure(image=self._last_preview)
+    
+	def _on_audio(self, data, sr):
+		"""Called when SpiriWidget captures an audio snippet."""
+		if np is not None:
+			# Show RMS level (0-100)
+			rms = float(np.sqrt(np.mean(np.square(data))))
+			level = min(100, rms * 100)
+			self.level_bar['value'] = level
+    
+	def _start(self):
+		"""Start capture with status updates."""
+		self.widget = SpiriWidget(
+			image_callback=self._on_image,
+			audio_callback=self._on_audio,
+			image_interval=0.1,  # faster updates for demo
+			audio_interval=0.1,
+			audio_duration=0.05
+		)
+        
+		try:
+			self.widget.start()
+			self.start_btn.configure(state=tk.DISABLED)
+			self.stop_btn.configure(state=tk.NORMAL)
+            
+			# Update status labels based on which captures started
+			if self.widget._image_thread is not None:
+				self.image_status.configure(text="Screen: Running")
+			else:
+				self.image_status.configure(text="Screen: Failed")
+            
+			if self.widget._audio_thread is not None:
+				self.audio_status.configure(text="Audio: Running")
+			else:
+				self.audio_status.configure(text="Audio: Failed")
+                
+		except Exception as e:
+			self.widget = None
+			import tkinter.messagebox as mb
+			mb.showerror(
+				"Error",
+				f"Failed to start capture: {e}\n\n"
+				"Check that you have granted:\n"
+				"- Screen Recording permission\n"
+				"- Microphone permission\n"
+				"in System Settings → Privacy & Security"
+			)
+    
+	def _stop(self):
+		"""Stop capture and reset UI state."""
+		if self.widget:
+			self.widget.stop()
+			self.widget = None
+        
+		self.start_btn.configure(state=tk.NORMAL)
+		self.stop_btn.configure(state=tk.DISABLED)
+		self.image_status.configure(text="Screen: Stopped")
+		self.audio_status.configure(text="Audio: Stopped")
+		self.level_bar['value'] = 0
+
 if __name__ == '__main__':
-	# Quick demo: print sizes and shapes when running directly.
-	def _on_image(img):
-		print('captured image', img.size)
-
-	def _on_audio(data, sr):
-		print('captured audio', getattr(data, 'shape', None), 'sr=', sr)
-
-	w = SpiriWidget(image_callback=_on_image, audio_callback=_on_audio)
-	try:
-		print('Starting SpiriWidget demo. Press Ctrl-C to stop.')
-		w.start()
-		while True:
-			time.sleep(1.0)
-	except KeyboardInterrupt:
-		print('Stopping...')
-		w.stop()
+    # Run the GUI demo when the file is run directly
+    app = SpiriGUI()
+    app.mainloop()
 
