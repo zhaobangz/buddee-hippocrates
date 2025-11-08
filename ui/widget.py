@@ -206,7 +206,7 @@ class GUI(tk.Tk):
 		self.audio_status.pack(side=tk.RIGHT, padx=5)
         
 		self._last_preview: Optional[ImageTk.PhotoImage] = None
-		self.widget: Optional[SpiriWidget] = None
+		self.widget: Optional[Widget] = None
     
 	def _on_image(self, img):
 		"""Called when SpiriWidget captures a new screenshot."""
