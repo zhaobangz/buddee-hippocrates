@@ -1,6 +1,6 @@
 """UI widget: Siri-inspired visual + audio capture helper.
 
-This module provides a lightweight `SpiriWidget` that can:
+This module provides a lightweight `SiriWidget` that can:
 - capture periodic screenshots (uses Pillow ImageGrab on macOS/Windows)
 - capture short audio snippets (if `sounddevice` + `numpy` are installed)
 
@@ -20,7 +20,7 @@ Usage:
 	def on_audio(data, sr):
 		print('audio captured', data.shape, sr)
 
-	w = SpiriWidget(image_callback=on_image, audio_callback=on_audio)
+	w = SiriWidget(image_callback=on_image, audio_callback=on_audio)
 	w.start()
 	# ... later
 	w.stop()
@@ -53,7 +53,7 @@ except Exception:  # sounddevice or numpy may not be installed
 	np = None  # type: ignore
 
 
-class SpiriWidget:
+class Widget:
 	"""A small widget that can 'see' (screenshots) and 'hear' (audio snippets).
 
 	This class runs background threads for screenshot and audio capture and
@@ -154,7 +154,7 @@ class SpiriWidget:
 			time.sleep(self.audio_interval)
 
 
-class SpiriGUI(tk.Tk):
+class GUI(tk.Tk):
 	"""A simple GUI window demonstrating the SpiriWidget capabilities.
     
 	Shows live screen capture preview and audio levels in a window with
@@ -164,7 +164,7 @@ class SpiriGUI(tk.Tk):
 	def __init__(self):
 		super().__init__()
         
-		self.title("Spiri Widget Demo")
+		self.title("Widget Demo")
 		self.geometry("800x600")
         
 		# Main content
@@ -231,7 +231,7 @@ class SpiriGUI(tk.Tk):
     
 	def _start(self):
 		"""Start capture with status updates."""
-		self.widget = SpiriWidget(
+		self.widget = Widget(
 			image_callback=self._on_image,
 			audio_callback=self._on_audio,
 			image_interval=0.1,  # faster updates for demo
@@ -281,6 +281,6 @@ class SpiriGUI(tk.Tk):
 
 if __name__ == '__main__':
     # Run the GUI demo when the file is run directly
-    app = SpiriGUI()
+    app = GUI()
     app.mainloop()
 
