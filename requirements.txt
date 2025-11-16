@@ -4,3 +4,8 @@
 pillow
 sounddevice
 numpy
+requests
+google-search-results
+sumy
+nltk
+
