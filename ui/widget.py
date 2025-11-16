@@ -205,7 +205,7 @@ class GUI(tk.Tk):
 		self.audio_status = ttk.Label(controls, text="Audio: Unknown")
 		self.audio_status.pack(side=tk.RIGHT, padx=5)
         
-		self._last_preview: Optional[ImageTk.PhotoImage] = None
+		self._last_preview: Optional["ImageTk.PhotoImage"] = None
 		self.widget: Optional[Widget] = None
     
 	def _on_image(self, img):
