@@ -48,7 +48,7 @@ class WebSearch:
             if results:
                 if self.summarization:
                     # Use a summarization algorithm to condense the results into a shorter, more digestible form
-                    summary = summarize_results(self, results)
+                    summary = self.summarize_results(self, results)
                     self.search_results[query] = summary
                     return summary
                 else:
