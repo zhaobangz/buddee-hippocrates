@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import tkinter as tk
 from tkinter import ttk
@@ -45,8 +45,14 @@ try:
 except Exception:  # Pillow may not be installed
 	ImageGrab = None  # type: ignore
 	ImageTk = None   # type: ignore
+# type only so type checkers see photo image but runtime works when mageTk is None
+if TYPE_CHECKING:
+	from PIL.ImageTk import PhotoImage as PILPhotoImage 
+
+
 
 try:
+	import sounddevice as sd
 	import numpy as np
 except Exception:  # sounddevice or numpy may not be installed
 	sd = None  # type: ignore
