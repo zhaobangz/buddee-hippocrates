@@ -49,8 +49,6 @@ except Exception:  # Pillow may not be installed
 if TYPE_CHECKING:
 	from PIL.ImageTk import PhotoImage as PILPhotoImage 
 
-
-
 try:
 	import sounddevice as sd
 	import numpy as np
@@ -211,7 +209,7 @@ class GUI(tk.Tk):
 		self.audio_status = ttk.Label(controls, text="Audio: Unknown")
 		self.audio_status.pack(side=tk.RIGHT, padx=5)
         
-		self._last_preview: Optional[ImageTk.PhotoImage] = None
+		self._last_preview: Optional[tk.PhotoImage] = None
 		self.widget: Optional[Widget] = None
     
 	def _on_image(self, img):
