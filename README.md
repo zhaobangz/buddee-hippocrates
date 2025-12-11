@@ -2,15 +2,20 @@ Society will get more tech reliant and effcient with the new discoveries in AI e
 building this product to help me get some more work done. Simple tasks like booking flights home, or apply to job will become mere tasks for your virtual self. This will allow people to spend more time
 thinking and developing their human skills and all menial tasks will be completed by your virtual self! This is buddi!
 
-Arguments
-objective:
-What does this entire repository/project do? Help me understand the architecture.
-Output
+"buddi," is a personal AI assistant with a modular architecture. Here's a breakdown of its structure:
 
-Subagent codebase_investigator Finished
+Entry Point (main.py): This is where the application starts. It contains the main loop that gets user input, sends it to the agent for processing, and then delivers the response.
 
-Termination Reason:
- GOAL
+Core Logic (core/):
+
+agent.py: This is the heart of the assistant. The Agent class orchestrates the workflow. It uses a Large Language Model (LLM) to understand the user's intent.
+llm_manager.py: This module manages all interactions with the external LLM (DeepSeek), sending it prompts and receiving responses.
+memory.py: This provides the assistant with conversational memory, allowing it to recall previous parts of the conversation.
+Capabilities (tools/): This directory holds the various tools the agent can use. Each file represents a specific capability, such as browsing the web, searching for information, or managing files.
+
+Input/Output (input_output/): This part of the project handles how the user interacts with the assistant, with separate modules for text and speech input/output. This design cleanly separates the user interface from the core logic.
+
+In essence, when you provide input, main.py passes it to the Agent. The Agent uses the LLMManager to ask a powerful language model what to do. Based on the answer, it either generates a conversational reply or executes one of its tools to perform an action. The Memory module ensures the conversation is coherent over time
 
 Result:
 {
@@ -82,3 +87,4 @@ Result:
     }
   ]
 }
+
