@@ -9,6 +9,7 @@ Use_VOICE  = False #toggle speech mode
 MEMORY_ENALED = True # toggle memory module
 
 # when setting an api key choose deepseek or openai 
+# find a general pupose model to use for all operating systems 
 api_key = os.getenv("REDACTED_OPENROUTER_KEY")
 url = f"https://api.example.com/data?param=value&apiKey={api_key}"
 response = requests.get(url)
