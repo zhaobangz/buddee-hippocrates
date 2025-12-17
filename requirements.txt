@@ -9,3 +9,5 @@ google-search-results
 sumy
 nltk
 PIL
+pytesseract
+pyttsx3 
