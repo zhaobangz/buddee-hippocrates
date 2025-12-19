@@ -7,7 +7,7 @@ load_dotenv()
 
 class Config:
     # Try to get API key from environment variable first
-    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+    DEEPSEEK_API_KEY = os.getenv("put a general api key here")
     
     # Fallback to credentials.json if environment variable not set
     if not DEEPSEEK_API_KEY and os.path.exists("credentials.json"):

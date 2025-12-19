@@ -10,7 +10,7 @@ class LLMManager:
     def __init__(self,memory):
         self.memory = memory
         self.api_url = "https://api.deepseek.com/v1/chat/completions"
-        self.api_key = "your_api_key_here"
+        self.api_key = "your_api_key_here" # fix a micture of experts ai / general ai
 
         def ask_llm(self,user_input):
 
