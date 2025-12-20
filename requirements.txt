@@ -11,3 +11,8 @@ nltk
 PIL
 pytesseract
 pyttsx3 
+pyaudio
+speechrecognition
+pydub
+ffmpeg-python
+opencv-python
