@@ -1,18 +1,26 @@
-## Minimal optional dependencies for the SpiriWidget
-# Install with: pip install -r requirements.txt
-
-pillow
-sounddevice
-numpy
+# Core LLM and AI Libraries
+# Libraries for interacting with Large Language Models and other AI features.
+python-dotenv
 requests
-google-search-results
+transformers
+torch
+
+# Speech and Audio Processing
+# Libraries for handling voice input, text-to-speech, and audio manipulation.
+SpeechRecognition
+pyaudio
+pyttsx3
+sounddevice
+pydub
+numpy
+
+# UI, Vision, and Image Processing
+# Libraries for the graphical user interface and for processing images and screenshots.
+Pillow
+pytesseract
+
+# Tool-related Libraries
+# Dependencies for the custom tools like web search and summarization.
+google-search-python
 sumy
 nltk
-PIL
-pytesseract
-pyttsx3 
-pyaudio
-speechrecognition
-pydub
-ffmpeg-python
-opencv-python
