@@ -24,3 +24,7 @@ pytesseract
 google-search-python
 sumy
 nltk
+
+# Testing
+# Libraries for running tests.
+pytest
