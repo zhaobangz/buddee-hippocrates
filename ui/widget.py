@@ -317,7 +317,263 @@ class GUI(tk.Tk):
 		self.ocr_output.configure(state=tk.DISABLED)
 
 if __name__ == '__main__':
-    # Run the GUI demo when the file is run directly
-    app = GUI()
-    app.mainloop()
+	# Run the GUI demo when the file is run directly
+	# Provide an alternative: a Siri-like sidebar demo
+	import argparse
+
+	parser = argparse.ArgumentParser(description='Widget demos')
+	parser.add_argument('--sidebar', action='store_true', help='Run Siri-style sidebar demo')
+	args = parser.parse_args()
+
+	if args.sidebar:
+		class SiriSidebar(tk.Tk):
+			"""A frameless, translucent sidebar inspired by macOS Siri sidebar.
+
+			This is a lightweight approximation using Tkinter. It creates a
+			frameless window docked to the right edge of the screen with a
+			rounded background, a central microphone button, and a simple
+			animated waveform effect.
+			"""
+
+			def __init__(self, width: int = 360, height: int = 520, padding: int = 16):
+				super().__init__()
+				self.width = width
+				self.height = height
+				self.padding = padding
+
+				# Frameless, topmost window
+				self.overrideredirect(True)
+				try:
+					self.wm_attributes('-topmost', True)
+					# translucency (overall window alpha)
+					self.wm_attributes('-alpha', 0.96)
+					# macOS: allow transparent background color key
+					self.wm_attributes('-transparent', True)
+				except Exception:
+					# Some attributes may not be available on all platforms
+					pass
+
+				sw = self.winfo_screenwidth()
+				sh = self.winfo_screenheight()
+				# Dock near right edge, centered vertically
+				x = sw - self.width - 24
+				y = max(24, (sh - self.height) // 2)
+				self.geometry(f'{self.width}x{self.height}+{x}+{y}')
+
+				# Root frame with padding
+				self.config(bg='')
+				self.canvas = tk.Canvas(self, width=self.width, height=self.height, highlightthickness=0)
+				self.canvas.pack(fill=tk.BOTH, expand=True)
+
+				# Draw rounded rectangle background
+				radius = 20
+				bg_color = '#0f1724'  # dark bluish
+				self._draw_rounded_rect(0, 0, self.width, self.height, radius, fill=bg_color, outline='#21303d')
+
+				# Add small drag area and close button
+				self.canvas.create_text(self.width - 28, 18, text='✕', fill='#9aa8b3', font=('Helvetica', 12), tags='close')
+				self.canvas.tag_bind('close', '<Button-1>', lambda e: self.hide())
+
+				# Title / label
+				self.canvas.create_text(self.padding + 12, 20, anchor='w', text='Siri', fill='#e6eef6', font=('Helvetica', 14, 'bold'))
+
+				# Microphone button in center
+				self.mic_size = 96
+				cx = self.width // 2
+				cy = self.height // 2 - 20
+				self.mic_center = (cx, cy)
+				self._mic_bg = self.canvas.create_oval(
+					cx - self.mic_size//2, cy - self.mic_size//2,
+					cx + self.mic_size//2, cy + self.mic_size//2,
+					fill='#13232b', outline='#2b5363', width=2
+				)
+
+				# mic icon (simple text glyph)
+				self.canvas.create_text(cx, cy, text='🎤', font=('Helvetica', 28), fill='#9fe7ff')
+
+				# Animated waveform rings (canvas ovals)
+				self.rings = []
+				for i in range(3):
+					ring = self.canvas.create_oval(0,0,0,0, outline='#3fb2d6', width=2, state='hidden')
+					self.rings.append(ring)
+
+				# Quick action buttons below mic
+				btn_y = cy + self.mic_size//2 + 28
+				self._add_quick_button(cx - 80, btn_y, 'Notes')
+				self._add_quick_button(cx + 80, btn_y, 'Search')
+
+				# Bindings
+				self.canvas.tag_bind(self._mic_bg, '<Button-1>', lambda e: self._toggle_listen())
+				self._listening = False
+				self._anim_after = None
+
+				# Make draggable by dragging the title area
+				self._drag_data = {'x': 0, 'y': 0}
+				self.canvas.bind('<ButtonPress-1>', self._on_press)
+				self.canvas.bind('<B1-Motion>', self._on_drag)
+
+			def _draw_rounded_rect(self, x1, y1, x2, y2, r=25, **kwargs):
+				points = [x1+r, y1,
+						  x1+r, y1,
+						  x2-r, y1,
+						  x2-r, y1,
+						  x2, y1,
+						  x2, y1+r,
+						  x2, y1+r,
+						  x2, y2-r,
+						  x2, y2-r,
+						  x2, y2,
+						  x2-r, y2,
+						  x2-r, y2,
+						  x1+r, y2,
+						  x1+r, y2,
+						  x1, y2,
+						  x1, y2-r,
+						  x1, y2-r,
+						  x1, y1+r,
+						  x1, y1+r,
+						  x1, y1]
+				return self.canvas.create_polygon(points, smooth=True, **kwargs)
+
+			def _add_quick_button(self, cx, cy, label):
+				w, h = 100, 34
+				x1, y1 = cx - w//2, cy - h//2
+				rect = self.canvas.create_rectangle(x1, y1, x1+w, y1+h, fill='#13323b', outline='#2b4750')
+				text = self.canvas.create_text(cx, cy, text=label, fill='#cfeef9', font=('Helvetica', 11))
+				# simple hover effect
+				for tag in (rect, text):
+					self.canvas.tag_bind(tag, '<Enter>', lambda e, r=rect: self.canvas.itemconfigure(r, fill='#16454f'))
+					self.canvas.tag_bind(tag, '<Leave>', lambda e, r=rect: self.canvas.itemconfigure(r, fill='#13323b'))
+
+			def _on_press(self, event):
+				self._drag_data['x'] = event.x
+				self._drag_data['y'] = event.y
+
+			def _on_drag(self, event):
+				dx = event.x - self._drag_data['x']
+				dy = event.y - self._drag_data['y']
+				geom = self.geometry()
+				# parse geometry WxH+X+Y
+				try:
+					parts = geom.split('+')
+					base = parts[0]
+					x = int(parts[1]) + dx
+					y = int(parts[2]) + dy
+					self.geometry(f"{base}+{x}+{y}")
+				except Exception:
+					pass
+
+			def _toggle_listen(self):
+				self._listening = not self._listening
+				if self._listening:
+					self._start_rings()
+				else:
+					self._stop_rings()
+
+			def _start_rings(self):
+				self._ring_steps = [0, 8, 16]
+				for r in self.rings:
+					self.canvas.itemconfigure(r, state='normal')
+				self._animate_rings()
+
+			def _animate_rings(self):
+				# animate expanding rings
+				cx, cy = self.mic_center
+				maxr = self.mic_size
+				for i, ring in enumerate(self.rings):
+					step = (self._ring_steps[i] + 2) % (maxr + 20)
+					self._ring_steps[i] = step
+					r = 30 + step
+					self.canvas.coords(ring, cx - r, cy - r, cx + r, cy + r)
+					alpha = max(0, 1.0 - (r / (maxr + 40)))
+					color = self._blend_color('#3fb2d6', '#0f1724', alpha)
+					try:
+						self.canvas.itemconfigure(ring, outline=color)
+					except Exception:
+						pass
+
+				if self._listening:
+					self._anim_after = self.after(70, self._animate_rings)
+
+			def _stop_rings(self):
+				if self._anim_after:
+					self.after_cancel(self._anim_after)
+					self._anim_after = None
+				for r in self.rings:
+					self.canvas.itemconfigure(r, state='hidden')
+
+			def _blend_color(self, fg: str, bg: str, alpha: float) -> str:
+				# Simple hex color blend fg over bg with alpha
+				try:
+					fg = fg.lstrip('#')
+					bg = bg.lstrip('#')
+					fr = int(fg[0:2], 16)
+					fg_ = int(fg[2:4], 16)
+					fb = int(fg[4:6], 16)
+					br = int(bg[0:2], 16)
+					bg_ = int(bg[2:4], 16)
+					bb = int(bg[4:6], 16)
+					r = int(fr * alpha + br * (1 - alpha))
+					g = int(fg_ * alpha + bg_ * (1 - alpha))
+					b = int(fb * alpha + bb * (1 - alpha))
+					return f'#{r:02x}{g:02x}{b:02x}'
+				except Exception:
+					return fg
+
+			def show(self):
+				# simple slide-in animation from right
+				sw = self.winfo_screenwidth()
+				target_x = sw - self.width - 24
+				geom = self.geometry()
+				parts = geom.split('+')
+				base = parts[0]
+				try:
+					cur_x = int(parts[1])
+					y = int(parts[2])
+				except Exception:
+					cur_x = sw
+					y = int((self.winfo_screenheight() - self.height) // 2)
+
+				def step():
+					nonlocal cur_x
+					if cur_x > target_x:
+						cur_x = max(target_x, cur_x - 40)
+						self.geometry(f"{base}+{cur_x}+{y}")
+						self.after(10, step)
+
+				step()
+
+			def hide(self):
+				# slide-out then destroy
+				sw = self.winfo_screenwidth()
+				geom = self.geometry()
+				parts = geom.split('+')
+				base = parts[0]
+				try:
+					cur_x = int(parts[1])
+					y = int(parts[2])
+				except Exception:
+					cur_x = sw - self.width
+					y = int((self.winfo_screenheight() - self.height) // 2)
+
+				def step():
+					nonlocal cur_x
+					if cur_x < sw:
+						cur_x = min(sw + 10, cur_x + 40)
+						self.geometry(f"{base}+{cur_x}+{y}")
+						self.after(10, step)
+					else:
+						try:
+							self.destroy()
+						except Exception:
+							pass
+
+				step()
+
+		app = SiriSidebar()
+		app.show()
+		app.mainloop()
+	else:
+		app = GUI()
+		app.mainloop()
 
