@@ -326,7 +326,7 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	if args.sidebar:
-		class SiriSidebar(tk.Tk):
+		class Sidebar(tk.Tk):
 			"""A frameless, translucent sidebar inspired by macOS Siri sidebar.
 
 			This is a lightweight approximation using Tkinter. It creates a
@@ -375,7 +375,7 @@ if __name__ == '__main__':
 				self.canvas.tag_bind('close', '<Button-1>', lambda e: self.hide())
 
 				# Title / label
-				self.canvas.create_text(self.padding + 12, 20, anchor='w', text='Siri', fill='#e6eef6', font=('Helvetica', 14, 'bold'))
+				self.canvas.create_text(self.padding + 12, 20, anchor='w', text='Buddi', fill='#e6eef6', font=('Times New Roman', 14, 'bold'))
 
 				# Microphone button in center
 				self.mic_size = 96
@@ -570,9 +570,32 @@ if __name__ == '__main__':
 
 				step()
 
-		app = SiriSidebar()
+		app = Sidebar()
+		# Try to start the agent perception if an agent exists
+		perception_started = False
+		try:
+			import core.agent as core_agent
+			if hasattr(core_agent, 'agent'):
+				try:
+					core_agent.agent.start_perception()
+					perception_started = True
+				except Exception:
+					perception_started = False
+		except Exception:
+			perception_started = False
+
 		app.show()
-		app.mainloop()
+		try:
+			app.mainloop()
+		finally:
+			# Stop perception if we started it
+			if perception_started:
+				try:
+					import core.agent as core_agent
+					if hasattr(core_agent, 'agent'):
+						core_agent.agent.stop_perception()
+				except Exception:
+					pass
 	else:
 		app = GUI()
 		app.mainloop()

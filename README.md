@@ -57,3 +57,36 @@ To run the assistant, execute the main script from the project root:
 ```bash
 python3 main.py
 ```
+
+## Environment variables (examples)
+
+Configure behavior and optional features using environment variables. Example:
+
+```bash
+# LLM / provider
+export LLM_PROVIDER=deepseek
+export LLM_API_KEY="your_llm_api_key_here"
+export LLM_API_URL="https://api.deepseek.com/v1/chat/completions"
+
+# Enable perception features (optional; require optional deps and OS permissions)
+export ENABLE_SCREEN_CAPTURE=True   # requires Pillow
+export ENABLE_OCR=True              # requires pytesseract + tesseract engine
+export ENABLE_AUDIO=True            # requires sounddevice + numpy
+
+# Memory and voice
+export MEMORY_ENABLED=True
+export USE_VOICE=False
+
+# Optional: persist file for memory
+export MEMORY_PERSIST_FILE=memory.json
+
+# Run the main assistant
+python3 main.py
+
+# Or run the sidebar UI demo
+python3 ui/widget.py --sidebar
+```
+
+Notes:
+- On macOS you must grant Screen Recording and Microphone permissions for screen/audio capture.
+- Keep API keys out of git; use `config/credentials.json` or environment variables.
