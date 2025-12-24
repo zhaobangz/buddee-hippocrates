@@ -4,42 +4,61 @@ from core.llm_manager import LLMManager
 from core.memory import Memory
 from core.config import Config
 from tools import browser, system, search
-import speech_recognition as sr
-import pyttsx3
 
-class Agent: 
+try:
+    import speech_recognition as sr
+except Exception:
+    sr = None
+
+try:
+    import pyttsx3
+except Exception:
+    pyttsx3 = None
+
+
+class Agent:
     def __init__(self):
-        self.memory = Memory() if Config.Memory_Enabled else None
+        # Memory (persistent) if enabled
+        self.memory = Memory(max_history=Config.MAX_MEMORY_HISTORY, persist_file=Config.MEMORY_PERSIST_FILE) if Config.MEMORY_ENABLED else None
+
+        # LLM manager—pass memory so the manager can include context
         self.llm_manager = LLMManager(self.memory)
-        self.recognizer = sr.Recognizer() if Config.USE_VOICE else None 
-        self.tts_engine = pyttsx3.init() if Config.USE_VOICE else None 
+
+        # Optional voice stack
+        self.recognizer = sr.Recognizer() if (Config.USE_VOICE and sr is not None) else None
+        self.tts_engine = pyttsx3.init() if (Config.USE_VOICE and pyttsx3 is not None) else None
 
         if Config.USE_VOICE and self.tts_engine:
-            #set voice properties 
-            voices = self.tts_engine.getProperty('voices')
-            self.tts_engine.setProperty('voice', voices[0].id) #use of the first avaiable voice 
-            self.tts_engine.setProperty('rate', 150) # speed percent
+            try:
+                voices = self.tts_engine.getProperty('voices')
+                if voices:
+                    self.tts_engine.setProperty('voice', voices[0].id)
+                self.tts_engine.setProperty('rate', 150)
+            except Exception:
+                pass
 
     def listen(self):
         """Listen for voice input"""
         if not self.recognizer:
             return None
-        
-        with sr.Microphone() as source:
-            print("f{Config.ASSISTANT_NAME} is listening... ")
-            self.recognizer.adjust_for_ambient_noise(source)
 
-            try:
-                audio = self.recognizer.listen(source, timeout = 5)
-                text = self.recognizer.recognize_google(audio)
-                print(f"You said:{text}")
-                return text
-            except sr.UnknownValueError:
-                return "Sorry, I did not catch that."
-            except sr.RequestError:
-                return "Sorry, my speech service is down."
-            except sr.WaitTimeoutError:
-                return None
+        try:
+            with sr.Microphone() as source:
+                print(f"{Config.ASSISTANT_NAME} is listening...")
+                self.recognizer.adjust_for_ambient_noise(source)
+                try:
+                    audio = self.recognizer.listen(source, timeout=5)
+                    text = self.recognizer.recognize_google(audio)
+                    print(f"You said: {text}")
+                    return text
+                except sr.UnknownValueError:
+                    return "Sorry, I did not catch that."
+                except sr.RequestError:
+                    return "Sorry, my speech service is down."
+                except sr.WaitTimeoutError:
+                    return None
+        except Exception:
+            return None
             
     def speak(self, text):
         """convert text to speech"""
@@ -106,7 +125,71 @@ class Agent:
             
         else:  # general_query or unknown
             response = self.llm_manager.ask_llm(ui)
-            self.memory.remember(ui, response)
+            try:
+                if self.memory:
+                    self.memory.remember(ui, response)
+            except Exception:
+                pass
             return response
 
-agent =Agent()
+    # Perception helpers (optional)
+    def start_perception(self):
+        """Start screen/audio perception if enabled in Config.
+
+        This will create a `ui.widget.Widget` instance (if available) that
+        can run background capture threads. We keep it optional to avoid
+        importing GUI/audio libs when not needed.
+        """
+        if not (Config.ENABLE_SCREEN_CAPTURE or Config.ENABLE_AUDIO):
+            return None
+
+        try:
+            from ui.widget import Widget
+        except Exception:
+            return None
+
+        self._perception_widget = Widget(
+            image_callback=(self._on_image if Config.ENABLE_SCREEN_CAPTURE else None),
+            audio_callback=(self._on_audio if Config.ENABLE_AUDIO else None),
+            ocr_callback=(self._on_ocr if Config.ENABLE_OCR else None),
+            image_interval=1.0,
+            audio_interval=1.0,
+            audio_duration=0.5,
+        )
+        try:
+            self._perception_widget.start()
+            return self._perception_widget
+        except Exception:
+            return None
+
+    def stop_perception(self):
+        try:
+            if getattr(self, '_perception_widget', None):
+                self._perception_widget.stop()
+                self._perception_widget = None
+        except Exception:
+            pass
+
+    def _on_image(self, img):
+        # optional hook: store small preview into memory or pass to LLM
+        try:
+            if self.memory:
+                self.memory.remember('screenshot', f'<image {img.size}>')
+        except Exception:
+            pass
+
+    def _on_audio(self, data, sr):
+        try:
+            if self.memory:
+                self.memory.remember('audio_snippet', f'<audio {len(data)} samples>')
+        except Exception:
+            pass
+
+    def _on_ocr(self, text: str):
+        try:
+            if self.memory:
+                self.memory.remember('ocr', text)
+        except Exception:
+            pass
+
+agent = Agent()

@@ -1,21 +1,18 @@
-# central place for configs
-import requests
+"""Project-level optional settings.
+
+This file provides a safe, editable set of defaults for developer convenience.
+Runtime configuration should come from environment variables or
+`config/credentials.json` for secrets.
+"""
+
 import os
 
-# general settings 
+# Human-friendly defaults
+ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Buddi")
+USE_VOICE = os.getenv("USE_VOICE", "False").lower() == "true"
+MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "True").lower() == "true"
 
-Assitant_name = "Buddi"
-Use_VOICE  = False #toggle speech mode 
-MEMORY_ENALED = True # toggle memory module
-
-# when setting an api key choose deepseek or openai 
-# find a general pupose model to use for all operating systems 
-api_key = os.getenv("REDACTED_OPENROUTER_KEY")
-url = f"https://api.example.com/data?param=value&apiKey={api_key}"
-response = requests.get(url)
-
-# evaluate the pros and cons ogf both of them and choose that one thta best fits your need 
-# settings.py - Define your work domains
+# Work domain hints the assistant can use (example only)
 WORK_DOMAINS = {
     "coding": ["debugging", "code review", "algorithm design", "documentation"],
     "writing": ["emails", "reports", "documentation", "presentations"],
@@ -23,4 +20,7 @@ WORK_DOMAINS = {
     "planning": ["task management", "scheduling", "priority setting"],
     "communication": ["email drafting", "meeting notes", "follow-ups"]
 }
+
+# NOTE: Do not hard-code API keys here. Use environment variables or
+# `config/credentials.json` (gitignored) to store secrets.
 
