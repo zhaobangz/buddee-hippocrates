@@ -9,6 +9,17 @@ import time
 def main():
     agent = Agent()
     print(f"{Config.ASSISTANT_NAME} is ready!")
+
+    # Start optional perception (screenshots / audio) if enabled in config
+    try:
+        if Config.ENABLE_SCREEN_CAPTURE or Config.ENABLE_AUDIO:
+            started = agent.start_perception()
+            if started:
+                print("Perception: started background capture (screenshots/audio)")
+            else:
+                print("Perception: unavailable or failed to start")
+    except Exception:
+        print("Perception: error starting perception (check optional dependencies and permissions)")
     if Config.USE_VOICE:
         print("Voice mode enabled. You may speak now")
 
@@ -58,3 +69,9 @@ if __name__ == "__main__":
         # Clean up resources
         if Config.USE_VOICE:
             speech_output.stop()
+        # Stop perception if it was started
+        try:
+            # If this module created an agent earlier, stop its perception
+            Agent.stop_perception()
+        except Exception:
+            pass
