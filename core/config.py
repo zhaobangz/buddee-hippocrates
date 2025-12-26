@@ -49,4 +49,9 @@ class Config:
 
     # Convenience flags
     USE_VOICE = os.getenv("USE_VOICE", "False").lower() == "true"
+    # Device preferences
+    # Set FORCE_CPU=True to prevent GPU usage even when available
+    FORCE_CPU = os.getenv("FORCE_CPU", "False").lower() == "true"
+    # PREFERRED_DEVICE can be 'auto', 'cuda', 'mps', or 'cpu'
+    PREFERRED_DEVICE = os.getenv("PREFERRED_DEVICE", "auto").lower()
 

@@ -9,6 +9,18 @@ import requests
 from typing import Optional
 from core.config import Config
 
+from core.device import get_torch_device
+
+try:
+    import transformers
+except Exception:
+    transformers = None
+
+try:
+    import torch
+except Exception:
+    torch = None
+
 
 class LLMManager:
     def __init__(self, memory=None):
@@ -43,6 +55,27 @@ class LLMManager:
         This implementation is generic and expects a DeepSeek-like API but can
         be adapted by changing `Config` values.
         """
+        # If configured to use a local model, try to run locally (and prefer GPU)
+        if Config.LLM_PROVIDER and Config.LLM_PROVIDER.lower() == 'local':
+            # require transformers to be installed
+            if transformers is None:
+                return "Local model requested but the 'transformers' package is not installed."
+
+            # Try to load a local model and run on preferred device
+            device_str, device_index = get_torch_device(Config.PREFERRED_DEVICE, Config.FORCE_CPU)
+            try:
+                # use pipeline for text-generation if available
+                pipe = transformers.pipeline('text-generation', model=self.model, device=device_index)
+                out = pipe(user_input, max_length=512, do_sample=False)
+                if isinstance(out, list) and out:
+                    return out[0].get('generated_text', str(out[0]))
+                return str(out)
+            except Exception as e:
+                # Fall back to remote API if configured
+                if not self.api_key or not self.api_url:
+                    return f"Failed to run local model on device {device_str}: {e}"
+                # otherwise continue to try remote provider
+
         if not self.api_key or not self.api_url:
             return "LLM is not configured (missing API key or URL)."
 
