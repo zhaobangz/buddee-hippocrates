@@ -4,6 +4,10 @@ from core.llm_manager import LLMManager
 from core.memory import Memory
 from core.config import Config
 from tools import browser, system, search
+import os
+from typing import Optional
+
+# File manager will be imported lazily where used to avoid heavy imports at startup
 
 try:
     import speech_recognition as sr
@@ -98,6 +102,48 @@ class Agent:
             return "I didn't hear anythging. Please Repeat it?"
 
         intent = self.detect_intent(ui)
+        # quick heuristic: if user asks to organize files, handle locally
+        lower = ui.lower()
+        if any(k in lower for k in ("organize", "sort", "tidy up", "clean up")):
+            # determine target folder
+            target: Optional[str] = None
+            for name in ("downloads", "desktop", "documents", "pictures", "music", "videos"):
+                if name in lower:
+                    target = os.path.expanduser(f"~/{name.capitalize()}") if name != 'downloads' else os.path.expanduser('~/Downloads')
+                    break
+            # allow explicit path
+            if target is None:
+                import re
+                m = re.search(r'(/[^\s]+)', ui)
+                if m:
+                    target = os.path.expanduser(m.group(1))
+
+            # choose strategy
+            strategy = 'category'
+            if 'by date' in lower or 'by month' in lower or 'by year' in lower:
+                strategy = 'date'
+            elif 'by extension' in lower or 'by ext' in lower or 'by file type' in lower:
+                strategy = 'extension'
+            elif 'by type' in lower or 'by category' in lower:
+                strategy = 'category'
+
+            try:
+                from tools.file_manager import FileManager
+                fm = FileManager()
+                if not target:
+                    return "Which folder would you like me to organize? (e.g. Downloads, Desktop, or a full path)"
+
+                if strategy == 'extension':
+                    actions = fm.organize_by_extension(target, dry_run=False)
+                elif strategy == 'date':
+                    actions = fm.organize_by_date(target, dry_run=False)
+                else:
+                    actions = fm.organize_by_category(target, dry_run=False)
+
+                count = len(actions)
+                return f"Organized {count} files in {target} using strategy '{strategy}'."
+            except Exception as e:
+                return f"Failed to organize files: {e}"
         
         if "open_website" in intent:
             # Extract URL from input or use default
