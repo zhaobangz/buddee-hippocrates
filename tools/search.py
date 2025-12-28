@@ -1,5 +1,5 @@
 import requests
-from google import search as google_search
+from google import google_search as search
 from core.config import Config
 
 from sumy.parsers.plaintext import PlaintextParser
