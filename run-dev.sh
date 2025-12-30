@@ -12,16 +12,32 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VENV_DIR="$ROOT_DIR/venv"
 
+# Detect whether the script is being sourced. When sourced, we can activate
+# the venv in the caller's shell. When executed, we perform actions in a
+# subshell and cannot change the parent shell environment.
+SCRIPT_SOURCED=0
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  SCRIPT_SOURCED=1
+fi
+
 function create_venv() {
   if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
     echo "Created venv at $VENV_DIR"
   fi
-  # Activate and upgrade pip
-  # shellcheck disable=SC1090
-  source "$VENV_DIR/bin/activate"
-  pip install --upgrade pip
-  pip install -r "$ROOT_DIR/requirements.txt"
+  # Install requirements using the venv's python
+  "$VENV_DIR/bin/python" -m pip install --upgrade pip
+  "$VENV_DIR/bin/pip" install -r "$ROOT_DIR/requirements.txt"
+
+  # If the user sourced this script, auto-activate the venv in their shell
+  if [ "$SCRIPT_SOURCED" -eq 1 ]; then
+    # shellcheck disable=SC1090
+    source "$VENV_DIR/bin/activate"
+    echo "Virtualenv activated in current shell."
+  else
+    echo "Virtualenv created at $VENV_DIR. To activate it in your shell run:"
+    echo "  source $VENV_DIR/bin/activate"
+  fi
 }
 
 function run_check() {
@@ -59,6 +75,22 @@ while [ ${#@} -gt 0 ]; do
   case "$1" in
     --install)
       create_venv
+      shift
+      ;;
+    --activate)
+      if [ -f "$VENV_DIR/bin/activate" ]; then
+        # If the script is being sourced, activate the venv in current shell.
+        if [ "$SCRIPT_SOURCED" -eq 1 ]; then
+          # shellcheck disable=SC1090
+          source "$VENV_DIR/bin/activate"
+          echo "Activated venv in current shell."
+        else
+          echo "To activate the venv in your shell, run:"
+          echo "  source $VENV_DIR/bin/activate"
+        fi
+      else
+        echo "No venv found. Run './run-dev.sh --install' first."
+      fi
       shift
       ;;
     --check)
