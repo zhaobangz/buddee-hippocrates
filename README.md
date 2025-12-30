@@ -58,6 +58,41 @@ To run the assistant, execute the main script from the project root:
 python3 main.py
 ```
 
+## Dev helper scripts
+
+I added `run-dev.sh` and `scripts/startup_check.py` to make development easier.
+
+- Create venv and install deps (and activate if you `source` the script):
+
+```bash
+# Create venv and install packages
+./run-dev.sh --install
+
+# To activate the venv in your current shell (so `python` refers to the venv), source the script instead:
+source ./run-dev.sh --activate
+```
+
+- Run a startup check to validate optional dependencies and device availability:
+
+```bash
+./run-dev.sh --check
+```
+
+- Run the assistant or the sidebar demo (uses venv python if present):
+
+```bash
+./run-dev.sh --run-main
+./run-dev.sh --run-sidebar
+```
+
+Notes:
+- If you used `./run-dev.sh --install` but you didn't `source` it, activate the venv in your shell manually with:
+
+```bash
+source ./venv/bin/activate
+```
+
+
 ## Environment variables (examples)
 
 Configure behavior and optional features using environment variables. Example:

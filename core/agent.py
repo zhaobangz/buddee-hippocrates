@@ -41,6 +41,9 @@ class Agent:
             except Exception:
                 pass
 
+        # pending organize operation awaiting user confirmation
+        self._pending_organize = None
+
     def listen(self):
         """Listen for voice input"""
         if not self.recognizer:
@@ -101,6 +104,29 @@ class Agent:
         if not ui or ui.strip() == "":
             return "I didn't hear anythging. Please Repeat it?"
 
+        # If we have a pending organize operation, treat 'yes'/'no' replies as confirmation
+        if self._pending_organize is not None:
+            lower = ui.strip().lower()
+            if lower in ('yes', 'y', 'confirm', 'ok', 'sure'):
+                pending = self._pending_organize
+                self._pending_organize = None
+                try:
+                    fm = pending['fm']
+                    strategy = pending['strategy']
+                    target = pending['target']
+                    if strategy == 'extension':
+                        actions = fm.organize_by_extension(target, dry_run=False)
+                    elif strategy == 'date':
+                        actions = fm.organize_by_date(target, dry_run=False)
+                    else:
+                        actions = fm.organize_by_category(target, dry_run=False)
+                    return f"Organized {len(actions)} files in {target} using strategy '{strategy}'."
+                except Exception as e:
+                    return f"Failed to organize files: {e}"
+            else:
+                self._pending_organize = None
+                return "Okay — I won't organize files."
+
         intent = self.detect_intent(ui)
         # quick heuristic: if user asks to organize files, handle locally
         lower = ui.lower()
@@ -133,17 +159,20 @@ class Agent:
                 if not target:
                     return "Which folder would you like me to organize? (e.g. Downloads, Desktop, or a full path)"
 
+                # perform a dry-run first and ask for confirmation
                 if strategy == 'extension':
-                    actions = fm.organize_by_extension(target, dry_run=False)
+                    actions = fm.organize_by_extension(target, dry_run=True)
                 elif strategy == 'date':
-                    actions = fm.organize_by_date(target, dry_run=False)
+                    actions = fm.organize_by_date(target, dry_run=True)
                 else:
-                    actions = fm.organize_by_category(target, dry_run=False)
+                    actions = fm.organize_by_category(target, dry_run=True)
 
                 count = len(actions)
-                return f"Organized {count} files in {target} using strategy '{strategy}'."
+                # store pending operation for confirmation
+                self._pending_organize = {'fm': fm, 'target': target, 'strategy': strategy, 'actions': actions}
+                return f"I found {count} files to organize in {target} using strategy '{strategy}'. Shall I proceed? (yes/no)"
             except Exception as e:
-                return f"Failed to organize files: {e}"
+                return f"Failed to plan organization: {e}"
         
         if "open_website" in intent:
             # Extract URL from input or use default
