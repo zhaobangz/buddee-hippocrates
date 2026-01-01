@@ -10,7 +10,7 @@ from typing import Optional
 # File manager will be imported lazily where used to avoid heavy imports at startup
 
 try:
-    import speech_recognition as sr
+    import tools as sr
 except Exception:
     sr = None
 
