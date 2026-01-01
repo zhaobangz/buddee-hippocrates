@@ -10,7 +10,7 @@ from typing import Optional
 # File manager will be imported lazily where used to avoid heavy imports at startup
 
 try:
-    import tools as sr
+    import speech_recognition as sr
 except Exception:
     sr = None
 
@@ -102,7 +102,7 @@ class Agent:
     def handle(self, ui):
         """process user input and return the appropriate response"""
         if not ui or ui.strip() == "":
-            return "I didn't hear anythging. Please Repeat it?"
+            return "I didn't hear anything. Please repeat it."
 
         # If we have a pending organize operation, treat 'yes'/'no' replies as confirmation
         if self._pending_organize is not None:
