@@ -21,7 +21,9 @@ pytesseract
 
 # Tool-related Libraries
 # Dependencies for the custom tools like web search and summarization.
-google-search-python
+google-api-python-client
+# Alternative: serpapi (requires API key) - uncomment if you prefer
+# serpapi
 sumy
 nltk
 
