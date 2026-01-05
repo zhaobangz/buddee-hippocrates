@@ -2,6 +2,8 @@
 
 buddi is a personal AI assistant designed to act as a "virtual twin," capable of understanding your screen, listening to your voice, and performing tasks on your computer. It uses a Large Language Model (LLM) to interpret natural language commands and execute them using a modular set of tools.
 
+Don't you hate doing repetitive tasks that a computer should have done for you like apply for internships that match your linkedIn profile, filling out excel sheets with data on paper, and following up with a logical line of questions when attempting to accomplish a task. 
+
 ## Features
 
 *   **Conversational AI:** Engages in coherent conversations using an external LLM (e.g., DeepSeek) with persistent memory.
