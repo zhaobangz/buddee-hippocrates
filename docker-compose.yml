@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    container_name: buddi_app
+    env_file: .env
+    volumes:
+      - ./:/app:delegated
+    command: ["python", "main.py"]
+    restart: unless-stopped
