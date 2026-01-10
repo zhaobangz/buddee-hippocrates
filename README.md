@@ -60,6 +60,31 @@ To run the assistant, execute the main script from the project root:
 python3 main.py
 ```
 
+## Docker
+
+Use Docker to ensure a consistent environment for all contributors.
+
+- Copy `.env.example` to `.env` and adjust values as needed.
+- Build and run with docker-compose:
+
+```bash
+docker-compose up --build -d
+```
+
+- Attach a shell to the running container:
+
+```bash
+docker-compose exec app bash
+```
+
+- Stop and remove containers:
+
+```bash
+docker-compose down
+```
+
+You can also use the helper script `run-dev-docker.sh` to start the service in the foreground for development.
+
 ## Dev helper scripts
 
 I added `run-dev.sh` and `scripts/startup_check.py` to make development easier.
