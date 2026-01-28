@@ -1,5 +1,4 @@
 """Startup check for Buddi: verifies optional dependencies and device availability.
-
 Run this script to get a quick report of what's installed and whether GPU
 or other optional features look usable.
 """

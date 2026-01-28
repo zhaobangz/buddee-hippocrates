@@ -53,7 +53,9 @@ def save_input_history(history_file = ".input-history"):
             for i in range(1, readline.get_current_history_length() +1):
                 f.write(readline.get_history_item(i) + '\n')
     except:
-        pass
+        for e in Exception:
+            print (f"file isn';t saved correectly {e}, please try again")
+
 
 
 ##initiaize input history on module load 
