@@ -2,24 +2,32 @@
 # takes a user input, process the information -> run through the tools and gives an output 
 from core.agent import Agent
 from core.config import Config 
+from core.tracing import setup_tracing, get_tracer, shutdown_tracing
 from input_output.text_input import get_text_input, speech_input 
 from input_output.text_output import send_text_output, speech_output 
 import time 
 
-def main():
-    agent = Agent()
-    print(f"{Config.ASSISTANT_NAME} is ready!")
+# Initialize tracing
+setup_tracing(service_name="buddi-agent")
+tracer = get_tracer(__name__) 
 
-    # Start optional perception (screenshots / audio) if enabled in config
-    try:
-        if Config.ENABLE_SCREEN_CAPTURE or Config.ENABLE_AUDIO:
-            started = agent.start_perception()
-            if started:
-                print("Perception: started background capture (screenshots/audio)")
-            else:
-                print("Perception: unavailable or failed to start")
-    except Exception:
-        print("Perception: error starting perception (check optional dependencies and permissions)")
+def main():
+    with tracer.start_as_current_span("main") as span:
+        agent = Agent()
+        span.set_attribute("agent.initialized", True)
+        print(f"{Config.ASSISTANT_NAME} is ready!")
+
+        # Start optional perception (screenshots / audio) if enabled in config
+        try:
+            if Config.ENABLE_SCREEN_CAPTURE or Config.ENABLE_AUDIO:
+                started = agent.start_perception()
+                if started:
+                    print("Perception: started background capture (screenshots/audio)")
+                    span.set_attribute("perception.started", True)
+                else:
+                    print("Perception: unavailable or failed to start")
+        except Exception:
+            print("Perception: error starting perception (check optional dependencies and permissions)")
     if Config.USE_VOICE:
         print("Voice mode enabled. You may speak now")
 
@@ -53,7 +61,10 @@ def main():
             
         # Process the input
         if user_input and user_input.strip():
-            response = agent.handle(user_input)
+            with tracer.start_as_current_span("handle_user_input") as input_span:
+                input_span.set_attribute("input.length", len(user_input))
+                response = agent.handle(user_input)
+                input_span.set_attribute("response.length", len(response))
             
             # Output the response
             send_text_output(response)
@@ -75,3 +86,5 @@ if __name__ == "__main__":
             Agent.stop_perception()
         except Exception:
             pass
+        # Shutdown tracing to ensure all spans are exported
+        shutdown_tracing()
