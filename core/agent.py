@@ -3,9 +3,13 @@
 from core.llm_manager import LLMManager
 from core.memory import Memory
 from core.config import Config
+from core.tracing import get_tracer
 from tools import browser, system, search
 import os
 from typing import Optional
+
+# Initialize tracer
+tracer = get_tracer(__name__)
 
 # File manager will be imported lazily where used to avoid heavy imports at startup
 
@@ -75,7 +79,9 @@ class Agent:
 
     def detect_intent(self, ui):
         """Use LLM to classify user intent"""
-        prompt = f"""
+        with tracer.start_as_current_span("detect_intent") as span:
+            span.set_attribute("input.length", len(ui))
+            prompt = f"""
         Analyze this user input and classify its intent: "{ui}"
         
         Possible intents:
@@ -94,118 +100,137 @@ class Agent:
         
         Respond with ONLY the intent name.
         """
-        
-        intent = self.llm_manager.ask_llm(prompt).strip().lower()
-        return intent
+            
+            intent = self.llm_manager.ask_llm(prompt).strip().lower()
+            span.set_attribute("detected_intent", intent)
+            return intent
 
 
     def handle(self, ui):
         """process user input and return the appropriate response"""
-        if not ui or ui.strip() == "":
-            return "I didn't hear anything. Please repeat it."
+        with tracer.start_as_current_span("handle") as span:
+            span.set_attribute("input.length", len(ui) if ui else 0)
+            
+            if not ui or ui.strip() == "":
+                return "I didn't hear anything. Please repeat it."
 
-        # If we have a pending organize operation, treat 'yes'/'no' replies as confirmation
-        if self._pending_organize is not None:
-            lower = ui.strip().lower()
-            if lower in ('yes', 'y', 'confirm', 'ok', 'sure'):
-                pending = self._pending_organize
-                self._pending_organize = None
-                try:
-                    fm = pending['fm']
-                    strategy = pending['strategy']
-                    target = pending['target']
-                    if strategy == 'extension':
-                        actions = fm.organize_by_extension(target, dry_run=False)
-                    elif strategy == 'date':
-                        actions = fm.organize_by_date(target, dry_run=False)
+            # If we have a pending organize operation, treat 'yes'/'no' replies as confirmation
+            if self._pending_organize is not None:
+                lower = ui.strip().lower()
+                if lower in ('yes', 'y', 'confirm', 'ok', 'sure'):
+                    pending = self._pending_organize
+                    self._pending_organize = None
+                    try:
+                        fm = pending['fm']
+                        strategy = pending['strategy']
+                        target = pending['target']
+                        if strategy == 'extension':
+                            actions = fm.organize_by_extension(target, dry_run=False)
+                        elif strategy == 'date':
+                            actions = fm.organize_by_date(target, dry_run=False)
+                        else:
+                            actions = fm.organize_by_category(target, dry_run=False)
+                        return f"Organized {len(actions)} files in {target} using strategy '{strategy}'."
+                    except Exception as e:
+                        span.set_attribute("error", str(e))
+                        return f"Failed to organize files: {e}"
+                else:
+                    self._pending_organize = None
+                    return "Okay — I won't organize files."
+
+            intent = self.detect_intent(ui)
+            # quick heuristic: if user asks to organize files, handle locally
+            lower = ui.lower()
+            if any(k in lower for k in ("organize", "sort", "tidy up", "clean up")):
+                with tracer.start_as_current_span("organize_files") as org_span:
+                    org_span.set_attribute("target_folder", lower)
+                    # determine target folder
+                    target: Optional[str] = None
+                    for name in ("downloads", "desktop", "documents", "pictures", "music", "videos"):
+                        if name in lower:
+                            target = os.path.expanduser(f"~/{name.capitalize()}") if name != 'downloads' else os.path.expanduser('~/Downloads')
+                            break
+                    # allow explicit path
+                    if target is None:
+                        import re
+                        m = re.search(r'(/[^\s]+)', ui)
+                        if m:
+                            target = os.path.expanduser(m.group(1))
+
+                    # choose strategy
+                    strategy = 'category'
+                    if 'by date' in lower or 'by month' in lower or 'by year' in lower:
+                        strategy = 'date'
+                    elif 'by extension' in lower or 'by ext' in lower or 'by file type' in lower:
+                        strategy = 'extension'
+                    elif 'by type' in lower or 'by category' in lower:
+                        strategy = 'category'
+
+                    org_span.set_attribute("strategy", strategy)
+
+                    try:
+                        from tools.file_manager import FileManager
+                        fm = FileManager()
+                        if not target:
+                            return "Which folder would you like me to organize? (e.g. Downloads, Desktop, or a full path)"
+
+                        # perform a dry-run first and ask for confirmation
+                        if strategy == 'extension':
+                            actions = fm.organize_by_extension(target, dry_run=True)
+                        elif strategy == 'date':
+                            actions = fm.organize_by_date(target, dry_run=True)
+                        else:
+                            actions = fm.organize_by_category(target, dry_run=True)
+
+                        count = len(actions)
+                        org_span.set_attribute("files_found", count)
+                        # store pending operation for confirmation
+                        self._pending_organize = {'fm': fm, 'target': target, 'strategy': strategy, 'actions': actions}
+                        return f"I found {count} files to organize in {target} using strategy '{strategy}'. Shall I proceed? (yes/no)"
+                    except Exception as e:
+                        org_span.set_attribute("error", str(e))
+                        return f"Failed to plan organization: {e}"
+            
+            if "open_website" in intent:
+                with tracer.start_as_current_span("open_website") as web_span:
+                    # Extract URL from input or use default
+                    if "http" in ui:
+                        # Extract URL from input
+                        import re
+                        url_match = re.search(r'https?://[^\s]+', ui)
+                        if url_match:
+                            url = url_match.group(0)
+                        else:
+                            url = "https://www.google.com"
                     else:
-                        actions = fm.organize_by_category(target, dry_run=False)
-                    return f"Organized {len(actions)} files in {target} using strategy '{strategy}'."
-                except Exception as e:
-                    return f"Failed to organize files: {e}"
-            else:
-                self._pending_organize = None
-                return "Okay — I won't organize files."
-
-        intent = self.detect_intent(ui)
-        # quick heuristic: if user asks to organize files, handle locally
-        lower = ui.lower()
-        if any(k in lower for k in ("organize", "sort", "tidy up", "clean up")):
-            # determine target folder
-            target: Optional[str] = None
-            for name in ("downloads", "desktop", "documents", "pictures", "music", "videos"):
-                if name in lower:
-                    target = os.path.expanduser(f"~/{name.capitalize()}") if name != 'downloads' else os.path.expanduser('~/Downloads')
-                    break
-            # allow explicit path
-            if target is None:
-                import re
-                m = re.search(r'(/[^\s]+)', ui)
-                if m:
-                    target = os.path.expanduser(m.group(1))
-
-            # choose strategy
-            strategy = 'category'
-            if 'by date' in lower or 'by month' in lower or 'by year' in lower:
-                strategy = 'date'
-            elif 'by extension' in lower or 'by ext' in lower or 'by file type' in lower:
-                strategy = 'extension'
-            elif 'by type' in lower or 'by category' in lower:
-                strategy = 'category'
-
-            try:
-                from tools.file_manager import FileManager
-                fm = FileManager()
-                if not target:
-                    return "Which folder would you like me to organize? (e.g. Downloads, Desktop, or a full path)"
-
-                # perform a dry-run first and ask for confirmation
-                if strategy == 'extension':
-                    actions = fm.organize_by_extension(target, dry_run=True)
-                elif strategy == 'date':
-                    actions = fm.organize_by_date(target, dry_run=True)
-                else:
-                    actions = fm.organize_by_category(target, dry_run=True)
-
-                count = len(actions)
-                # store pending operation for confirmation
-                self._pending_organize = {'fm': fm, 'target': target, 'strategy': strategy, 'actions': actions}
-                return f"I found {count} files to organize in {target} using strategy '{strategy}'. Shall I proceed? (yes/no)"
-            except Exception as e:
-                return f"Failed to plan organization: {e}"
-        
-        if "open_website" in intent:
-            # Extract URL from input or use default
-            if "http" in ui:
-                # Extract URL from input
-                import re
-                url_match = re.search(r'https?://[^\s]+', ui)
-                if url_match:
-                    url = url_match.group(0)
-                else:
-                    url = "https://www.google.com"
-            else:
-                url = "https://www.google.com"
-            return browser.open_website(url)
-            
-        elif "web_search" in intent:
-            # Extract search query
-            query = ui.replace("search", "").replace("for", "").strip()
-            return search.web_search(query)
-            
-        elif "system_command" in intent:
-            if "shutdown" in ui:
-                return system.shutdown()
-            # Add other system commands here
-            
-        else:  # general_query or unknown
-            response = self.llm_manager.ask_llm(ui)
-            try:
-                if self.memory:
-                    self.memory.remember(ui, response)
-            except Exception:
-                pass
-            return response
+                        url = "https://www.google.com"
+                    web_span.set_attribute("url", url)
+                    return browser.open_website(url)
+                
+            elif "web_search" in intent:
+                with tracer.start_as_current_span("web_search") as search_span:
+                    # Extract search query
+                    query = ui.replace("search", "").replace("for", "").strip()
+                    search_span.set_attribute("query", query)
+                    return search.web_search(query)
+                
+            elif "system_command" in intent:
+                with tracer.start_as_current_span("system_command") as sys_span:
+                    if "shutdown" in ui:
+                        sys_span.set_attribute("command", "shutdown")
+                        return system.shutdown()
+                    # Add other system commands here
+                
+            else:  # general_query or unknown
+                with tracer.start_as_current_span("general_query") as gen_span:
+                    response = self.llm_manager.ask_llm(ui)
+                    gen_span.set_attribute("response.length", len(response))
+                    try:
+                        if self.memory:
+                            self.memory.remember(ui, response)
+                    except Exception:
+                        pass
+                    return response
 
     # Perception helpers (optional)
     def start_perception(self):
