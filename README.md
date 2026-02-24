@@ -64,91 +64,139 @@ python3 main.py
 
 Use Docker to ensure a consistent environment for all contributors.
 
-- Copy `.env.example` to `.env` and adjust values as needed.
-- Build and run with docker-compose:
+# buddi
+
+buddi is a local, modular AI assistant that uses an LLM to interpret natural language commands and perform actions on your machine. It supports text and optional voice I/O, screen capture + OCR, and a set of tools for automating tasks locally.
+
+## Quick overview
+
+- Conversational AI with persistent memory
+- Optional screen capture and OCR (Pillow + pytesseract)
+- Optional audio input and TTS (sounddevice, SpeechRecognition, pyttsx3)
+- Extensible tools (browser, file manager, search, system)
+- Tracing and observability via OpenTelemetry (OTLP exporter)
+
+## Project Structure
+
+- `main.py` — application entrypoint and main loop
+- `core/` — agent logic, LLM manager, memory, and tracing integration
+- `tools/` — pluggable tools the agent uses to perform actions
+- `input_output/` — text and speech handlers
+- `ui/` — optional UI widget for screen/audio capture
+- `config/` — configuration and credentials
+- `data/` — persistent data (e.g., `memory.db`)
+- `requirements.txt` — Python dependencies
+
+## What's new: Tracing
+
+This project includes OpenTelemetry tracing. Key points:
+
+- Tracing is initialized in `core/tracing.py` and wired into `main.py` and `core/agent.py`.
+- Traces are exported via OTLP (default endpoint `http://localhost:4318`) so you can view them with the AI Toolkit Trace Viewer or any OTLP-compatible collector.
+- Automatic instrumentation is enabled for HTTP requests (`requests`) and manual spans are added around intent detection, input handling, tool calls, and LLM requests.
+
+To open the trace viewer in VS Code, run the command: `AI Toolkit: Open Trace Viewer` (this starts the collector at `localhost:4318`).
+
+If you need a different OTLP endpoint, set `OTEL_EXPORTER_OTLP_ENDPOINT` in your environment.
+
+## Setup (recommended)
+
+1. Clone and enter the repo:
+
+```bash
+git clone <repository-url>
+cd buddi
+```
+
+2. Create and activate a virtual environment (recommended):
+
+```bash
+python3 -m venv venv
+source venv/bin/activate   # macOS / Linux
+# On Windows: venv\\Scripts\\activate
+```
+
+Note: this project may also work inside a Conda environment, but system audio and PortAudio dependencies are often easier to manage with Homebrew/apt and a standard venv.
+
+3. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+If you previously tried `pip install PIL`, use `Pillow` instead; the project depends on `Pillow`.
+
+On macOS, audio packages such as `pyaudio` may require PortAudio via Homebrew:
+
+```bash
+brew install portaudio
+pip install pyaudio
+```
+
+4. Configure credentials
+
+Add your LLM/api keys to `config/credentials.json` or export the appropriate environment variables (e.g., `LLM_API_KEY`, `LLM_PROVIDER`, `LLM_API_URL`). Keep secrets out of git.
+
+## Running the assistant
+
+With the venv active:
+
+```bash
+python main.py
+```
+
+Or use the full venv python path (if VS Code hasn't activated the venv in the terminal):
+
+```bash
+./venv/bin/python main.py
+```
+
+To use tracing while running, open the trace viewer in VS Code first (`AI Toolkit: Open Trace Viewer`).
+
+## Docker
+
+Docker is supported via `docker-compose.yml`. Copy `.env.example` to `.env` and adjust values, then:
 
 ```bash
 docker-compose up --build -d
-```
 
-- Attach a shell to the running container:
-
-```bash
+# attach a shell
 docker-compose exec app bash
-```
 
-- Stop and remove containers:
-
-```bash
+# stop
 docker-compose down
 ```
 
-You can also use the helper script `run-dev-docker.sh` to start the service in the foreground for development.
-
 ## Dev helper scripts
 
-I added `run-dev.sh` and `scripts/startup_check.py` to make development easier.
-
-- Create venv and install deps (and activate if you `source` the script):
+Use `run-dev.sh` to create a venv, install deps, run checks, and launch the app. Examples:
 
 ```bash
-# Create venv and install packages
+# install deps into venv
 ./run-dev.sh --install
 
-# To activate the venv in your current shell (so `python` refers to the venv), source the script instead:
+# source the venv for interactive use
 source ./run-dev.sh --activate
-```
 
-- Run a startup check to validate optional dependencies and device availability:
-
-```bash
+# run startup checks
 ./run-dev.sh --check
-```
 
-- Run the assistant or the sidebar demo (uses venv python if present):
-
-```bash
+# run the assistant
 ./run-dev.sh --run-main
-./run-dev.sh --run-sidebar
 ```
 
-Notes:
-- If you used `./run-dev.sh --install` but you didn't `source` it, activate the venv in your shell manually with:
+## Troubleshooting
 
-```bash
-source ./venv/bin/activate
-```
+- Pillow vs PIL: install `Pillow` (the package name is not `PIL`).
+- pyaudio on macOS: install PortAudio first (`brew install portaudio`) then `pip install pyaudio`.
+- If audio or screen capture fails, verify macOS permissions: System Preferences → Security & Privacy → Screen Recording / Microphone.
+- OpenTelemetry: if you don't see traces, open the AI Toolkit Trace Viewer (`AI Toolkit: Open Trace Viewer`) or set `OTEL_EXPORTER_OTLP_ENDPOINT` to your collector URL.
+- Virtual environment confusion: ensure you activate the project's venv (`source venv/bin/activate`) or use the venv python path.
 
+## Contributing
 
-## Environment variables (examples)
+Contributions are welcome. Please open issues for bugs or feature requests. For larger changes, open a PR with a clear description and tests where applicable.
 
-Configure behavior and optional features using environment variables. Example:
+## License
 
-```bash
-# LLM / provider
-export LLM_PROVIDER=deepseek
-export LLM_API_KEY="your_llm_api_key_here"
-export LLM_API_URL="https://api.deepseek.com/v1/chat/completions"
-
-# Enable perception features (optional; require optional deps and OS permissions)
-export ENABLE_SCREEN_CAPTURE=True   # requires Pillow
-export ENABLE_OCR=True              # requires pytesseract + tesseract engine
-export ENABLE_AUDIO=True            # requires sounddevice + numpy
-
-# Memory and voice
-export MEMORY_ENABLED=True
-export USE_VOICE=False
-
-# Optional: persist file for memory
-export MEMORY_PERSIST_FILE=memory.json
-
-# Run the main assistant
-python3 main.py
-
-# Or run the sidebar UI demo
-python3 ui/widget.py --sidebar
-```
-
-Notes:
-- On macOS you must grant Screen Recording and Microphone permissions for screen/audio capture.
-- Keep API keys out of git; use `config/credentials.json` or environment variables.
+(Add license details here)
