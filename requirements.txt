@@ -5,6 +5,11 @@ requests
 transformers
 torch
 
+# Web Framework (Backend API)
+# FastAPI for REST API and Uvicorn for running the server
+fastapi
+uvicorn[standard]
+
 # Speech and Audio Processing
 # Libraries for handling voice input, text-to-speech, and audio manipulation.
 SpeechRecognition

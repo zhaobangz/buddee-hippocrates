@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buddi Agent</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">Buddi Agent</h1>
+                <p class="subtitle">Your AI Assistant</p>
+            </div>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot" id="statusDot"></span>
+                <span class="status-text" id="statusText">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Chat Container -->
+            <div class="chat-container">
+                <div class="messages-container" id="messagesContainer">
+                    <div class="message system-message">
+                        <p>Welcome to Buddi Agent! How can I help you today?</p>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="input-area">
+                    <form id="chatForm" class="chat-form">
+                        <div class="form-group">
+                            <input
+                                type="text"
+                                id="userInput"
+                                class="text-input"
+                                placeholder="Type your message here..."
+                                autocomplete="off"
+                            >
+                            <button type="submit" class="send-button" id="sendButton">
+                                <span class="button-icon">→</span>
+                                <span class="button-text">Send</span>
+                            </button>
+                        </div>
+                        <div class="form-options">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="includeHistory">
+                                <span>Include chat history</span>
+                            </label>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">Controls</h3>
+                    <button class="control-button" id="resetButton">
+                        <span class="button-icon">↻</span> Clear Memory
+                    </button>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">Agent Info</h3>
+                    <div class="info-group">
+                        <label>Assistant Name</label>
+                        <p id="assistantName">Loading...</p>
+                    </div>
+                    <div class="info-group">
+                        <label>Memory Enabled</label>
+                        <p id="memoryEnabled">Loading...</p>
+                    </div>
+                    <div class="info-group">
+                        <label>Voice Mode</label>
+                        <p id="voiceMode">Loading...</p>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">API Status</h3>
+                    <div class="api-info">
+                        <p id="apiStatus">Checking...</p>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Buddi Agent v1.0 | Running locally | <a href="#" id="apiLink">API</a></p>
+        </footer>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Error Toast -->
+    <div class="toast" id="errorToast">
+        <p id="toastMessage"></p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
