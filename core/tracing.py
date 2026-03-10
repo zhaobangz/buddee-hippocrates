@@ -24,6 +24,7 @@ def setup_tracing(service_name: str = "buddi-agent",
     Returns:
         Configured TracerProvider instance
     """
+    print("--- Initializing OpenTelemetry Tracing ---")
     if otlp_endpoint is None:
         # Default to AI Toolkit's OTLP HTTP endpoint
         otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
@@ -63,6 +64,25 @@ def get_tracer(module_name: str) -> trace.Tracer:
     return trace.get_tracer(module_name)
 
 
+def create_custom_span(tracer: trace.Tracer):
+    """
+    This is an example function to demonstrate how to create a custom span.
+    A span represents a unit of work or an operation.
+
+    Args:
+        tracer: The tracer instance to use for creating the span.
+    """
+    with tracer.start_as_current_span("custom_span_name") as span:
+        # You can add attributes to the span
+        span.set_attribute("custom_attribute_key", "custom_attribute_value")
+
+        # You can also add events to the span
+        span.add_event("This is a custom event.")
+
+        # The code inside this block is now being traced as part of "custom_span_name"
+        print("This code is inside a custom span.")
+
+
 def shutdown_tracing() -> None:
     """
     Gracefully shutdown the tracing provider.
@@ -76,3 +96,21 @@ def shutdown_tracing() -> None:
             trace_provider.shutdown()
     except Exception as e:
         print(f"Error during tracing shutdown: {e}")
+
+
+# Example of how to use the tracing functions.
+# This part is for demonstration and would typically be in your main application logic.
+if __name__ == "__main__":
+    # 1. Set up tracing
+    tracer_provider = setup_tracing()
+
+    # 2. Get a tracer for your module
+    tracer = get_tracer(__name__)
+
+    # 3. Create a custom span
+    create_custom_span(tracer)
+
+    print("Custom span created. Check your OpenTelemetry backend to see the trace.")
+
+    # 4. Shutdown tracing when your application exits
+    shutdown_tracing()
