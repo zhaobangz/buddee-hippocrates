@@ -129,16 +129,16 @@ Your application is architecture-ready for AWS/Google Cloud/Azure:
                     │  (example.com)  │
                     └────────┬────────┘
                              │
-                    ┌────────┴────────┐
-                    │                 │
-              ┌─────▼────┐      ┌─────▼────┐
+                    ┌────────┴─────────┐
+                    │                  │
+              ┌─────▼─────┐      ┌─────▼────┐
               │Frontend   │      │ Backend  │
               │(S3 + CDN) │      │(API Svc) │
               └───────────┘      └──┬───────┘
                                     │
                             ┌───────▼────────┐
-                            │  LLM Provider  │
-                            │ (Deepseek API) │
+                            │  LLM Provides  │
+                            │ (APIs)         │
                             └────────────────┘
 ```
 
