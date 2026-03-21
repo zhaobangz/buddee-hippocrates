@@ -2,7 +2,24 @@ import sqlite3
 import os
 import json
 import shutil
+import webbrowser
 from datetime import datetime, timedelta
+
+
+def open_website(url: str) -> str:
+    """Open a website in the default browser.
+
+    Args:
+        url: The URL to open.
+
+    Returns:
+        A status message indicating success or failure.
+    """
+    try:
+        webbrowser.open(url)
+        return f"Opened {url} in your default browser."
+    except Exception as e:
+        return f"Failed to open {url}: {e}"
 
 def get_chrome_history(output_file='browser_history.json'):
     """

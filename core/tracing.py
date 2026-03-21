@@ -75,10 +75,8 @@ def create_custom_span(tracer: trace.Tracer):
     with tracer.start_as_current_span("custom_span_name") as span:
         # You can add attributes to the span
         span.set_attribute("custom_attribute_key", "custom_attribute_value")
-
         # You can also add events to the span
         span.add_event("This is a custom event.")
-
         # The code inside this block is now being traced as part of "custom_span_name"
         print("This code is inside a custom span.")
 
