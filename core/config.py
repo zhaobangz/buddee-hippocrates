@@ -7,7 +7,7 @@ load_dotenv()
 
 
 class Config:
-    """Central configuration for the agent and optional features.
+    """Central configuration for the clinical agent and optional features.
 
     Values are read from environment variables first, then from a
     credentials.json file in the repo root (if present). Reasonable defaults
@@ -31,7 +31,7 @@ class Config:
 
     # Memory and assistant identity
     MAX_MEMORY_HISTORY = int(os.getenv("MAX_MEMORY_HISTORY", 50))
-    ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Buddi")
+    ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Buddi Clinical Agent")
     MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "True").lower() == "true"
 
     # Perception features
@@ -39,10 +39,18 @@ class Config:
     ENABLE_OCR = os.getenv("ENABLE_OCR", "False").lower() == "true"
     ENABLE_AUDIO = os.getenv("ENABLE_AUDIO", "False").lower() == "true"
 
-    # Tools and extensibility
-    ENABLE_WEB_BROWSING = os.getenv("ENABLE_WEB_BROWSING", "True").lower() == "true"
-    ENABLE_FILE_MANAGER = os.getenv("ENABLE_FILE_MANAGER", "True").lower() == "true"
-    ENABLE_SYSTEM_SEARCH = os.getenv("ENABLE_SYSTEM_SEARCH", "True").lower() == "true"
+    # Healthcare medical tools
+    ENABLE_EHR_READER = os.getenv("ENABLE_EHR_READER", "True").lower() == "true"
+    ENABLE_PRIOR_AUTH = os.getenv("ENABLE_PRIOR_AUTH", "True").lower() == "true"
+    ENABLE_CLINICAL_GUIDELINES = os.getenv("ENABLE_CLINICAL_GUIDELINES", "True").lower() == "true"
+    ENABLE_FOLLOW_UP = os.getenv("ENABLE_FOLLOW_UP", "True").lower() == "true"
+    ENABLE_SCHEDULING = os.getenv("ENABLE_SCHEDULING", "True").lower() == "true"
+
+    # Safety and compliance
+    ENABLE_SAFETY_LAYER = os.getenv("ENABLE_SAFETY_LAYER", "True").lower() == "true"
+    ENABLE_AUDIT_LOG = os.getenv("ENABLE_AUDIT_LOG", "True").lower() == "true"
+    REQUIRE_HUMAN_APPROVAL = os.getenv("REQUIRE_HUMAN_APPROVAL", "True").lower() == "true"
+    AUDIT_LOG_FILE = os.getenv("AUDIT_LOG_FILE", "audit_log.json")
 
     # Local persistence paths
     MEMORY_PERSIST_FILE = os.getenv("MEMORY_PERSIST_FILE", "memory.json")
@@ -54,4 +62,3 @@ class Config:
     FORCE_CPU = os.getenv("FORCE_CPU", "False").lower() == "true"
     # PREFERRED_DEVICE can be 'auto', 'cuda', 'mps', or 'cpu'
     PREFERRED_DEVICE = os.getenv("PREFERRED_DEVICE", "auto").lower()
-

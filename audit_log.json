@@ -1,0 +1,3 @@
+{"timestamp": "2026-03-24T10:04:18.350529", "event_type": "safety_boundary_triggered", "user_id": "system", "details": {"flagged_phrases": ["you have"], "response_preview": "Based on the symptoms, you have diabetes."}}
+{"timestamp": "2026-03-24T10:04:18.351083", "event_type": "safety_boundary_triggered", "user_id": "system", "details": {"flagged_phrases": ["i diagnose"], "response_preview": "I diagnose this as a rare condition."}}
+{"timestamp": "2026-03-24T10:04:18.352780", "event_type": "approval_requested", "user_id": "system", "details": {"action_type": "prior_auth_submit", "details": {"patient": "Jane Doe", "treatment": "MRI"}}}

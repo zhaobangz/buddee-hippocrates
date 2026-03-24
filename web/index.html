@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Buddi</title>
+    <title>Buddi Clinical Agent</title>
+    <meta name="description" content="Healthcare Workflow Intelligence — AI-powered clinical agent for prior authorizations, patient briefs, and clinical decision support.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,8 +12,8 @@
         <!-- Header -->
         <header class="header">
             <div class="header-content">
-                <h1 class="title">Buddi</h1>
-                <p class="subtitle">Your AI Assistant</p>
+                <h1 class="title">🏥 Buddi Clinical Agent</h1>
+                <p class="subtitle">Healthcare Workflow Intelligence</p>
             </div>
             <div class="status-indicator" id="statusIndicator">
                 <span class="status-dot" id="statusDot"></span>
@@ -26,8 +27,36 @@
             <div class="chat-container">
                 <div class="messages-container" id="messagesContainer">
                     <div class="message system-message">
-                        <p>I'm your Buddi! How can I help you today?</p>
+                        <p>Welcome to the <strong>Buddi Clinical Agent System</strong>. I can help with prior authorizations, patient briefs, clinical guidelines, follow-ups, and scheduling. Set a patient context to get started!</p>
                     </div>
+                </div>
+
+                <!-- Workflow Quick Actions -->
+                <div class="workflow-actions" id="workflowActions">
+                    <button class="workflow-btn" data-workflow="Set patient John Smith, ID 12345, conditions: Type 2 Diabetes, Hypertension, medications: Metformin 1000mg, Lisinopril 10mg, allergies: Penicillin" id="btnSetPatient">
+                        <span class="workflow-icon">👤</span>
+                        <span>Set Demo Patient</span>
+                    </button>
+                    <button class="workflow-btn" data-workflow="Generate a prior authorization" id="btnPriorAuth">
+                        <span class="workflow-icon">📋</span>
+                        <span>Prior Auth</span>
+                    </button>
+                    <button class="workflow-btn" data-workflow="Generate a patient brief" id="btnPatientBrief">
+                        <span class="workflow-icon">🏥</span>
+                        <span>Patient Brief</span>
+                    </button>
+                    <button class="workflow-btn" data-workflow="Look up clinical guidelines for diabetes" id="btnGuidelines">
+                        <span class="workflow-icon">📚</span>
+                        <span>Guidelines</span>
+                    </button>
+                    <button class="workflow-btn" data-workflow="Create a medication adherence follow-up" id="btnFollowUp">
+                        <span class="workflow-icon">📞</span>
+                        <span>Follow-Up</span>
+                    </button>
+                    <button class="workflow-btn" data-workflow="Schedule a lab for HbA1c" id="btnSchedule">
+                        <span class="workflow-icon">📅</span>
+                        <span>Schedule Lab</span>
+                    </button>
                 </div>
 
                 <!-- Input Area -->
@@ -38,7 +67,7 @@
                                 type="text"
                                 id="userInput"
                                 class="text-input"
-                                placeholder="Type your message here..."
+                                placeholder="Ask about prior auth, guidelines, follow-ups, scheduling..."
                                 autocomplete="off"
                             >
                             <button type="submit" class="send-button" id="sendButton">
@@ -46,45 +75,64 @@
                                 <span class="button-text">Send</span>
                             </button>
                         </div>
-                        <div class="form-options">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="includeHistory">
-                                <span>Include chat history</span>
-                            </label>
-                        </div>
                     </form>
                 </div>
             </div>
 
             <!-- Sidebar -->
             <aside class="sidebar">
+                <!-- Patient Context Card -->
+                <div class="sidebar-section patient-context-card">
+                    <h3 class="sidebar-title">👤 Patient Context</h3>
+                    <div id="patientContextDisplay">
+                        <p class="context-empty">No patient set</p>
+                    </div>
+                    <button class="control-button secondary" id="clearPatientBtn">Clear Patient</button>
+                </div>
+
+                <!-- Workflows Info -->
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">🔧 Available Workflows</h3>
+                    <div class="workflow-list" id="workflowList">
+                        <div class="workflow-item">📋 Prior Authorization</div>
+                        <div class="workflow-item">🏥 Patient Brief</div>
+                        <div class="workflow-item">📚 Clinical Guidelines</div>
+                        <div class="workflow-item">📞 Follow-Up Tracking</div>
+                        <div class="workflow-item">📅 Labs / Imaging / Referrals</div>
+                        <div class="workflow-item">⚠️ Risk Assessment</div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
                 <div class="sidebar-section">
                     <h3 class="sidebar-title">Controls</h3>
                     <button class="control-button" id="resetButton">
-                        <span class="button-icon">↻</span> Clear Memory
+                        <span class="button-icon">↻</span> Reset Agent
                     </button>
                 </div>
 
+                <!-- Agent Info -->
                 <div class="sidebar-section">
                     <h3 class="sidebar-title">Agent Info</h3>
                     <div class="info-group">
-                        <label>Assistant Name</label>
+                        <label>System</label>
                         <p id="assistantName">Loading...</p>
                     </div>
                     <div class="info-group">
-                        <label>Memory Enabled</label>
-                        <p id="memoryEnabled">Loading...</p>
+                        <label>Safety Layer</label>
+                        <p id="safetyEnabled">Loading...</p>
                     </div>
                     <div class="info-group">
-                        <label>Voice Mode</label>
-                        <p id="voiceMode">Loading...</p>
+                        <label>API Status</label>
+                        <p id="apiStatus">Checking...</p>
                     </div>
                 </div>
 
+                <!-- Audit Log Preview -->
                 <div class="sidebar-section">
-                    <h3 class="sidebar-title">API Status</h3>
-                    <div class="api-info">
-                        <p id="apiStatus">Checking...</p>
+                    <h3 class="sidebar-title">📝 Recent Activity</h3>
+                    <div class="audit-log" id="auditLog">
+                        <p class="context-empty">No activity yet</p>
                     </div>
                 </div>
             </aside>
@@ -92,7 +140,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>Buddi Agent v1.0 | Running locally | <a href="#" id="apiLink">API</a></p>
+            <p>Buddi Clinical Agent v2.0 | Healthcare Workflow Intelligence | <a href="#" id="apiLink">API</a></p>
         </footer>
     </div>
 
