@@ -1,17 +1,15 @@
 # Core LLM and AI Libraries
-# Libraries for interacting with Large Language Models and other AI features.
 python-dotenv
 requests
 transformers
 torch
 
 # Web Framework (Backend API)
-# FastAPI for REST API and Uvicorn for running the server
 fastapi
 uvicorn[standard]
+pydantic
 
 # Speech and Audio Processing
-# Libraries for handling voice input, text-to-speech, and audio manipulation.
 SpeechRecognition
 pyaudio
 pyttsx3
@@ -19,24 +17,15 @@ sounddevice
 pydub
 numpy
 
-# UI, Vision, and Image Processing
-# Libraries for the graphical user interface and for processing images and screenshots.
+# Medical Document Processing
+PyPDF2
 Pillow
 pytesseract
 
-# Tool-related Libraries
-# Dependencies for the custom tools like web search and summarization.
-google-api-python-client
-# Alternative: serpapi (requires API key) - uncomment if you prefer
-# serpapi
-sumy
-nltk
-
 # Testing
-# Libraries for running tests.
 pytest
+
 # Tracing and Observability
-# Libraries for distributed tracing and observability integration with AI Toolkit.
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-exporter-otlp

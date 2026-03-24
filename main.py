@@ -1,5 +1,5 @@
-# the entry point. it loops. 
-# takes a user input, process the information -> run through the tools and gives an output 
+# Buddi Clinical Agent — Entry Point
+# Takes user input, routes through the clinical agent, and outputs the response.
 from core.agent import Agent
 from core.config import Config 
 from core.tracing import setup_tracing, get_tracer, shutdown_tracing
@@ -8,7 +8,7 @@ from input_output.text_output import send_text_output, speech_output
 import time 
 
 # Initialize tracing
-setup_tracing(service_name="buddi-agent")
+setup_tracing(service_name="buddi-clinical-agent")
 tracer = get_tracer(__name__) 
 
 def main():

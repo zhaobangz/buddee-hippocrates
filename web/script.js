@@ -1,17 +1,14 @@
 /**
- * Buddi Agent Web UI - Frontend Logic
- * Handles communication with the FastAPI backend
+ * Buddi Clinical Agent — Web UI Frontend Logic
+ * Healthcare Workflow Intelligence
  */
 
 // Configuration
 const API_BASE_URL = 'http://localhost:8000/api';
-const RECONNECT_INTERVAL = 5000; // milliseconds
+const RECONNECT_INTERVAL = 5000;
 
 // State
-let agentStatus = {
-    connected: false,
-    lastCheckTime: null
-};
+let agentStatus = { connected: false, lastCheckTime: null };
 
 // DOM Elements
 const messagesContainer = document.getElementById('messagesContainer');
@@ -24,33 +21,41 @@ const statusText = document.getElementById('statusText');
 const loadingSpinner = document.getElementById('loadingSpinner');
 const errorToast = document.getElementById('errorToast');
 const toastMessage = document.getElementById('toastMessage');
-const includeHistoryCheckbox = document.getElementById('includeHistory');
+const clearPatientBtn = document.getElementById('clearPatientBtn');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing Buddi Agent Web UI...');
-    
-    // Setup event listeners
+    console.log('Initializing Buddi Clinical Agent Web UI...');
+
     chatForm.addEventListener('submit', handleSendMessage);
     resetButton.addEventListener('click', handleReset);
-    
-    // Initial status check
+    clearPatientBtn.addEventListener('click', handleClearPatient);
+
+    // Workflow quick-action buttons
+    document.querySelectorAll('.workflow-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const message = btn.getAttribute('data-workflow');
+            if (message) {
+                userInput.value = message;
+                chatForm.dispatchEvent(new Event('submit'));
+            }
+        });
+    });
+
     checkAgentStatus();
-    
-    // Periodic status checks
     setInterval(checkAgentStatus, RECONNECT_INTERVAL);
 });
 
-/**
- * Check if the agent API is available
- */
+// ── Agent Status ────────────────────────────────────────────────────
+
 async function checkAgentStatus() {
     try {
         const response = await fetch(`${API_BASE_URL}/health`);
-        
         if (response.ok) {
             setAgentStatus(true);
             loadAgentInfo();
+            loadPatientContext();
+            loadAuditLog();
         } else {
             setAgentStatus(false);
         }
@@ -60,110 +65,147 @@ async function checkAgentStatus() {
     }
 }
 
-/**
- * Update UI based on agent status
- */
 function setAgentStatus(connected) {
     agentStatus.connected = connected;
     agentStatus.lastCheckTime = new Date();
-    
-    const statusElement = document.getElementById('statusDot');
-    const statusTextElement = document.getElementById('statusText');
-    
+
     if (connected) {
-        statusElement.textContent = '';
-        statusElement.className = 'status-dot';
-        statusTextElement.textContent = 'Connected';
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'Connected';
         sendButton.disabled = false;
         document.getElementById('apiStatus').textContent = '✓ API is running';
     } else {
-        statusElement.className = 'status-dot error';
-        statusTextElement.textContent = 'Disconnected';
+        statusDot.className = 'status-dot error';
+        statusText.textContent = 'Disconnected';
         sendButton.disabled = true;
         document.getElementById('apiStatus').textContent = '✗ API is offline';
     }
 }
 
-/**
- * Load agent information and display in sidebar
- */
+// ── Agent Info ───────────────────────────────────────────────────────
+
 async function loadAgentInfo() {
     try {
         const response = await fetch(`${API_BASE_URL}/status`);
-        
         if (response.ok) {
             const data = await response.json();
-            
             document.getElementById('assistantName').textContent = data.assistant_name || 'N/A';
-            document.getElementById('memoryEnabled').textContent = data.memory_enabled ? 'Yes' : 'No';
-            document.getElementById('voiceMode').textContent = data.use_voice ? 'Enabled' : 'Disabled';
+            document.getElementById('safetyEnabled').textContent = data.safety_enabled ? '✅ Active' : '❌ Disabled';
         }
     } catch (error) {
         console.error('Error loading agent info:', error);
     }
 }
 
-/**
- * Handle sending a message
- */
+// ── Patient Context ─────────────────────────────────────────────────
+
+async function loadPatientContext() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/patient-context`);
+        if (response.ok) {
+            const data = await response.json();
+            const ctx = data.patient_context;
+            const display = document.getElementById('patientContextDisplay');
+
+            if (ctx && ctx.patient_id) {
+                display.innerHTML = `
+                    <div class="patient-info">
+                        <p><strong>${ctx.name || 'Unknown'}</strong></p>
+                        <p class="patient-detail">ID: ${ctx.patient_id}</p>
+                        ${ctx.conditions && ctx.conditions.length ? `<p class="patient-detail">Dx: ${ctx.conditions.join(', ')}</p>` : ''}
+                        ${ctx.medications && ctx.medications.length ? `<p class="patient-detail">Meds: ${ctx.medications.join(', ')}</p>` : ''}
+                        ${ctx.allergies && ctx.allergies.length ? `<p class="patient-detail allergy">⚠ Allergies: ${ctx.allergies.join(', ')}</p>` : ''}
+                    </div>
+                `;
+            } else {
+                display.innerHTML = '<p class="context-empty">No patient set</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading patient context:', error);
+    }
+}
+
+async function handleClearPatient() {
+    if (!agentStatus.connected) {
+        showError('Agent API is not available');
+        return;
+    }
+    try {
+        await fetch(`${API_BASE_URL}/patient-context`, { method: 'DELETE' });
+        loadPatientContext();
+        addMessageToChat('Patient context cleared.', 'system-message');
+    } catch (error) {
+        showError(`Failed to clear patient: ${error.message}`);
+    }
+}
+
+// ── Audit Log ───────────────────────────────────────────────────────
+
+async function loadAuditLog() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/audit-log?count=5`);
+        if (response.ok) {
+            const data = await response.json();
+            const auditLog = document.getElementById('auditLog');
+
+            if (data.events && data.events.length > 0) {
+                auditLog.innerHTML = data.events.map(e => {
+                    const time = new Date(e.timestamp).toLocaleTimeString();
+                    return `<div class="audit-entry"><span class="audit-time">${time}</span> ${e.event_type}</div>`;
+                }).join('');
+            } else {
+                auditLog.innerHTML = '<p class="context-empty">No activity yet</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading audit log:', error);
+    }
+}
+
+// ── Chat ────────────────────────────────────────────────────────────
+
 async function handleSendMessage(event) {
     event.preventDefault();
-    
     const message = userInput.value.trim();
-    
+
     if (!message) {
         showError('Please enter a message');
         return;
     }
-    
     if (!agentStatus.connected) {
         showError('Agent API is not available. Please check the backend.');
         return;
     }
-    
-    // Add user message to chat
+
     addMessageToChat(message, 'user-message');
-    
-    // Clear input
     userInput.value = '';
     userInput.focus();
-    
-    // Show loading spinner
     showLoading(true);
     sendButton.disabled = true;
-    
+
     try {
-        // Send message to API
         const response = await fetch(`${API_BASE_URL}/chat`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                message: message,
-                include_history: includeHistoryCheckbox.checked
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: message }),
         });
-        
+
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Failed to get response');
         }
-        
+
         const data = await response.json();
-        
-        // Add agent response to chat
         addMessageToChat(data.response, 'agent-message');
-        
+
+        // Refresh context panels after each message
+        loadPatientContext();
+        loadAuditLog();
     } catch (error) {
         console.error('Error sending message:', error);
         showError(`Failed to send message: ${error.message}`);
-        
-        // Add error message to chat
-        addMessageToChat(
-            `Error: Unable to process your message. ${error.message}`,
-            'system-message'
-        );
+        addMessageToChat(`Error: ${error.message}`, 'system-message');
     } finally {
         showLoading(false);
         sendButton.disabled = false;
@@ -171,42 +213,31 @@ async function handleSendMessage(event) {
     }
 }
 
-/**
- * Handle reset agent
- */
+// ── Reset ───────────────────────────────────────────────────────────
+
 async function handleReset() {
-    if (!confirm('Are you sure you want to clear the agent\'s memory? This cannot be undone.')) {
-        return;
-    }
-    
+    if (!confirm('Reset the agent? This will clear memory and patient context.')) return;
     if (!agentStatus.connected) {
         showError('Agent API is not available');
         return;
     }
-    
+
     showLoading(true);
     resetButton.disabled = true;
-    
+
     try {
         const response = await fetch(`${API_BASE_URL}/reset`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: { 'Content-Type': 'application/json' },
         });
-        
-        if (!response.ok) {
-            throw new Error('Failed to reset agent');
-        }
-        
-        // Clear chat messages
+
+        if (!response.ok) throw new Error('Failed to reset agent');
+
         messagesContainer.innerHTML = '';
-        addMessageToChat('Memory cleared. Hello again!', 'system-message');
-        
-        console.log('Agent memory reset successfully');
-        
+        addMessageToChat('Agent reset. Memory and patient context cleared.', 'system-message');
+        loadPatientContext();
+        loadAuditLog();
     } catch (error) {
-        console.error('Error resetting agent:', error);
         showError(`Failed to reset: ${error.message}`);
     } finally {
         showLoading(false);
@@ -214,29 +245,22 @@ async function handleReset() {
     }
 }
 
-/**
- * Add a message to the chat UI
- */
+// ── Helpers ─────────────────────────────────────────────────────────
+
 function addMessageToChat(text, className) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${className}`;
-    
-    const paragraph = document.createElement('p');
-    paragraph.textContent = text;
-    
-    messageDiv.appendChild(paragraph);
+
+    const pre = document.createElement('pre');
+    pre.className = 'message-content';
+    pre.textContent = text;
+    messageDiv.appendChild(pre);
     messagesContainer.appendChild(messageDiv);
-    
-    // Auto-scroll to bottom
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-/**
- * Show loading spinner
- */
 function showLoading(show) {
     const spinner = document.getElementById('loadingSpinner');
-    
     if (show) {
         spinner.classList.add('active');
     } else {
@@ -244,22 +268,12 @@ function showLoading(show) {
     }
 }
 
-/**
- * Show error toast
- */
 function showError(message) {
     toastMessage.textContent = message;
     errorToast.classList.add('show');
-    
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-        errorToast.classList.remove('show');
-    }, 5000);
+    setTimeout(() => { errorToast.classList.remove('show'); }, 5000);
 }
 
-/**
- * Allow Enter key to send message (Shift+Enter for newline)
- */
 userInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -267,14 +281,4 @@ userInput.addEventListener('keydown', (event) => {
     }
 });
 
-// Utility: Format timestamp
-function formatTime(date) {
-    return new Intl.DateTimeFormat('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    }).format(date);
-}
-
-// Log initialization complete
-console.log('Buddi Agent Web UI initialized');
+console.log('Buddi Clinical Agent Web UI initialized');
