@@ -187,4 +187,4 @@ def get_recent_audit_events(count: int = 20) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    return events[-count:]
+    return events 

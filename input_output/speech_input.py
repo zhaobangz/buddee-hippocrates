@@ -5,7 +5,7 @@ from core.config import Config
 class SpeechInput:
 
     def __init__(self):
-        self.recognier = sr.Recognizer()
+        self.recognizer = sr.Recognizer()
         self.recognizer.energy_threshold = 300 #adjust for sensitivity issues if needed 
         self.recognizer.dynamic_energy_threshod = True
         self.recognizer.pause_threhold = 0.8 #time to wait for the speech to end

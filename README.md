@@ -4,7 +4,7 @@
 
 Buddi Clinical Agent is an AI-powered clinical workflow system that automates healthcare administrative tasks, provides clinical decision support, and orchestrates care activities. Built with a modular agent architecture, it's designed to start with prior authorization automation and expand into a full clinical operating system.
 
-## 🏥 What It Does
+## 🏥 Clinical Workflows
 
 | Workflow | Description |
 |----------|-------------|
@@ -13,9 +13,9 @@ Buddi Clinical Agent is an AI-powered clinical workflow system that automates he
 | **Clinical Guidelines** | Maps patient conditions to ADA, ACC/AHA, GINA, APA guidelines with treatment step-up logic |
 | **Follow-Up Tracking** | Automates patient follow-ups with symptom checks, medication adherence, and escalation |
 | **Scheduling** | Coordinates labs, imaging, and referrals as a workflow orchestrator |
-| **Safety Layer** | Validates actions, blocks diagnosis/prescription territory, and writes HIPAA audit logs |
+| **Safety Layer** | Validates clinical actions, blocks unauthorized territory, and writes HIPAA-ready audit logs |
 
-## 🏗 Architecture
+## 🏗 Modular Architecture
 
 ```
 ┌────────────────────────────────────────────────┐
@@ -32,7 +32,7 @@ Buddi Clinical Agent is an AI-powered clinical workflow system that automates he
 │  ┌──────────┬──────────┬──────────────────┐   │
 │  │EHR Reader│Prior Auth│Clinical Guidelines│   │
 │  ├──────────┼──────────┼──────────────────┤   │
-│  │Follow-Up │Scheduling│   (Extensible)   │   │
+│  │Follow-Up │Scheduling│   Web Search     │   │
 │  └──────────┴──────────┴──────────────────┘   │
 ├────────────────────────────────────────────────┤
 │         Memory (Patient + Provider Context)    │
@@ -43,35 +43,31 @@ Buddi Clinical Agent is an AI-powered clinical workflow system that automates he
 
 ## 🚀 Quick Start
 
-### 1. Install dependencies
-
+### 1. Install Dependencies
+Ensure you have Python 3.9+ installed, then run:
 ```bash
+# Install core AI, web, and medical libraries
 pip install -r requirements.txt
+
+# macOS only: Install system dependencies for voice/summarization
+brew install portaudio tesseract ffmpeg
 ```
 
-### 2. Configure
-
+### 2. Configure Environment
 ```bash
 cp .env.example .env
-# Edit .env with your LLM API key
+# Edit .env and add your LLM API key
 ```
 
-### 3. Run the CLI
-
+### 3. Run the System
+Use the development launcher to start both the Backend and Frontend:
 ```bash
-python main.py
+chmod +x run-web-dev.sh
+./run-web-dev.sh
 ```
+The Web UI will be available at: **http://localhost:5000**
 
-### 4. Run the Web UI
-
-```bash
-# Start the backend API
-python -m uvicorn backend.api:app --reload --port 8000
-
-# Open web/index.html in your browser
-```
-
-## 📋 Usage Examples
+## 📋 Clinical Usage Examples
 
 ```
 > Set patient John Smith, ID 12345, diabetes, on metformin
@@ -94,28 +90,18 @@ python -m uvicorn backend.api:app --reload --port 8000
 
 ## 🛡 Safety & Compliance
 
-- **No diagnoses or prescriptions** — the system blocks these action types
-- **Human approval gates** — sensitive actions require explicit confirmation
-- **Audit logging** — all actions logged to `audit_log.json` (HIPAA foundation)
-- **Response sanitization** — LLM outputs scanned for unsafe clinical language
+- **Clinical Boundaries**: The system is hard-coded to block diagnosis or prescription actions.
+- **Human-in-the-loop**: Sensitive actions (like submitting Prior Auth) require explicit human approval.
+- **Audit Trails**: All actions are logged to `audit_log.json` for HIPAA compliance foundations.
+- **Response Sanitization**: All LLM outputs pass through a safety layer to ensure appropriate clinical language.
 
-## 🗺 Product Roadmap
-
-| Phase | Timeline | Scope |
-|-------|----------|-------|
-| 🟢 Phase 1 | 0–2 months | Prior Auth MVP + Patient Brief |
-| 🟡 Phase 2 | 2–4 months | Follow-up tracking + notifications |
-| 🔵 Phase 3 | 4–8 months | Full workflow automation |
-| 🔴 Phase 4 | 8+ months | AI operating system for clinics |
-
-## 🧪 Running Tests
-
+## 🧪 Testing
 ```bash
 python -m pytest tests/ -v
 ```
 
 ## ⚖️ Regulatory Notes
 
-- **HIPAA**: Audit logging foundation in place. Production deployment requires encryption, access control, and BAA agreements.
-- **FDA**: System avoids diagnosis/prescription territory to minimize regulatory risk.
-- **EHR Integration**: Starts with PDF/text uploads. Future integration with Epic/Cerner via FHIR APIs.
+Buddi is designed as a **Clinical Decision Support (CDS)** tool. It is not intended to replace professional medical judgment. 
+- **HIPAA**: Foundation in place via audit logging. Production requires encryption at rest/transit.
+- **FDA**: System avoids diagnosis/prescription territory to minimize regulatory risk under current FDA software guidance.

@@ -22,6 +22,12 @@ PyPDF2
 Pillow
 pytesseract
 
+# Web Search & Summarization
+sumy
+nltk
+googlesearch-python
+lxml
+
 # Testing
 pytest
 
