@@ -4,12 +4,12 @@ This module initializes distributed tracing using OpenTelemetry SDK.
 """
 
 import os
-from opentelemetry import trace  # type: ignore
-from opentelemetry.sdk.trace import TracerProvider  # type: ignore
-from opentelemetry.sdk.trace.export import BatchSpanProcessor  # type: ignore
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # type: ignore
-from opentelemetry.sdk.resources import Resource  # type: ignore
-from opentelemetry.instrumentation.requests import RequestsInstrumentor  # type: ignore
+from opentelemetry import trace 
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor 
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter 
+from opentelemetry.sdk.resources import Resource 
+from opentelemetry.instrumentation.requests import RequestsInstrumentor 
 
 # Configure resource information for traces
 def setup_tracing(service_name: str = "buddi-agent", 

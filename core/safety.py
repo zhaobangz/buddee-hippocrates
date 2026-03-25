@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from core.config import Config  # type: ignore
+from core.config import Config
 
 
 # ── Actions that require human approval ──────────────────────────────
