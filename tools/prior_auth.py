@@ -11,7 +11,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 # In-memory store for prior auth requests (persisted to disk)
 _PRIOR_AUTH_STORE_FILE = "prior_auth_store.json"
@@ -112,7 +112,7 @@ def generate_prior_auth_form(
 
     Returns a dict representing the filled form and stores it for tracking.
     """
-    auth_id = f"PA-{uuid.uuid4().hex[:8].upper()}"
+    auth_id = f"PA-{str(uuid.uuid4()).split('-')[0].upper()}"
     now = datetime.now().isoformat()
 
     form = {

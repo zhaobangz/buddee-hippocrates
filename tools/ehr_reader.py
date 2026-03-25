@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import os
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 # Optional PDF support — gracefully degrade to text-only
 try:
-    import PyPDF2
+    import PyPDF2  # type: ignore
     _HAS_PDF = True
 except ImportError:
     _HAS_PDF = False

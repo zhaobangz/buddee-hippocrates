@@ -18,19 +18,19 @@ from tools import (
     follow_up,
     scheduling,
 )
-import os
-from typing import Optional
+from typing import Optional, Dict, Any
+# Unused imports removed
 
 # Initialize tracer
 tracer = get_tracer(__name__)
 
 try:
-    import speech_recognition as sr
+    import speech_recognition as sr  # type: ignore
 except Exception:
     sr = None
 
 try:
-    import pyttsx3
+    import pyttsx3  # type: ignore
 except Exception:
     pyttsx3 = None
 
@@ -58,17 +58,20 @@ class Agent:
             pyttsx3.init() if (Config.USE_VOICE and pyttsx3 is not None) else None
         )
 
-        if Config.USE_VOICE and self.tts_engine:
+        if Config.USE_VOICE and self.tts_engine is not None:
             try:
-                voices = self.tts_engine.getProperty("voices")
+                voices = self.tts_engine.getProperty("voices")  # type: ignore
                 if voices:
-                    self.tts_engine.setProperty("voice", voices[0].id)
-                self.tts_engine.setProperty("rate", 150)
+                    self.tts_engine.setProperty("voice", voices[0].id)  # type: ignore
+                self.tts_engine.setProperty("rate", 150)  # type: ignore
             except Exception:
                 pass
 
+        # Perception widget (set dynamically by start_perception)
+        self._perception_widget: Any = None
+
         # Pending approval for gated actions
-        self._pending_approval = None
+        self._pending_approval: Optional[Dict[str, Any]] = None
 
         log_audit_event("agent_initialized", {"assistant": Config.ASSISTANT_NAME})
 
@@ -76,10 +79,10 @@ class Agent:
 
     def listen(self):
         """Listen for voice input."""
-        if not self.recognizer:
+        if not self.recognizer or sr is None:
             return None
         try:
-            with sr.Microphone() as source:
+            with sr.Microphone() as source:  # type: ignore
                 print(f"{Config.ASSISTANT_NAME} is listening...")
                 self.recognizer.adjust_for_ambient_noise(source)
                 try:
@@ -87,20 +90,21 @@ class Agent:
                     text = self.recognizer.recognize_google(audio)
                     print(f"You said: {text}")
                     return text
-                except sr.UnknownValueError:
+                except sr.UnknownValueError:  # type: ignore
                     return "Sorry, I did not catch that."
-                except sr.RequestError:
+                except sr.RequestError:  # type: ignore
                     return "Sorry, my speech service is down."
-                except sr.WaitTimeoutError:
+                except sr.WaitTimeoutError:  # type: ignore
                     return None
         except Exception:
             return None
 
     def speak(self, text):
         """Convert text to speech."""
-        if self.tts_engine:
-            self.tts_engine.say(text)
-            self.tts_engine.runAndWait()
+        tts = self.tts_engine
+        if tts is not None:
+            tts.say(text)  # type: ignore
+            tts.runAndWait()  # type: ignore
 
     # ── Intent Detection ─────────────────────────────────────────────
 
@@ -138,7 +142,7 @@ Respond with ONLY the intent name. If unsure, respond with "general_clinical_que
                 intent = "general_clinical_query"
 
             span.set_attribute("detected_intent", intent)
-            log_audit_event("intent_detected", {"input_preview": ui[:100], "intent": intent})
+            log_audit_event("intent_detected", {"input_preview": str(ui)[:100], "intent": intent})  # type: ignore
             return intent
 
     # ── Main Handler ─────────────────────────────────────────────────
@@ -152,16 +156,16 @@ Respond with ONLY the intent name. If unsure, respond with "general_clinical_que
                 return "I didn't hear anything. Please repeat it."
 
             # Handle pending approval flow
-            if self._pending_approval is not None:
+            pending_action = self._pending_approval
+            if pending_action is not None:
                 lower = ui.strip().lower()
                 if lower in ("yes", "y", "confirm", "ok", "sure", "approve"):
-                    pending = self._pending_approval
                     self._pending_approval = None
-                    log_audit_event("action_approved", pending)
-                    return self._execute_approved_action(pending)
+                    log_audit_event("action_approved", pending_action)
+                    return self._execute_approved_action(pending_action)
                 else:
                     self._pending_approval = None
-                    log_audit_event("action_denied", {"input": ui[:100]})
+                    log_audit_event("action_denied", {"input": str(ui)[:100]})  # type: ignore
                     return "Action cancelled."
 
             # Detect intent
@@ -211,7 +215,7 @@ Respond with ONLY the intent name. If unsure, respond with "general_clinical_que
             if not validation["allowed"]:
                 return validation["reason"]
 
-            patient_ctx = self.memory.get_patient_context() if self.memory else {}
+            patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
             if not patient_ctx:
                 return (
                     "No patient context set. Please set the current patient first.\n"
@@ -257,7 +261,7 @@ If not clearly stated, use the patient's primary condition.
 
     def _handle_patient_brief(self, ui: str, lower: str, span) -> str:
         with tracer.start_as_current_span("patient_brief_workflow"):
-            patient_ctx = self.memory.get_patient_context() if self.memory else {}
+            patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
             if not patient_ctx:
                 return (
                     "No patient context set. Please set the current patient first, "
@@ -269,7 +273,7 @@ If not clearly stated, use the patient's primary condition.
         with tracer.start_as_current_span("follow_up_workflow"):
             # Check for listing
             if any(k in lower for k in ("list", "check", "pending", "status", "overdue")):
-                patient_ctx = self.memory.get_patient_context() if self.memory else {}
+                patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
                 pid = patient_ctx.get("patient_id")
 
                 if "overdue" in lower:
@@ -280,7 +284,7 @@ If not clearly stated, use the patient's primary condition.
                 return follow_up.format_follow_up_summary(records)
 
             # Create new follow-up
-            patient_ctx = self.memory.get_patient_context() if self.memory else {}
+            patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
             if not patient_ctx.get("patient_id"):
                 return "No patient context set. Please set the current patient first."
 
@@ -309,7 +313,7 @@ If not clearly stated, use the patient's primary condition.
 
     def _handle_guidelines(self, ui: str, lower: str, span) -> str:
         with tracer.start_as_current_span("guidelines_workflow"):
-            patient_ctx = self.memory.get_patient_context() if self.memory else {}
+            patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
 
             # Try to extract condition from the query
             extract_prompt = f"""
@@ -349,12 +353,12 @@ If unclear, respond with "unknown".
         with tracer.start_as_current_span("scheduling_workflow"):
             # Check for listing tasks
             if any(k in lower for k in ("list", "pending", "status", "tasks")):
-                patient_ctx = self.memory.get_patient_context() if self.memory else {}
+                patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
                 pid = patient_ctx.get("patient_id")
                 tasks = scheduling.get_pending_tasks(patient_id=pid)
                 return scheduling.format_task_summary(tasks)
 
-            patient_ctx = self.memory.get_patient_context() if self.memory else {}
+            patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
             if not patient_ctx.get("patient_id"):
                 return "No patient context set. Please set the current patient first."
 
@@ -390,7 +394,7 @@ If unclear, respond with "unknown".
                         "input": ui,
                     }
                     return request_human_approval("referral_create", {
-                        "patient": pname, "request": ui[:200],
+                        "patient": pname, "request": str(ui)[:200],  # type: ignore
                     })
                 spec_type = "General Specialist"
                 for s in ("Cardiology", "Endocrinology", "Neurology", "Orthopedics", "Dermatology", "Psychiatry"):
@@ -404,7 +408,7 @@ If unclear, respond with "unknown".
 
     def _handle_risk_check(self, ui: str, span) -> str:
         with tracer.start_as_current_span("risk_check"):
-            patient_ctx = self.memory.get_patient_context() if self.memory else {}
+            patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
             if not patient_ctx:
                 return "No patient context set. Cannot assess risk without patient information."
 
@@ -421,7 +425,7 @@ If unclear, respond with "unknown".
             lower = ui.lower()
 
             if any(k in lower for k in ("view", "show", "current", "get", "who")):
-                ctx = self.memory.get_patient_context() if self.memory else {}
+                ctx = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
                 if not ctx:
                     return "No patient context is currently set."
                 lines = [
@@ -437,12 +441,12 @@ If unclear, respond with "unknown".
                 return "\n".join(lines)
 
             if any(k in lower for k in ("clear", "reset", "remove")):
-                if self.memory:
-                    self.memory.clear_patient_context()
+                if self.memory is not None:
+                    self.memory.clear_patient_context()  # type: ignore
                 return "Patient context cleared."
 
             # Set patient context via LLM extraction
-            if self.memory:
+            if self.memory is not None:
                 extract_prompt = f"""
 Extract patient information from this input:
 "{ui}"
@@ -479,7 +483,7 @@ NOTES: [any additional notes]
                     elif line.upper().startswith("NOTES:"):
                         notes = line.split(":", 1)[1].strip()
 
-                self.memory.set_patient_context(
+                self.memory.set_patient_context(  # type: ignore
                     patient_id=pid or "AUTO",
                     name=name,
                     conditions=conditions,
@@ -510,7 +514,7 @@ NOTES: [any additional notes]
                 "Always recommend consulting with the treating physician for clinical decisions."
             )
 
-            patient_ctx = self.memory.get_patient_context() if self.memory else {}
+            patient_ctx: Dict[str, Any] = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
             if patient_ctx:
                 system_context += (
                     f"\n\nCurrent patient: {patient_ctx.get('name', 'Unknown')} "
@@ -525,13 +529,13 @@ NOTES: [any additional notes]
 
             gen_span.set_attribute("response.length", len(response))
             try:
-                if self.memory:
-                    self.memory.remember(ui, response)
+                if self.memory is not None:
+                    self.memory.remember(ui, response)  # type: ignore
             except Exception:
                 pass
             return response
 
-    def _execute_approved_action(self, pending: dict) -> str:
+    def _execute_approved_action(self, pending: Dict[str, Any]) -> str:
         """Execute an action that was previously approved by human review."""
         action = pending.get("action", "")
 
@@ -560,7 +564,7 @@ NOTES: [any additional notes]
         if not (Config.ENABLE_SCREEN_CAPTURE or Config.ENABLE_AUDIO):
             return None
         try:
-            from ui.widget import Widget
+            from ui.widget import Widget  # type: ignore
         except Exception:
             return None
 
@@ -588,22 +592,22 @@ NOTES: [any additional notes]
 
     def _on_image(self, img):
         try:
-            if self.memory:
-                self.memory.remember("screenshot", f"<image {img.size}>")
+            if self.memory is not None:
+                self.memory.remember("screenshot", f"<image {img.size}>")  # type: ignore
         except Exception:
             pass
 
     def _on_audio(self, data, sr):
         try:
-            if self.memory:
-                self.memory.remember("audio_snippet", f"<audio {len(data)} samples>")
+            if self.memory is not None:
+                self.memory.remember("audio_snippet", f"<audio {len(data)} samples>")  # type: ignore
         except Exception:
             pass
 
     def _on_ocr(self, text: str):
         try:
-            if self.memory:
-                self.memory.remember("ocr", text)
+            if self.memory is not None:
+                self.memory.remember("ocr", text)  # type: ignore
         except Exception:
             pass
 

@@ -4,16 +4,16 @@ This module initializes distributed tracing using OpenTelemetry SDK.
 """
 
 import os
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry import trace  # type: ignore
+from opentelemetry.sdk.trace import TracerProvider  # type: ignore
+from opentelemetry.sdk.trace.export import BatchSpanProcessor  # type: ignore
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # type: ignore
+from opentelemetry.sdk.resources import Resource  # type: ignore
+from opentelemetry.instrumentation.requests import RequestsInstrumentor  # type: ignore
 
 # Configure resource information for traces
 def setup_tracing(service_name: str = "buddi-agent", 
-                  otlp_endpoint: str = None) -> TracerProvider:
+                  otlp_endpoint: str | None = None) -> TracerProvider:
     """
     Initialize OpenTelemetry tracing.
     
@@ -38,9 +38,25 @@ def setup_tracing(service_name: str = "buddi-agent",
     # Initialize tracer provider
     tracer_provider = TracerProvider(resource=resource)
     
-    # Add OTLP exporter
-    otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
-    tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+    # Extract hostname and port safely
+    host = otlp_endpoint.replace("http://", "").replace("https://", "").split("/")[0]
+    hostname, _, port_str = host.partition(':')
+    port = int(port_str) if port_str else 80
+    
+    import socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.5)
+        result = sock.connect_ex((hostname, port))
+        sock.close()
+        
+        if result == 0:
+            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+        else:
+            print(f"⚠ Tracing collector not found at {otlp_endpoint} (Silently dropping spans).")
+    except Exception:
+        print(f"⚠ Tracing disabled: Could not verify endpoint {otlp_endpoint}.")
     
     # Set the global tracer provider
     trace.set_tracer_provider(tracer_provider)

@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 BACKEND_PORT=8000
-FRONTEND_PORT=5000
+FRONTEND_PORT=3000
 BACKEND_LOG="logs/backend.log"
 FRONTEND_LOG="logs/frontend.log"
 
@@ -82,14 +82,14 @@ sleep 2
 if ! kill -0 $BACKEND_PID 2>/dev/null; then
     echo -e "${RED}❌ Backend failed to start${NC}"
     echo "Error log:"
-    cat "$BACKEND_LOG"
+    cat "../$BACKEND_LOG"
     exit 1
 fi
 
 if ! kill -0 $FRONTEND_PID 2>/dev/null; then
     echo -e "${RED}❌ Frontend failed to start${NC}"
     echo "Error log:"
-    cat "$FRONTEND_LOG"
+    cat "../$FRONTEND_LOG"
     exit 1
 fi
 
@@ -117,9 +117,9 @@ echo ""
 # Tail logs
 echo "Output streams:"
 echo ""
-( tail -f "$BACKEND_LOG" & 
+( tail -f "../$BACKEND_LOG" & 
   BACKEND_TAIL=$!
-  tail -f "$FRONTEND_LOG" &
+  tail -f "../$FRONTEND_LOG" &
   FRONTEND_TAIL=$!
   
   wait

@@ -6,7 +6,7 @@ Exposes the clinical agent functionality as REST API endpoints
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 import logging
 
 from core.agent import Agent
@@ -148,7 +148,7 @@ async def chat(request: ChatRequest):
     try:
         with tracer.start_as_current_span("chat_request") as span:
             span.set_attribute("input.length", len(request.message))
-            logger.info(f"Processing message: {request.message[:100]}")
+            logger.info(f"Processing message: {request.message[:100]}")  # type: ignore
 
             response_text = agent.handle(request.message)
             span.set_attribute("response.length", len(response_text))

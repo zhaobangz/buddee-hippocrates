@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-import pytest
+# Unused import removed
 
 # Ensure tools can be imported
 import sys
@@ -99,6 +99,9 @@ class TestEHRReader:
 # ── Prior Authorization Tests ────────────────────────────────────────
 
 class TestPriorAuth:
+    _orig_file: str = ""
+    _tmp: tempfile._TemporaryFileWrapper = None  # type: ignore
+
     def setup_method(self):
         """Use a temp file for the PA store."""
         import tools.prior_auth as pa_mod
@@ -198,6 +201,9 @@ class TestClinicalGuidelines:
 # ── Follow-Up Tests ──────────────────────────────────────────────────
 
 class TestFollowUp:
+    _orig_file: str = ""
+    _tmp: tempfile._TemporaryFileWrapper = None  # type: ignore
+
     def setup_method(self):
         import tools.follow_up as fu_mod
         self._orig_file = fu_mod._FOLLOW_UP_STORE_FILE
@@ -251,6 +257,9 @@ class TestFollowUp:
 # ── Scheduling Tests ─────────────────────────────────────────────────
 
 class TestScheduling:
+    _orig_file: str = ""
+    _tmp: tempfile._TemporaryFileWrapper = None  # type: ignore
+
     def setup_method(self):
         import tools.scheduling as sched_mod
         self._orig_file = sched_mod._SCHEDULE_STORE_FILE
