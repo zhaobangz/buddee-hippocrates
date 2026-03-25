@@ -1,10 +1,9 @@
 # core/config.py
 import os
 import json
-from dotenv import load_dotenv 
+from dotenv import load_dotenv  # type: ignore
 
 load_dotenv()
-
 
 class Config:
     """Central configuration for the clinical agent and optional features.

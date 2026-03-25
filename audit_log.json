@@ -44,3 +44,14 @@
 {"timestamp": "2026-03-24T19:48:32.174508", "event_type": "safety_boundary_triggered", "user_id": "system", "details": {"flagged_phrases": ["you have"], "response_preview": "Based on the symptoms, you have diabetes."}}
 {"timestamp": "2026-03-24T19:48:32.175101", "event_type": "safety_boundary_triggered", "user_id": "system", "details": {"flagged_phrases": ["i diagnose"], "response_preview": "I diagnose this as a rare condition."}}
 {"timestamp": "2026-03-24T19:48:32.176240", "event_type": "approval_requested", "user_id": "system", "details": {"action_type": "prior_auth_submit", "details": {"patient": "Jane Doe", "treatment": "MRI"}}}
+{"timestamp": "2026-03-24T19:57:09.816774", "event_type": "agent_initialized", "user_id": "system", "details": {"assistant": "Buddi Clinical Agent"}}
+{"timestamp": "2026-03-24T19:57:09.821372", "event_type": "agent_initialized", "user_id": "system", "details": {"assistant": "Buddi Clinical Agent"}}
+{"timestamp": "2026-03-24T19:59:47.021143", "event_type": "intent_detected", "user_id": "system", "details": {"input_preview": "Generate a patient brief", "intent": "general_clinical_query"}}
+{"timestamp": "2026-03-24T19:59:52.549270", "event_type": "intent_detected", "user_id": "system", "details": {"input_preview": "Set patient John Smith, ID 12345, conditions: Type 2 Diabetes, Hypertension, medications: Metformin ", "intent": "general_clinical_query"}}
+{"timestamp": "2026-03-24T20:31:40.452252", "event_type": "agent_initialized", "user_id": "system", "details": {"assistant": "Buddi Clinical Agent"}}
+{"timestamp": "2026-03-24T20:31:40.456738", "event_type": "agent_initialized", "user_id": "system", "details": {"assistant": "Buddi Clinical Agent"}}
+{"timestamp": "2026-03-24T20:32:47.503500", "event_type": "safety_boundary_triggered", "user_id": "system", "details": {"flagged_phrases": ["you have"], "response_preview": "Based on the symptoms, you have diabetes."}}
+{"timestamp": "2026-03-24T20:32:47.504096", "event_type": "safety_boundary_triggered", "user_id": "system", "details": {"flagged_phrases": ["i diagnose"], "response_preview": "I diagnose this as a rare condition."}}
+{"timestamp": "2026-03-24T20:32:47.506463", "event_type": "approval_requested", "user_id": "system", "details": {"action_type": "prior_auth_submit", "details": {"patient": "Jane Doe", "treatment": "MRI"}}}
+{"timestamp": "2026-03-24T20:46:35.608453", "event_type": "agent_initialized", "user_id": "system", "details": {"assistant": "Buddi Clinical Agent"}}
+{"timestamp": "2026-03-24T20:46:35.612962", "event_type": "agent_initialized", "user_id": "system", "details": {"assistant": "Buddi Clinical Agent"}}
