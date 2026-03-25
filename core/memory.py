@@ -28,11 +28,11 @@ class Memory:
     def remember(self, ui: str, response: str) -> None:
         self.history.append({"user": ui, "assistant": response})
         if len(self.history) > self.max_history:
-            self.history = self.history[-self.max_history:]
+            self.history = self.history[-int(self.max_history):]  # type: ignore
         self.save_memory()
 
     def recall(self, num_interactions: int = 5) -> List[Dict[str, str]]:
-        return self.history[-num_interactions:] if self.history else []
+        return self.history[-int(num_interactions):] if self.history else []  # type: ignore
 
     def clear_history(self) -> None:
         """Clear conversation history."""

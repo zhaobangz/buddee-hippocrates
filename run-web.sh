@@ -58,7 +58,7 @@ fi
 echo ""
 echo "Starting frontend (Web Server)..."
 cd "$(dirname "$0")/web"
-python3 -m http.server 5000 &
+python3 -m http.server 3000 &
 FRONTEND_PID=$!
 echo -e "${GREEN}✓ Frontend PID: $FRONTEND_PID${NC}"
 
@@ -75,7 +75,7 @@ echo "  URL: http://localhost:8000"
 echo "  Docs: http://localhost:8000/docs"
 echo ""
 echo -e "${BLUE}Frontend Web UI:${NC}"
-echo "  URL: http://localhost:5000"
+echo "  URL: http://localhost:3000"
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop all servers${NC}"
 echo ""

@@ -1,0 +1,38 @@
+2026-03-24 19:43:52 PERFORMANCE Initialized shared memory (heap size: 8589934592, dep table pow: 27, hash table pow: 26): 0.000s
+2026-03-24 19:43:52 PERFORMANCE Initialized multiprocessing workers (workers: 4): 0.012s
+2026-03-24 19:43:52 INFO Server has started listening on socket `/var/folders/6v/6913x2cj10xc4z38d2sbtpv00000gn/T/pyre_server_9ce2edaf0ccf8707.sock`
+2026-03-24 19:43:52 INFO Initializing server state from scratch...
+2026-03-24 19:43:52 INFO Building module tracker...
+2026-03-24 19:43:52 PERFORMANCE Module tracker built: 0.491s
+2026-03-24 19:43:52 PERFORMANCE Full environment built: 0.493s
+2026-03-24 19:43:52 INFO Collecting all definitions...
+<unknown>:67: SyntaxWarning: invalid escape sequence '\N'
+<unknown>:82: SyntaxWarning: invalid escape sequence '\N'
+<unknown>:149: SyntaxWarning: invalid escape sequence '\N'
+<unknown>:196: SyntaxWarning: invalid escape sequence '\N'
+<unknown>:429: SyntaxWarning: invalid escape sequence '\N'
+2026-03-24 19:43:53 PERFORMANCE Collected definitions (defines: 12079): 1.069s
+2026-03-24 19:43:53 INFO Checking 12079 functions...
+2026-03-24 19:44:00 PROGRESS Processed 1510 of 12079 functions
+2026-03-24 19:44:00 PROGRESS Processed 3020 of 12079 functions
+2026-03-24 19:44:00 PROGRESS Processed 4530 of 12079 functions
+2026-03-24 19:44:00 PROGRESS Processed 6040 of 12079 functions
+2026-03-24 19:44:04 PROGRESS Processed 7550 of 12079 functions
+2026-03-24 19:44:04 PROGRESS Processed 9060 of 12079 functions
+2026-03-24 19:44:04 PROGRESS Processed 10570 of 12079 functions
+2026-03-24 19:44:05 PROGRESS Processed 12079 of 12079 functions
+2026-03-24 19:44:05 PERFORMANCE Check_TypeCheck: 11.192s
+2026-03-24 19:44:05 MEMORY Shared memory size post-typecheck (size: 40)
+2026-03-24 19:44:05 PROGRESS Postprocessing 786 sources...
+2026-03-24 19:44:05 PROGRESS Postprocessed 195 of 786 sources
+2026-03-24 19:44:05 PROGRESS Postprocessed 392 of 786 sources
+2026-03-24 19:44:05 PROGRESS Postprocessed 589 of 786 sources
+2026-03-24 19:44:05 PROGRESS Postprocessed 786 of 786 sources
+2026-03-24 19:44:05 PERFORMANCE Check_Postprocessing: 0.428s
+2026-03-24 19:44:05 PERFORMANCE Initialization (binary_version: 7873fbf76ce7a1f3b02a527f4e2ee8ac50ca6843, initialization method: cold start): 13.184s
+2026-03-24 19:44:05 INFO Server state initialized.
+2026-03-24 19:44:05 SERVER Connection established
+2026-03-24 19:44:05 SERVER Processing request (DisplayTypeError())...
+2026-03-24 19:44:05 PERFORMANCE Server request (binary_version: 7873fbf76ce7a1f3b02a527f4e2ee8ac50ca6843, request kind: DisplayTypeErrors): 0.088s
+2026-03-24 19:44:05 SERVER Request `(DisplayTypeError())` processed
+2026-03-24 19:44:05 SERVER Connection closed

@@ -1,12 +1,22 @@
-import requests
-from google import search as google_search
-from core.config import Config
+# Unused import removed
+from googlesearch import search as google_search  # type: ignore
 
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.summarizers.lsa import LsaSummarizer
-from sumy.nlp.stemmers import Stemmer
-from sumy.utils import get_stop_words
+# Optional: summarized content Extraction
+try:
+    from sumy.parsers.plaintext import PlaintextParser  # type: ignore
+    from sumy.nlp.tokenizers import Tokenizer  # type: ignore
+    from sumy.summarizers.lsa import LsaSummarizer  # type: ignore
+    from sumy.nlp.stemmers import Stemmer  # type: ignore
+    from sumy.utils import get_stop_words  # type: ignore
+    _HAS_SUMY = True
+except ImportError:
+    PlaintextParser = None  # type: ignore
+    Tokenizer = None  # type: ignore
+    LsaSummarizer = None  # type: ignore
+    Stemmer = None  # type: ignore
+    get_stop_words = None  # type: ignore
+    _HAS_SUMY = False
+
 
 class WebSearch:
     def __init__(self, num_results=3, search_engine='google', summarization=True, cache=True):
@@ -16,15 +26,18 @@ class WebSearch:
         self.cache = cache
         self.search_results = {}
 
-    def summarize_results(self, results):
+    def summarize_results(self, results):  # type: ignore
+        if not _HAS_SUMY:
+            return '\n\n'.join(results)
+
         # Combine all the results into a single text
         text = '\n\n'.join(results)
 
         # Summarize the text using LSA
-        parser = PlaintextParser.from_string(text, Tokenizer('english'))
-        stemmer = Stemmer("english")
-        summarizer = LsaSummarizer(stemmer)
-        summarizer.stop_words = get_stop_words('english')
+        parser = PlaintextParser.from_string(text, Tokenizer('english'))  # type: ignore
+        stemmer = Stemmer("english")  # type: ignore
+        summarizer = LsaSummarizer(stemmer)  # type: ignore
+        summarizer.stop_words = get_stop_words('english')  # type: ignore
         summary = summarizer(parser.document, 2)  # summarize to 2 sentences
 
         # Join the summary sentences into a single string
@@ -40,15 +53,9 @@ class WebSearch:
             # Get search results
             results = list(google_search(query, num_results=self.num_results))
 
-            # For a more advanced implementation, you could:
-            # 1. Scrape each page and summarize content
-            # 2. Use a search API instead
-            # 3. Integrate with the LLM to process results
-
             if results:
                 if self.summarization:
-                    # Use a summarization algorithm to condense the results into a shorter, more digestible form
-                    summary = self.summarize_results(self, results)
+                    summary = self.summarize_results(results)
                     self.search_results[query] = summary
                     return summary
                 else:

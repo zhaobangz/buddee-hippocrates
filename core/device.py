@@ -5,7 +5,7 @@ Provides a small, safe API for deciding whether to use CUDA / MPS or CPU.
 from typing import Tuple
 
 try:
-    import torch
+    import torch  # type: ignore
 except Exception:
     torch = None
 

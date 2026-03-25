@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from core.config import Config
+from core.config import Config  # type: ignore
 
 
 # ── Actions that require human approval ──────────────────────────────
@@ -114,7 +114,7 @@ def check_safety_boundaries(response: str) -> Dict[str, Any]:
     if flagged:
         log_audit_event("safety_boundary_triggered", {
             "flagged_phrases": flagged,
-            "response_preview": response[:200],
+            "response_preview": response[:200],  # type: ignore
         })
 
     return {

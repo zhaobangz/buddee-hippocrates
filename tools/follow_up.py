@@ -86,10 +86,10 @@ def create_follow_up(
         The created follow-up record.
     """
     fu_type = FOLLOW_UP_TYPES.get(reason, FOLLOW_UP_TYPES["general"])
-    fu_id = f"FU-{uuid.uuid4().hex[:8].upper()}"
+    fu_id = f"FU-{str(uuid.uuid4()).split('-')[0].upper()}"
     now = datetime.now()
     days = days_until_due if days_until_due is not None else fu_type["default_days"]
-    due_date = (now + timedelta(days=days)).isoformat()
+    due_date = (now + timedelta(days=float(days))).isoformat()
 
     record = {
         "follow_up_id": fu_id,
@@ -159,7 +159,7 @@ def process_follow_up_response(
     if risk_detected:
         record["status"] = "escalated"
         record["escalated"] = True
-        record["escalation_reason"] = f"Risk detected in patient response: {response[:100]}"
+        record["escalation_reason"] = f"Risk detected in patient response: {response[:100]}"  # type: ignore
     else:
         record["status"] = "completed"
 

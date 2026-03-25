@@ -44,7 +44,7 @@ def _create_task(
     days_out: int = 7,
 ) -> Dict[str, Any]:
     """Internal helper to create a scheduled task."""
-    task_id = f"TASK-{uuid.uuid4().hex[:8].upper()}"
+    task_id = f"TASK-{str(uuid.uuid4()).split('-')[0].upper()}"
     now = datetime.now()
     scheduled_date = (now + timedelta(days=days_out)).isoformat()
 

@@ -1,0 +1,30 @@
+{
+  "history": [
+    {
+      "user": "Generate a patient brief",
+      "assistant": "Error contacting LLM: 401 Client Error: Unauthorized for url: https://api.deepseek.com/v1/chat/completions"
+    },
+    {
+      "user": "Set patient John Smith, ID 12345, conditions: Type 2 Diabetes, Hypertension, medications: Metformin 1000mg, Lisinopril 10mg, allergies: Penicillin",
+      "assistant": "Error contacting LLM: 401 Client Error: Unauthorized for url: https://api.deepseek.com/v1/chat/completions"
+    },
+    {
+      "user": "Schedule a lab for HbA1c",
+      "assistant": "Error contacting LLM: 401 Client Error: Unauthorized for url: https://api.deepseek.com/v1/chat/completions"
+    },
+    {
+      "user": "Create a medication adherence follow-up",
+      "assistant": "Error contacting LLM: 401 Client Error: Unauthorized for url: https://api.deepseek.com/v1/chat/completions"
+    },
+    {
+      "user": "You are good",
+      "assistant": "Error contacting LLM: 401 Client Error: Unauthorized for url: https://api.deepseek.com/v1/chat/completions"
+    },
+    {
+      "user": "Generate a patient brief",
+      "assistant": "Error contacting LLM: 401 Client Error: Unauthorized for url: https://api.deepseek.com/v1/chat/completions"
+    }
+  ],
+  "patient_context": {},
+  "provider_context": {}
+}

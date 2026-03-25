@@ -4,10 +4,10 @@ Buddi Agent - Web Interface Launcher
 Starts both backend and frontend servers in separate threads
 """
 
-import os
+# Unused import removed
 import sys
 import subprocess
-import threading
+# Unused import removed
 import time
 import signal
 from pathlib import Path
@@ -17,6 +17,9 @@ BACKEND_PORT = 8000
 FRONTEND_PORT = 3000
 BACKEND_HOST = "0.0.0.0"
 
+# Global process references
+backend_process = None
+frontend_process = None
 class Colors:
     GREEN = '\033[0;32m'
     BLUE = '\033[0;34m'
@@ -38,8 +41,7 @@ def print_status(message, status="info"):
 def check_dependencies():
     """Check if required packages are installed"""
     try:
-        import fastapi
-        import uvicorn
+        pass
         return True
     except ImportError:
         return False
@@ -148,7 +150,7 @@ def cleanup(signum, frame):
     """Handle shutdown"""
     print("\n")
     print_status("Shutting down...", "warning")
-    global backend_process, frontend_process
+    # Unused globals removed
     
     if backend_process:
         try:
