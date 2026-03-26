@@ -18,19 +18,18 @@ class SpeechOutput:
 
         try:
             #get available voices
-            voices = self.engine.getproperty('voices')
-            if voices:
-                #prefer the female voice if available
-                for voice in voices:
-                    if "female" in voice.name.lower() or 'zira' in voice.name.lower():
-                        self.engine.setProperty('voice', voice.id)
-                        break 
-                    else:
-                        self.engine.setProperty('voice', voices[0].id) #default to the first voice
+            voices = self.engine.getProperty('voices')
+            #prefer the female voice if available
+            for voice in voices:
+                if "female" in voice.name.lower() or 'zira' in voice.name.lower():
+                    self.engine.setProperty('voice', voice.id)
+                    break 
+                else:
+                    self.engine.setProperty('voice', voices[0].id) #default to the first voice
                     
-                    #set the speech properties
-                    self.engine.setPropety('rate', 180) #speaking speed
-                    self.engine.setProperty('volume', 1) #volume range = 0.0 to 1.0
+                #set the speech properties
+                self.engine.setProperty('rate', 180) #speaking speed
+                self.engine.setProperty('volume', 1) #volume range = 0.0 to 1.0
         except Exception as e:
             print(f"Error Setting Up Voice: {e}")
 
@@ -42,14 +41,14 @@ class SpeechOutput:
         print(f"{Config.ASSISTANT_NAME}: {text}")
 
         #add to queue and start speaking threafd if not already running 
-        self.speech_queue.apend(text)
+        self.speech_queue.append(text)
         if not self.is_speaking:
             self._start_speaking_thread()
 
     def _start_speaking_thread(self):
         """start a thread to process the speech queue"""
 
-        if self.thread and self.thrad.is_alive():
+        if self.thread and self.thread.is_alive():
             return
         
         self.thread = threading.Thread(target = self._process_speech_queue)
