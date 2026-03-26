@@ -124,7 +124,7 @@ async def get_status():
         memory_enabled=Config.MEMORY_ENABLED,
         use_voice=Config.USE_VOICE,
         healthcare_tools={
-            "ehr_reader": Config.ENABLE_EHR_READER,
+            "ehr_reader" : Config.ENABLE_EHR_READER,
             "prior_auth": Config.ENABLE_PRIOR_AUTH,
             "clinical_guidelines": Config.ENABLE_CLINICAL_GUIDELINES,
             "follow_up": Config.ENABLE_FOLLOW_UP,
