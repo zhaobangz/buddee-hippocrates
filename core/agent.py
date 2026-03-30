@@ -2,13 +2,12 @@
 # Routes user input to the appropriate healthcare workflow tool.
 
 from core.llm_manager import LLMManager
-
 from core.memory import Memory
 
 from core.config import Config
 
 from core.tracing import get_tracer
-from core.safety import (
+from core import (
     validate_action,
     request_human_approval,
     sanitize_response,
@@ -28,12 +27,12 @@ from typing import Optional, Dict, Any
 tracer = get_tracer(__name__)
 
 try:
-    import speech_recognition as sr  # type: ignore
+    import speech_recognition as sr
 except Exception:
     sr = None
 
 try:
-    import pyttsx3  # type: ignore
+    import pyttsx3
 except Exception:
     pyttsx3 = None
 
@@ -75,6 +74,9 @@ class Agent:
 
         # Pending approval for gated actions
         self._pending_approval: Optional[Dict[str, Any]] = None
+
+        # Reasoning chain for the current interaction
+        self.reasoning_chain: List[str] = []
 
         log_audit_event("agent_initialized", {"assistant": Config.ASSISTANT_NAME})
 
@@ -132,6 +134,9 @@ You are a Clinical Agent System. Classify the intent into one of these categorie
 Respond with ONLY the intent name. If unsure, respond with "general_clinical_query".
 """
             intent = self.llm_manager.ask_llm(prompt).strip().lower()
+            self.reasoning_chain.append(f"Intent Detection Prompt: {prompt[:200]}...")
+            self.reasoning_chain.append(f"Raw LLM Intent: {intent}")
+
             # Clean up LLM response to extract just the intent
             for valid_intent in (
                 "prior_auth", "patient_brief", "follow_up",
@@ -144,6 +149,7 @@ Respond with ONLY the intent name. If unsure, respond with "general_clinical_que
             else:
                 intent = "general_clinical_query"
 
+            self.reasoning_chain.append(f"Final Detected Intent: {intent}")
             span.set_attribute("detected_intent", intent)
             log_audit_event("intent_detected", {"input_preview": str(ui)[:100], "intent": intent})  # type: ignore
             return intent
@@ -164,12 +170,15 @@ Respond with ONLY the intent name. If unsure, respond with "general_clinical_que
                 lower = ui.strip().lower()
                 if lower in ("yes", "y", "confirm", "ok", "sure", "approve"):
                     self._pending_approval = None
-                    log_audit_event("action_approved", pending_action)
+                    log_audit_event("action_approved", pending_action, reasoning_chain="\n".join(self.reasoning_chain))
                     return self._execute_approved_action(pending_action)
                 else:
                     self._pending_approval = None
                     log_audit_event("action_denied", {"input": str(ui)[:100]})  # type: ignore
                     return "Action cancelled."
+
+            # Clear reasoning chain for new interaction
+            self.reasoning_chain = []
 
             # Detect intent
             intent = self.detect_intent(ui)
@@ -177,29 +186,31 @@ Respond with ONLY the intent name. If unsure, respond with "general_clinical_que
 
             # ── Route to healthcare workflows ────────────────────────
 
+            # ── Route to healthcare workflows ────────────────────────
+
             if intent == "prior_auth":
-                return self._handle_prior_auth(ui, lower, span)
-
+                result = self._handle_prior_auth(ui, lower, span)
             elif intent == "patient_brief":
-                return self._handle_patient_brief(ui, lower, span)
-
+                result = self._handle_patient_brief(ui, lower, span)
             elif intent == "follow_up":
-                return self._handle_follow_up(ui, lower, span)
-
+                result = self._handle_follow_up(ui, lower, span)
             elif intent == "guidelines_lookup":
-                return self._handle_guidelines(ui, lower, span)
-
+                result = self._handle_guidelines(ui, lower, span)
             elif intent == "schedule_task":
-                return self._handle_scheduling(ui, lower, span)
-
-            elif intent == "risk_check":
-                return self._handle_risk_check(ui, span)
-
-            elif intent == "patient_context":
-                return self._handle_patient_context(ui, span)
-
+                result = self._handle_scheduling(ui, lower, span)
+            elif intent == "risk_check" or "risk" in lower:
+                result = self._handle_risk_check(ui, span)
+            elif intent == "patient_context" or "history" in lower:
+                result = self._handle_patient_context(ui, span)
             else:  # general_clinical_query
-                return self._handle_general_query(ui, span)
+                result = self._handle_general_query(ui, span)
+
+            log_audit_event(
+                "workflow_executed",
+                {"intent": intent, "result_preview": result[:200]},
+                reasoning_chain="\n".join(self.reasoning_chain)
+            )
+            return result
 
     # ── Workflow Handlers ────────────────────────────────────────────
 
@@ -427,18 +438,28 @@ If unclear, respond with "unknown".
         with tracer.start_as_current_span("patient_context"):
             lower = ui.lower()
 
-            if any(k in lower for k in ("view", "show", "current", "get", "who")):
+            if any(k in lower for k in ("view", "show", "current", "get", "who", "history", "context")):
                 ctx = self.memory.get_patient_context() if self.memory is not None else {}  # type: ignore
                 if not ctx:
                     return "No patient context is currently set."
                 lines = [
-                    "📋 Current Patient Context:",
+                    "📋 Current Patient Context & History:",
                     f"  Name: {ctx.get('name', 'N/A')}",
                     f"  ID: {ctx.get('patient_id', 'N/A')}",
                     f"  Conditions: {', '.join(ctx.get('conditions', [])) or 'None'}",
                     f"  Medications: {', '.join(ctx.get('medications', [])) or 'None'}",
                     f"  Allergies: {', '.join(ctx.get('allergies', [])) or 'None'}",
                 ]
+                
+                # Also include recent interaction summary if history is requested
+                if "history" in lower and self.memory:
+                    history = self.memory.recall(num_interactions=3)
+                    if history:
+                        lines.append("\n🕰️ Recent Activity:")
+                        for idx, item in enumerate(history):
+                            lines.append(f"  {idx+1}. User: {item.get('user', '')[:60]}...")
+                            lines.append(f"     Buddi: {item.get('bot', '')[:60]}...")
+                
                 if ctx.get("notes"):
                     lines.append(f"  Notes: {ctx['notes']}")
                 return "\n".join(lines)
@@ -559,6 +580,30 @@ NOTES: [any additional notes]
             return f"👨‍⚕️ Referral created: {task['task_id']}\n{task['description']}"
 
         return "Approved action executed."
+
+    # ── Shadow Mode ───────────────────────────────────────────────────
+
+    def shadow_mode_compare(self, ui: str, expert_action: str) -> Dict[str, Any]:
+        """Compare the agent's intent detection with an expert's baseline.
+        
+        This is a 'Shadow Mode' feature used for training and validation.
+        """
+        self.reasoning_chain = [f"Shadow Mode Evaluation start for: '{ui}'"]
+        detected_intent = self.detect_intent(ui)
+        
+        comparison = {
+            "input": ui,
+            "expert_baseline": expert_action,
+            "agent_suggestion": detected_intent,
+            "match": detected_intent.lower() == expert_action.lower(),
+        }
+        
+        log_audit_event(
+            "shadow_mode_evaluation",
+            comparison,
+            reasoning_chain="\n".join(self.reasoning_chain)
+        )
+        return comparison
 
     # ── Perception helpers (optional) ────────────────────────────────
 

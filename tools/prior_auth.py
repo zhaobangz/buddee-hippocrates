@@ -7,11 +7,17 @@ implementation designed for future integration with real insurance APIs.
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 import json
 import os
 import uuid
-from datetime import datetime
-from typing import Any, Dict, List
+
+from core.llm_manager import LLMManager
+from core.rag_engine import get_rag_engine
+
+llm = LLMManager()
+rag = get_rag_engine()
 
 # In-memory store for prior auth requests (persisted to disk)
 _PRIOR_AUTH_STORE_FILE = "prior_auth_store.json"
@@ -129,7 +135,7 @@ def generate_prior_auth_form(
         "treatment_requested": treatment,
         "treating_physician": physician_name,
         "physician_npi": physician_npi,
-        "clinical_justification": clinical_justification or _auto_justification(diagnosis, treatment),
+        "clinical_justification": clinical_justification or _generate_intelligent_justification(patient_data, treatment, diagnosis),
         "required_fields": get_required_fields(insurance_type),
     }
 
@@ -208,8 +214,44 @@ def format_prior_auth_summary(form: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _generate_intelligent_justification(patient_data: Dict[str, Any], treatment: str, diagnosis: str) -> str:
+    """Generate a high-quality clinical justification for prior auth.
+    
+    Pulls specific evidence (failed prior therapies, specific lab values) 
+    from the patient's history and matches with guidelines.
+    """
+    # 1. Get guidelines for the diagnosis/treatment
+    guidelines = rag.search(f"{diagnosis} {treatment}", top_k=2)
+    
+    # 2. Extract relevant patient history (medications, labs)
+    history = {
+        "conditions": patient_data.get("conditions", []),
+        "medications": patient_data.get("medications", []),
+        "labs": patient_data.get("lab_results", [])
+    }
+
+    # 3. Use LLM to draft the letter
+    prompt = f"""
+System: You are a clinical documentation specialist.
+Goal: Draft a "Clinical Justification" letter for a Prior Authorization request.
+Patient Data: {json.dumps(history)}
+Guidelines: {json.dumps(guidelines)}
+Requested Treatment: {treatment}
+Diagnosis: {diagnosis}
+
+Structure the justification with:
+- Clinical Necessity: Why the patient needs this.
+- Evidence-Based Justification: Reference the guidelines.
+- Prior Therapies: List what was tried and failed (if any).
+- Lab Values: Reference specific lab results if relevant.
+
+Be professional, concise, and persuasive.
+"""
+    return llm.ask_llm(prompt)
+
+
 def _auto_justification(diagnosis: str, treatment: str) -> str:
-    """Generate a basic clinical justification string."""
+    """Fallback basic clinical justification string."""
     return (
         f"Patient presents with {diagnosis}. "
         f"Requesting authorization for {treatment} based on current clinical guidelines. "

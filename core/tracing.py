@@ -103,10 +103,10 @@ def shutdown_tracing() -> None:
     Call this at application exit to ensure all spans are exported.
     """
     try:
+        from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
         trace_provider = trace.get_tracer_provider()
-        if hasattr(trace_provider, 'force_flush'):
+        if isinstance(trace_provider, SdkTracerProvider):
             trace_provider.force_flush(timeout_millis=5000)
-        if hasattr(trace_provider, 'shutdown'):
             trace_provider.shutdown()
     except Exception as e:
         print(f"Error during tracing shutdown: {e}")

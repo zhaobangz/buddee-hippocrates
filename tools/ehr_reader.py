@@ -9,14 +9,25 @@ from __future__ import annotations
 
 import os
 import json
-from typing import Any, Dict, List
+import pandas as pd
+from typing import Any, Dict, List, Optional
+from datetime import datetime
 
-# Optional PDF support — gracefully degrade to text-only
 try:
     import PyPDF2  # type: ignore
     _HAS_PDF = True
 except ImportError:
     _HAS_PDF = False
+
+try:
+    import easyocr  # type: ignore
+    _HAS_MEDICAL_OCR = True
+    _ocr_reader = easyocr.Reader(['en'])
+except ImportError:
+    _HAS_MEDICAL_OCR = False
+
+from core.llm_manager import LLMManager
+llm = LLMManager()
 
 
 def parse_patient_record(file_path: str) -> Dict[str, Any]:
@@ -38,8 +49,19 @@ def parse_patient_record(file_path: str) -> Dict[str, Any]:
                 reader = PyPDF2.PdfReader(f)
                 for page in reader.pages:
                     raw_text += page.extract_text() or ""
+            
+            # If text extraction failed or is very sparse, try OCR
+            if _HAS_OCR and len(raw_text.strip()) < 50:
+                # Basic OCR attempt (Note: in production would use pdf2image)
+                # For now, we'll log that OCR might be needed for this file
+                raw_text += f"\n[OCR NOTE: Document appears to be image-based. Basic extraction may be incomplete.]\n"
         except Exception as e:
             return {"error": f"Failed to read PDF: {e}"}
+    elif ext in (".png", ".jpg", ".jpeg") and _HAS_OCR:
+        try:
+            raw_text = pytesseract.image_to_string(Image.open(file_path))
+        except Exception as e:
+            return {"error": f"Failed to perform OCR on image: {e}"}
     elif ext == ".json":
         try:
             with open(file_path, "r") as f:
@@ -57,6 +79,24 @@ def parse_patient_record(file_path: str) -> Dict[str, Any]:
                 }
         except Exception as e:
             return {"error": f"Failed to parse JSON: {e}"}
+    elif ext == ".csv":
+        try:
+            df = pd.read_csv(file_path)
+            raw_text = df.to_string()
+            return {
+                "raw_text": raw_text,
+                "lab_results": df.to_dict(orient="records"),
+                "notes": f"Parsed lab dataset with {len(df)} records.",
+            }
+        except Exception as e:
+            return {"error": f"Failed to parse CSV: {e}"}
+    elif ext in (".png", ".jpg", ".jpeg") and _HAS_MEDICAL_OCR:
+        try:
+            # Using EasyOCR as the specialized open-source medical reader
+            results = _ocr_reader.readtext(file_path, detail=0)
+            raw_text = "\n".join(results)
+        except Exception as e:
+            return {"error": f"Failed to perform Medical OCR: {e}"}
     else:
         try:
             with open(file_path, "r", encoding="utf-8", errors="replace") as f:
@@ -68,8 +108,75 @@ def parse_patient_record(file_path: str) -> Dict[str, Any]:
     return _extract_from_text(raw_text)
 
 
+def generate_lab_trend_report(lab_results: List[Dict[str, Any]]) -> str:
+    """Analyze historical lab results and generate trend reports.
+    
+    Example: 'HbA1c has risen 0.5% over 3 months despite Metformin adherence'
+    """
+    if not lab_results or not isinstance(lab_results, list):
+        return "No historical lab results available for trend analysis."
+
+    try:
+        df = pd.DataFrame(lab_results)
+        # Ensure date and value columns exist (standardized mock format)
+        # In production, we'd map 'A1C%', 'Hemoglobin A1c', etc.
+        if 'date' not in df.columns or 'value' not in df.columns:
+            return "Lab results format insufficient for automated trend reports."
+
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+
+        # Use LLM to interpret the trend
+        prompt = f"""
+System: You are an expert clinical pathologist.
+Task: Analyze these lab trends for a patient and provide a concise clinical report.
+Lab Data:
+{df.to_string()}
+
+Focus on:
+- Direction of change (improving/worsening)
+- Rate of change
+- Clinical significance
+"""
+        return llm.ask_llm(prompt)
+    except Exception as e:
+        return f"Error analyzing lab trends: {str(e)}"
+
+
 def _extract_from_text(text: str) -> Dict[str, Any]:
-    """Attempt lightweight keyword extraction from raw clinical text."""
+    """Use AI to extract structured clinical data from raw text."""
+    prompt = f"""
+Extract patient information from this clinical document:
+"{text[:4000]}"
+
+Respond in this exact JSON format:
+{{
+    "patient_name": "...",
+    "patient_id": "...",
+    "conditions": ["...", "..."],
+    "medications": ["...", "..."],
+    "allergies": ["...", "..."],
+    "lab_results": ["...", "..."],
+    "notes": "..."
+}}
+If a field is not found, use empty string or empty list as appropriate.
+Respond with ONLY the JSON.
+"""
+    try:
+        response = llm.ask_llm(prompt)
+        # Attempt to find JSON block if it's wrapped in markdown
+        if "```json" in response:
+            response = response.split("```json")[1].split("```")[0].strip()
+        data = json.loads(response)
+        data["raw_text"] = text
+        return data
+    except Exception:
+        # Fallback to keyword matching if LLM fails
+        return _fallback_extract_from_text(text)
+
+
+def _fallback_extract_from_text(text: str) -> Dict[str, Any]:
+    """Lightweight keyword extraction as a fallback."""
     result: Dict[str, Any] = {
         "raw_text": text,
         "patient_name": "Unknown",

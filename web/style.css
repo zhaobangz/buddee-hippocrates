@@ -122,6 +122,84 @@ body {
     font-weight: 500;
 }
 
+/* ── Mode Toggle & Header Right ─────────────────────────────────── */
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mode-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* The switch - the box around the slider */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+}
+
+.switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-input);
+    transition: .4s;
+    border: 1px solid var(--border-light);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 4px;
+    bottom: 3px;
+    background-color: var(--text-secondary);
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: var(--primary);
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px var(--primary);
+}
+
+input:checked + .slider:before {
+    transform: translateX(14px);
+    background-color: white;
+}
+
+.slider.round {
+    border-radius: 20px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
@@ -279,7 +357,26 @@ body {
 
 .form-group {
     display: flex;
+    align-items: center;
     gap: 8px;
+}
+
+.upload-label {
+    padding: 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.upload-label:hover {
+    border-color: var(--primary);
+    background: var(--primary-glow);
+}
+
+.upload-icon {
+    font-size: 1.2rem;
 }
 
 .text-input {
@@ -357,6 +454,42 @@ body {
     margin-bottom: 10px;
 }
 
+/* ── Tabs ────────────────────────────────────────────────────────── */
+
+.tabs-container {
+    padding: 8px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+.tab-btn.active {
+    background: var(--primary-glow);
+    border-color: var(--primary-dark);
+    color: var(--primary-light);
+}
+
 /* ── Patient Context Card ────────────────────────────────────────── */
 
 .patient-context-card {
@@ -383,6 +516,70 @@ body {
     color: var(--text-muted);
     font-size: 0.8rem;
     font-style: italic;
+}
+
+/* ── Risks ───────────────────────────────────────────────────────── */
+
+.risk-indicator-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.risk-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: 12px;
+    font-weight: 600;
+}
+
+.risk-badge.low {
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.risk-badge.med {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+/* ── History ─────────────────────────────────────────────────────── */
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.history-item {
+    padding: 8px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-xs);
+    border-left: 3px solid var(--primary);
+}
+
+.history-item-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+
+.history-item-content {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ── Workflow List ───────────────────────────────────────────────── */
@@ -552,6 +749,268 @@ body {
 
 .toast.show {
     bottom: 24px;
+}
+
+/* ── View Containers (Dashboard & Shadow) ───────────────────────── */
+
+.view-container {
+    flex: 1;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.view-header h2 {
+    font-size: 1.25rem;
+    margin-bottom: 4px;
+}
+
+.view-header p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* ── Perception Widget (Siri-Inspired) ─────────────────────────── */
+
+.perception-widget {
+    background: linear-gradient(135deg, var(--bg-card) 0%, #0f172a 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid #111e2f;
+    position: relative;
+    overflow: hidden;
+}
+
+.mic-container {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    margin: 12px 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.mic-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #111e2f;
+    border: 1px solid #1c3554;
+    color: #3fb2d6;
+    font-size: 1.5rem;
+    cursor: pointer;
+    z-index: 2;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.mic-btn:hover {
+    transform: scale(1.1);
+    background: #1c3554;
+    color: #61dafb;
+}
+
+.mic-btn.active {
+    background: #1c3554;
+    color: #fff;
+    box-shadow: 0 0 20px rgba(63, 178, 214, 0.5);
+}
+
+.mic-rings {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 1px solid rgba(63, 178, 214, 0.2);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.mic-rings.animating {
+    animation: mic-pulse 2s infinite;
+}
+
+@keyframes mic-pulse {
+    0% { transform: scale(0.8); opacity: 0; }
+    30% { opacity: 0.6; }
+    100% { transform: scale(2.5); opacity: 0; }
+}
+
+.perception-status {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 12px;
+}
+
+.perception-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.small-action-btn {
+    flex: 1;
+    padding: 6px;
+    font-size: 0.7rem;
+    background: rgba(63, 178, 214, 0.05);
+    border: 1px solid rgba(63, 178, 214, 0.1);
+    color: #3fb2d6;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.small-action-btn:hover {
+    background: rgba(63, 178, 214, 0.15);
+    border-color: #3fb2d6;
+}
+
+/* ── Shadow Mode Polish ─────────────────────────────────────────── */
+.shadow-workstation {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+@media (max-width: 900px) {
+    .shadow-workstation {
+        grid-template-columns: 1fr;
+    }
+}
+
+.risk-heatmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.heatmap-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.2s;
+}
+
+.heatmap-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary);
+}
+
+.heat-level {
+    height: 4px;
+    border-radius: 2px;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.heat-high { background: var(--danger); }
+.heat-med  { background: var(--warning); }
+.heat-low  { background: var(--success); }
+
+/* ── Shadow Workstation ──────────────────────────────────────────── */
+
+.shadow-workstation {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    flex: 1;
+}
+
+.shadow-input-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.shadow-input-panel h3 {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.shadow-input-panel textarea {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    color: var(--text-primary);
+    font-family: inherit;
+    resize: none;
+    outline: none;
+}
+
+.shadow-input-panel textarea:focus {
+    border-color: var(--primary);
+}
+
+.shadow-output-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.comparison-result {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.comparison-stat {
+    padding: 12px;
+    border-radius: var(--radius-xs);
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+}
+
+.match-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.match-true { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.match-false { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+/* ── Patient Mode Override ───────────────────────────────────────── */
+
+.patient-mode {
+    --primary: #4f46e5;
+    --primary-light: #818cf8;
+    --primary-dark: #3730a3;
+    --primary-glow: rgba(79, 70, 229, 0.15);
+}
+
+.patient-mode .sidebar { display: none; }
+.patient-mode .workflow-actions { display: none; }
+.patient-mode .message.agent-message {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+}
+.patient-mode .message.user-message {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+}
+.patient-mode .title {
+    background: linear-gradient(135deg, var(--primary-light), var(--accent-light));
 }
 
 /* ── Responsive ──────────────────────────────────────────────────── */

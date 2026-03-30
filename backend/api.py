@@ -38,7 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global agent instance
+# Global agent instance (initialized in startup)
 agent: Optional[Agent] = None
 
 
@@ -65,6 +65,21 @@ class PatientContextRequest(BaseModel):
     medications: List[str] = []
     allergies: List[str] = []
     notes: str = ""
+
+
+class ShadowModeRequest(BaseModel):
+    """Request model for shadow mode comparison"""
+    message: str
+    expert_action: str
+
+
+class ShadowModeResponse(BaseModel):
+    """Response model for shadow mode comparison"""
+    input: str
+    expert_baseline: str
+    agent_suggestion: str
+    match: bool
+    status: str = "success"
 
 
 class StatusResponse(BaseModel):
@@ -113,7 +128,6 @@ async def health_check():
         "status": "healthy",
         "service": "buddi-clinical-agent-api",
     }
-
 
 @app.get("/api/status", response_model=StatusResponse)
 async def get_status():
@@ -198,6 +212,55 @@ async def clear_patient_context():
     return {"status": "success", "message": "Patient context cleared"}
 
 
+# ── Patient History ──────────────────────────────────────────────────
+
+@app.get("/api/patient-history")
+async def get_patient_history(count: int = 10):
+    """Get recent conversation history/activity for the patient"""
+    if agent is None or agent.memory is None:
+        raise HTTPException(status_code=503, detail="Agent or memory not available")
+
+    history = agent.memory.recall(num_interactions=count)
+    return {"status": "success", "history": history, "count": len(history)}
+
+
+# ── Risk Assessment ──────────────────────────────────────────────────
+
+@app.get("/api/risk-assessment")
+async def get_risk_assessment():
+    """Perform a risk assessment based on current patient context"""
+    if agent is None or agent.memory is None:
+        raise HTTPException(status_code=503, detail="Agent or memory not available")
+
+    ctx = agent.memory.get_patient_context()
+    if not ctx or not ctx.get("patient_id"):
+        return {"status": "success", "risks": [], "summary": "No patient context set"}
+
+    # Use the logic from ehr_reader (already imported)
+    from tools.ehr_reader import _identify_risks
+    risks = _identify_risks(
+        ctx.get("conditions", []),
+        ctx.get("medications", []),
+        ctx.get("allergies", [])
+    )
+
+    # Map risk strings to UI-friendly badges/levels
+    structured_risks = []
+    for r in risks:
+        level = "high"
+        if "monitor" in r.lower() or "review" in r.lower():
+            level = "med"
+        elif "history" in r.lower():
+            level = "low"
+        structured_risks.append({"label": r, "level": level})
+
+    return {
+        "status": "success",
+        "risks": structured_risks,
+        "summary": f"Detected {len(structured_risks)} focus areas for clinical review"
+    }
+
+
 # ── Audit Log ────────────────────────────────────────────────────────
 
 @app.get("/api/audit-log")
@@ -223,6 +286,26 @@ async def list_workflows():
             {"id": "risk_check", "name": "Risk Assessment", "description": "Review patient risk factors and alerts", "icon": "⚠️"},
         ],
     }
+
+
+# ── Shadow Mode ────────────────────────────────────────────────────────
+
+@app.post("/api/shadow-mode/compare", response_model=ShadowModeResponse)
+async def shadow_mode_compare(request: ShadowModeRequest):
+    """Compare the agent's intent detection with an expert's baseline"""
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        with tracer.start_as_current_span("shadow_mode_compare") as span:
+            span.set_attribute("input.length", len(request.message))
+            logger.info(f"Running shadow mode evaluation for: {request.message[:100]}")
+
+            comparison = agent.shadow_mode_compare(request.message, request.expert_action)
+            return ShadowModeResponse(**comparison, status="success")
+    except Exception as e:
+        logger.info(f"Error in shadow mode comparison: {e}")
+        raise HTTPException(status_code=500, detail=f"Error in shadow mode: {str(e)}")
 
 
 # ── Reset ────────────────────────────────────────────────────────────

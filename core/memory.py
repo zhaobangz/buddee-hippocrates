@@ -5,6 +5,7 @@
 import json
 import os
 from typing import Any, Dict, List, Optional
+from core.storage import SecureStorage
 
 
 class Memory:
@@ -18,6 +19,7 @@ class Memory:
 
         # Provider context — doctor preferences, clinic workflows
         self.provider_context: Dict[str, Any] = {}
+        self.storage = SecureStorage()
 
         self.load_memory()
 
@@ -110,16 +112,18 @@ class Memory:
                 "patient_context": self.patient_context,
                 "provider_context": self.provider_context,
             }
-            with open(self.persist_file, "w") as f:
-                json.dump(data, f, indent=2)
+            self.storage.save_json(self.persist_file, data)
         except Exception as e:
             print(f"Error Saving Memory to Disk: {e}")
 
     def load_memory(self) -> None:
         if os.path.exists(self.persist_file):
             try:
-                with open(self.persist_file, "r") as f:
-                    data = json.load(f)
+                data = self.storage.load_json(self.persist_file)
+                if data is None:
+                    self.history = []
+                    return
+                
                 if isinstance(data, list):
                     # Legacy format: plain history list
                     self.history = data

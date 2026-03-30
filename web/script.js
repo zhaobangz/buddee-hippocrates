@@ -4,7 +4,12 @@
  */
 
 // Configuration
-const API_BASE_URL = 'http://localhost:8000/api';
+// If the frontend is served from a server, try to guess the API URL
+const DEFAULT_API_PORT = 8000;
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? `${window.location.protocol}//${window.location.hostname}:${DEFAULT_API_PORT}/api`
+    : '/api'; // Fallback for production/relative paths
+
 const RECONNECT_INTERVAL = 5000;
 
 // State
@@ -22,6 +27,17 @@ const loadingSpinner = document.getElementById('loadingSpinner');
 const errorToast = document.getElementById('errorToast');
 const toastMessage = document.getElementById('toastMessage');
 const clearPatientBtn = document.getElementById('clearPatientBtn');
+const patientModeToggle = document.getElementById('patientModeToggle');
+const imageUpload = document.getElementById('imageUpload');
+const compareShadowBtn = document.getElementById('compareShadowBtn');
+const expertActionInput = document.getElementById('expertActionInput');
+const shadowComparisonOutput = document.getElementById('shadowComparisonOutput');
+const dashboardView = document.getElementById('dashboardView');
+const shadowView = document.getElementById('shadowView');
+const chatContainer = document.getElementById('chatContainer');
+const micBtn = document.getElementById('micBtn');
+const micRings = document.getElementById('micRings');
+const perceptionStatus = document.getElementById('perceptionStatus');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -30,6 +46,53 @@ document.addEventListener('DOMContentLoaded', () => {
     chatForm.addEventListener('submit', handleSendMessage);
     resetButton.addEventListener('click', handleReset);
     clearPatientBtn.addEventListener('click', handleClearPatient);
+
+    // Mode Toggle
+    patientModeToggle.addEventListener('change', (e) => {
+        document.body.classList.toggle('patient-mode', e.target.checked);
+        if (e.target.checked) {
+            addMessageToChat("Patient Mode Active: Providing simplified, patient-friendly explanations.", "system-message");
+        } else {
+            addMessageToChat("Clinical Mode Active: Full technical precision enabled.", "system-message");
+        }
+    });
+
+    // Tab Switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.getAttribute('data-tab');
+            switchTab(tab);
+            
+            // Highlight active tab
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // Shadow Mode Comparison
+    compareShadowBtn.addEventListener('click', handleShadowCompare);
+
+    // Image Upload (OCR)
+    imageUpload.addEventListener('change', handleImageOCR);
+
+    // Mic Interaction Mockup
+    let isListening = false;
+    micBtn.addEventListener('click', () => {
+        isListening = !isListening;
+        if (isListening) {
+            micBtn.classList.add('active');
+            micRings.classList.add('animating');
+            perceptionStatus.textContent = 'Buddi is listening...';
+            perceptionStatus.style.color = '#3fb2d6';
+            addMessageToChat('[PERCEPTION] Live audio capture enabled.', 'system-message');
+        } else {
+            micBtn.classList.remove('active');
+            micRings.classList.remove('animating');
+            perceptionStatus.textContent = 'Perception Idle';
+            perceptionStatus.style.color = 'var(--text-muted)';
+            addMessageToChat('[PERCEPTION] Live capture stopped.', 'system-message');
+        }
+    });
 
     // Workflow quick-action buttons
     document.querySelectorAll('.workflow-btn').forEach(btn => {
@@ -45,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAgentStatus();
     setInterval(checkAgentStatus, RECONNECT_INTERVAL);
 });
-
 // ── Agent Status ────────────────────────────────────────────────────
 
 async function checkAgentStatus() {
@@ -55,6 +117,8 @@ async function checkAgentStatus() {
             setAgentStatus(true);
             loadAgentInfo();
             loadPatientContext();
+            loadPatientHistory();
+            loadRiskAssessment();
             loadAuditLog();
         } else {
             setAgentStatus(false);
@@ -79,6 +143,21 @@ function setAgentStatus(connected) {
         statusText.textContent = 'Disconnected';
         sendButton.disabled = true;
         document.getElementById('apiStatus').textContent = '✗ API is offline';
+    }
+}
+
+function switchTab(tab) {
+    chatContainer.style.display = 'none';
+    dashboardView.style.display = 'none';
+    shadowView.style.display = 'none';
+
+    if (tab === 'chat') {
+        chatContainer.style.display = 'flex';
+    } else if (tab === 'dashboard') {
+        dashboardView.style.display = 'flex';
+        renderRiskHeatmap();
+    } else if (tab === 'shadow') {
+        shadowView.style.display = 'flex';
     }
 }
 
@@ -124,6 +203,140 @@ async function loadPatientContext() {
     } catch (error) {
         console.error('Error loading patient context:', error);
     }
+}
+
+async function loadPatientHistory() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/patient-history?count=5`);
+        if (response.ok) {
+            const data = await response.json();
+            const display = document.getElementById('patientHistoryDisplay');
+            if (data.history && data.history.length > 0) {
+                display.innerHTML = data.history.map(item => `
+                    <div class="history-item">
+                        <div class="history-item-header">
+                            <span>User query</span>
+                        </div>
+                        <div class="history-item-content">${item.user}</div>
+                    </div>
+                `).join('');
+            } else {
+                display.innerHTML = '<p class="context-empty">No history available</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading patient history:', error);
+    }
+}
+
+async function loadRiskAssessment() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/risk-assessment`);
+        if (response.ok) {
+            const data = await response.json();
+            const container = document.getElementById('riskIndicatorContainer');
+            if (data.risks && data.risks.length > 0) {
+                container.innerHTML = data.risks.map(r => `
+                    <span class="risk-badge ${r.level}">${r.label.split('—')[0].trim()}</span>
+                `).join('');
+            } else {
+                container.innerHTML = '';
+            }
+            // If the dashboard is visible, update the heatmap too
+            if (dashboardView.style.display !== 'none') {
+                renderRiskHeatmap(data.risks);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading risk assessment:', error);
+    }
+}
+
+function renderRiskHeatmap(risks = []) {
+    const heatmap = document.getElementById('riskHeatmap');
+    if (!risks || risks.length === 0) {
+        heatmap.innerHTML = '<p class="context-empty">No clinical risks detected to visualize.</p>';
+        return;
+    }
+
+    heatmap.innerHTML = risks.map(r => `
+        <div class="heatmap-card">
+            <div style="font-weight: 600; font-size: 0.9rem;">${r.label.split('—')[0]}</div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary);">${r.label.split('—')[1] || ''}</div>
+            <div class="heat-level heat-${r.level}"></div>
+        </div>
+    `).join('');
+}
+
+async function handleShadowCompare() {
+    const expertAction = expertActionInput.value.trim();
+    if (!expertAction) {
+        showError('Please enter your manual charting action first.');
+        return;
+    }
+
+    // We'll use the last user message as the input message
+    const historyRes = await fetch(`${API_BASE_URL}/patient-history?count=1`);
+    const history = await historyRes.json();
+    const lastMessage = (history.history && history.history.length > 0) 
+        ? history.history[0].user 
+        : "Patient presents for routine follow-up.";
+
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE_URL}/shadow-mode/compare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: lastMessage,
+                expert_action: expertAction
+            })
+        });
+
+        if (!response.ok) throw new Error('Shadow mode comparison failed');
+        
+        const data = await response.json();
+        renderShadowComparison(data);
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+function renderShadowComparison(data) {
+    shadowComparisonOutput.innerHTML = `
+        <div class="comparison-result">
+            <div class="comparison-stat">
+                <h3>Intent Match</h3>
+                <span class="match-badge match-${data.match}">${data.match ? 'MATCHED' : 'DIVERGED'}</span>
+            </div>
+            <div class="comparison-stat">
+                <h4>Agent Intent Detection</h4>
+                <p style="font-size: 0.85rem; color: var(--primary-light);">${data.agent_suggestion}</p>
+            </div>
+            <div class="comparison-stat">
+                <h4>Expert Baseline</h4>
+                <p style="font-size: 0.85rem; color: var(--text-secondary);">${data.expert_baseline}</p>
+            </div>
+        </div>
+    `;
+}
+
+async function handleImageOCR(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    showLoading(true);
+    addMessageToChat(`[SYSTEM] Initializing Medical OCR for ${file.name}...`, 'system-message');
+    
+    // In a prototype, we simulate the OCR processing time
+    setTimeout(() => {
+        showLoading(false);
+        const mockOcrText = "MEDICAL RECORD EXTRACT:\nPatient: John Smith\nID: 12345\nConditions: T2DM, Hypertension\nLab: HbA1c 7.7 (2026-03-20)\nNote: Patient reports mild tingling in feet.";
+        userInput.value = `Process this medical record extract: ${mockOcrText}`;
+        addMessageToChat(`[OCR COMPLETED] Data extracted from image.`, 'system-message');
+    }, 2000);
 }
 
 async function handleClearPatient() {
@@ -201,6 +414,8 @@ async function handleSendMessage(event) {
 
         // Refresh context panels after each message
         loadPatientContext();
+        loadPatientHistory();
+        loadRiskAssessment();
         loadAuditLog();
     } catch (error) {
         console.error('Error sending message:', error);

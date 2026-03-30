@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+import json
+
+from core.safety import log_audit_event
+from core.llm_manager import LLMManager
+
+llm = LLMManager()
 
 _SCHEDULE_STORE_FILE = "schedule_store.json"
 
@@ -177,6 +182,48 @@ def complete_task(task_id: str, notes: str = "") -> Dict[str, Any]:
         store[task_id]["completion_notes"] = notes
     _save_store(store)
     return store[task_id]
+
+
+def check_and_close_loops(patient_id: str, medical_history: Dict[str, Any]) -> List[str]:
+    """Automated Loop Closer: Tracks if scheduled tasks were completed.
+    
+    Alerts the provider if results haven't arrived within 5 days of scheduled date.
+    """
+    pending = get_pending_tasks(patient_id)
+    now = datetime.now()
+    alerts = []
+    
+    store = _load_store()
+    
+    for task in pending:
+        task_id = task["task_id"]
+        scheduled_date = datetime.fromisoformat(task["scheduled_date"])
+        
+        # If task is more than 5 days overdue
+        if now > (scheduled_date + timedelta(days=5)):
+            description = task.get("description", "Task")
+            
+            # Use AI to check if the 'medical_history' contains evidence of completion
+            prompt = f"""
+System: You are a clinical workflow monitor.
+Task: Determine if there is evidence that the following scheduled task was completed based on the patient's new medical history.
+
+Scheduled Task: {description}
+New Medical History: {json.dumps(medical_history)}
+
+If the task appears completed (e.g. a corresponding lab result exists), respond with 'COMPLETED'.
+If there is no evidence, respond with 'OVERDUE' and explain why.
+"""
+            status_check = llm.ask_llm(prompt)
+            
+            if "COMPLETED" in status_check.upper():
+                complete_task(task_id, notes="Automatically closed by Loop Closer — evidence found in EHR.")
+                log_audit_event("loop_closed_automatically", {"task_id": task_id, "evidence": status_check})
+            else:
+                alerts.append(f"🚨 LOOP GAP: {description} (Scheduled {task['scheduled_date']}) - Results not received.")
+                log_audit_event("loop_gap_detected", {"task_id": task_id, "reason": status_check})
+
+    return alerts
 
 
 def format_task_summary(tasks: List[Dict[str, Any]]) -> str:

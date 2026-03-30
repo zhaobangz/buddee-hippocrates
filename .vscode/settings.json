@@ -1,6 +1,9 @@
 {
-    "python.defaultInterpreterPath": "/Users/williamzhu/Desktop/Developer/buddi/venv/bin/python",
+    "python.defaultInterpreterPath": "/opt/miniconda3/envs/buddi/bin/python",
     "python.analysis.extraPaths": [
-        "/Users/williamzhu/Desktop/Developer/buddi"
-    ]
+        "."
+    ],
+    "git.ignoreLimitWarning": true,
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda"
 }

@@ -3,6 +3,10 @@ python-dotenv
 requests
 transformers
 torch
+faiss-cpu
+uvloop
+sentence-transformers
+numpy
 
 # Web Framework (Backend API)
 fastapi
@@ -21,6 +25,9 @@ numpy
 PyPDF2
 Pillow
 pytesseract
+pandas
+easyocr
+openpyxl
 
 # Web Search & Summarization
 sumy
@@ -30,6 +37,9 @@ lxml
 
 # Testing
 pytest
+
+# Security and Hardening
+cryptography
 
 # Tracing and Observability
 opentelemetry-api

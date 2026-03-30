@@ -31,17 +31,14 @@ echo "  Backend:  http://localhost:$BACKEND_PORT"
 echo "  Frontend: http://localhost:$FRONTEND_PORT"
 echo ""
 
-# Check if Python is available
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python 3 is not installed or not in PATH${NC}"
-    exit 1
-fi
+# Detect absolute path of Python 3
+PYTHON_PATH=$(which python3)
 
 # Check if required packages are installed
 echo "Checking dependencies..."
-if ! python3 -c "import fastapi" 2>/dev/null; then
+if ! "$PYTHON_PATH" -c "import fastapi" 2>/dev/null; then
     echo "Installing required packages..."
-    pip install fastapi uvicorn[standard]
+    "$PYTHON_PATH" -m pip install fastapi uvicorn[standard]
 fi
 echo -e "${GREEN}✓ Dependencies OK${NC}"
 
@@ -66,13 +63,13 @@ trap cleanup EXIT
 # Start backend
 echo ""
 echo -e "${BLUE}Starting backend (FastAPI with hot-reload)...${NC}"
-python3 -m uvicorn backend.api:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$BACKEND_LOG" 2>&1 &
+"$PYTHON_PATH" -m uvicorn backend.api:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 
 # Start frontend
 echo -e "${BLUE}Starting frontend (Web Server)...${NC}"
 cd "$(dirname "$0")/web"
-python3 -m http.server $FRONTEND_PORT > "../$FRONTEND_LOG" 2>&1 &
+"$PYTHON_PATH" -m http.server $FRONTEND_PORT > "../$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
 
 # Wait for servers to start

@@ -15,100 +15,166 @@
                 <h1 class="title">🏥 Buddi Clinical Agent</h1>
                 <p class="subtitle">Healthcare Workflow Intelligence</p>
             </div>
-            <div class="status-indicator" id="statusIndicator">
-                <span class="status-dot" id="statusDot"></span>
-                <span class="status-text" id="statusText">Connecting...</span>
+            <div class="header-right">
+                <div class="mode-toggle">
+                    <label class="switch">
+                        <input type="checkbox" id="patientModeToggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="mode-label">Patient Mode</span>
+                </div>
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span class="status-text" id="statusText">Connecting...</span>
+                </div>
             </div>
         </header>
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Chat Container -->
-            <div class="chat-container">
-                <div class="messages-container" id="messagesContainer">
-                    <div class="message system-message">
-                        <p>Welcome to the <strong>Buddi Clinical Agent System</strong>. I can help with prior authorizations, patient briefs, clinical guidelines, follow-ups, and scheduling. Set a patient context to get started!</p>
+            <!-- Central View Area -->
+            <div class="view-area" style="flex: 1; display: flex; flex-direction: column; gap: 16px;">
+                
+                <!-- Chat Container (Main View) -->
+                <div class="chat-container" id="chatContainer">
+                    <div class="messages-container" id="messagesContainer">
+                        <div class="message system-message">
+                            <p>Welcome to the <strong>Buddi Clinical Agent System</strong>. I can help with prior authorizations, patient briefs, clinical guidelines, follow-ups, and scheduling. Set a patient context to get started!</p>
+                        </div>
+                    </div>
+
+                    <!-- Workflow Quick Actions -->
+                    <div class="workflow-actions" id="workflowActions">
+                        <button class="workflow-btn" data-workflow="Set patient John Smith, ID 12345, conditions: Type 2 Diabetes, Hypertension, medications: Metformin 1000mg, Lisinopril 10mg, allergies: Penicillin" id="btnSetPatient">
+                            <span class="workflow-icon">👤</span>
+                            <span>Set Demo Patient</span>
+                        </button>
+                        <button class="workflow-btn" data-workflow="Generate a prior authorization" id="btnPriorAuth">
+                            <span class="workflow-icon">📋</span>
+                            <span>Prior Auth</span>
+                        </button>
+                        <button class="workflow-btn" data-workflow="Generate a patient brief" id="btnPatientBrief">
+                            <span class="workflow-icon">🏥</span>
+                            <span>Patient Brief</span>
+                        </button>
+                        <button class="workflow-btn" data-workflow="Look up clinical guidelines for diabetes" id="btnGuidelines">
+                            <span class="workflow-icon">📚</span>
+                            <span>Guidelines</span>
+                        </button>
+                        <button class="workflow-btn" data-workflow="Create a medication adherence follow-up" id="btnFollowUp">
+                            <span class="workflow-icon">📞</span>
+                            <span>Follow-Up</span>
+                        </button>
+                        <button class="workflow-btn" data-workflow="Schedule a lab for HbA1c" id="btnSchedule">
+                            <span class="workflow-icon">📅</span>
+                            <span>Schedule Lab</span>
+                        </button>
+                        <button class="workflow-btn" data-workflow="Perform a clinical risk assessment" id="btnRiskAssessment">
+                            <span class="workflow-icon">⚠️</span>
+                            <span>Context Risks</span>
+                        </button>
+                        <button class="workflow-btn" data-workflow="Show recent patient history" id="btnHistory">
+                            <span class="workflow-icon">🕰️</span>
+                            <span>History</span>
+                        </button>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="input-area">
+                        <form id="chatForm" class="chat-form">
+                            <div class="form-group">
+                                <label for="imageUpload" class="upload-label" title="Upload Medical Image">
+                                    <span class="upload-icon">📷</span>
+                                    <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                                </label>
+                                <input
+                                    type="text"
+                                    id="userInput"
+                                    class="text-input"
+                                    placeholder="Ask about prior auth, guidelines, follow-ups..."
+                                    autocomplete="off"
+                                >
+                                <button type="submit" class="send-button" id="sendButton">
+                                    <span class="button-icon">→</span>
+                                    <span class="button-text">Send</span>
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
 
-                <!-- Workflow Quick Actions -->
-                <div class="workflow-actions" id="workflowActions">
-                    <button class="workflow-btn" data-workflow="Set patient John Smith, ID 12345, conditions: Type 2 Diabetes, Hypertension, medications: Metformin 1000mg, Lisinopril 10mg, allergies: Penicillin" id="btnSetPatient">
-                        <span class="workflow-icon">👤</span>
-                        <span>Set Demo Patient</span>
-                    </button>
-                    <button class="workflow-btn" data-workflow="Generate a prior authorization" id="btnPriorAuth">
-                        <span class="workflow-icon">📋</span>
-                        <span>Prior Auth</span>
-                    </button>
-                    <button class="workflow-btn" data-workflow="Generate a patient brief" id="btnPatientBrief">
-                        <span class="workflow-icon">🏥</span>
-                        <span>Patient Brief</span>
-                    </button>
-                    <button class="workflow-btn" data-workflow="Look up clinical guidelines for diabetes" id="btnGuidelines">
-                        <span class="workflow-icon">📚</span>
-                        <span>Guidelines</span>
-                    </button>
-                    <button class="workflow-btn" data-workflow="Create a medication adherence follow-up" id="btnFollowUp">
-                        <span class="workflow-icon">📞</span>
-                        <span>Follow-Up</span>
-                    </button>
-                    <button class="workflow-btn" data-workflow="Schedule a lab for HbA1c" id="btnSchedule">
-                        <span class="workflow-icon">📅</span>
-                        <span>Schedule Lab</span>
-                    </button>
+                <!-- Risk Dashboard View (Hidden by default) -->
+                <div class="view-container" id="dashboardView" style="display: none;">
+                    <div class="view-header">
+                        <h2>📊 Population Risk Dashboard</h2>
+                        <p>Clinical heatmap based on overdue follow-ups and high-risk conditions.</p>
+                    </div>
+                    <div class="risk-heatmap" id="riskHeatmap">
+                        <!-- Dynamic heatmap will be injected here -->
+                    </div>
                 </div>
 
-                <!-- Input Area -->
-                <div class="input-area">
-                    <form id="chatForm" class="chat-form">
-                        <div class="form-group">
-                            <input
-                                type="text"
-                                id="userInput"
-                                class="text-input"
-                                placeholder="Ask about prior auth, guidelines, follow-ups, scheduling..."
-                                autocomplete="off"
-                            >
-                            <button type="submit" class="send-button" id="sendButton">
-                                <span class="button-icon">→</span>
-                                <span class="button-text">Send</span>
-                            </button>
+                <!-- Shadow Mode View (Hidden by default) -->
+                <div class="view-container" id="shadowView" style="display: none;">
+                    <div class="view-header">
+                        <h2>🌗 Shadow Mode Workstation</h2>
+                        <p>Compare AI suggestions with your clinical manual charting for validation.</p>
+                    </div>
+                    <div class="shadow-workstation">
+                        <div class="shadow-input-panel">
+                            <h3>Manual Charting (Human)</h3>
+                            <textarea id="expertActionInput" placeholder="Enter your clinical decision/action here..." style="width: 100%; min-height: 120px; padding: 12px; background: var(--bg-input); border: 1px solid var(--border-light); border-radius: var(--radius-sm); color: var(--text-primary); margin-bottom: 12px;"></textarea>
+                            <button class="control-button" id="compareShadowBtn">Run Comparison</button>
                         </div>
-                    </form>
+                        <div class="shadow-output-panel" id="shadowComparisonOutput" style="margin-top: 20px; padding: 16px; background: var(--bg-surface); border-radius: var(--radius-sm); border: 1px dashed var(--border-light);">
+                            <p class="context-empty">Results will appear after comparison</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Sidebar -->
             <aside class="sidebar">
+                <!-- Navigation Tabs -->
+                <div class="sidebar-section tabs-container">
+                    <h3 class="sidebar-title">View Mode</h3>
+                    <button class="tab-btn active" data-tab="chat">💬 Clinical Chat</button>
+                    <button class="tab-btn" data-tab="dashboard">📊 Risk Dashboard</button>
+                    <button class="tab-btn" data-tab="shadow">🌗 Shadow Mode</button>
+                </div>
+
+                <!-- Buddi Perception Widget (Siri-inspired) -->
+                <div class="sidebar-section perception-widget">
+                    <h3 class="sidebar-title">👁 Perception</h3>
+                    <div class="mic-container">
+                        <div class="mic-rings" id="micRings"></div>
+                        <button class="mic-btn" id="micBtn">🎤</button>
+                    </div>
+                    <p class="perception-status" id="perceptionStatus">Perception Idle</p>
+                    <div class="perception-actions">
+                        <button class="small-action-btn" onclick="userInput.value='Take a note: '; userInput.focus();">📝 Notes</button>
+                        <button class="small-action-btn" onclick="userInput.value='Search medical info for: '; userInput.focus();">🔍 Search</button>
+                    </div>
+                </div>
+
                 <!-- Patient Context Card -->
                 <div class="sidebar-section patient-context-card">
                     <h3 class="sidebar-title">👤 Patient Context</h3>
                     <div id="patientContextDisplay">
                         <p class="context-empty">No patient set</p>
                     </div>
+                    <div id="riskIndicatorContainer" class="risk-indicator-container">
+                        <!-- Risk badges will be injected here -->
+                    </div>
                     <button class="control-button secondary" id="clearPatientBtn">Clear Patient</button>
                 </div>
 
-                <!-- Workflows Info -->
+                <!-- Patient History Section -->
                 <div class="sidebar-section">
-                    <h3 class="sidebar-title">🔧 Available Workflows</h3>
-                    <div class="workflow-list" id="workflowList">
-                        <div class="workflow-item">📋 Prior Authorization</div>
-                        <div class="workflow-item">🏥 Patient Brief</div>
-                        <div class="workflow-item">📚 Clinical Guidelines</div>
-                        <div class="workflow-item">📞 Follow-Up Tracking</div>
-                        <div class="workflow-item">📅 Labs / Imaging / Referrals</div>
-                        <div class="workflow-item">⚠️ Risk Assessment</div>
+                    <h3 class="sidebar-title">🕰️ Recent History</h3>
+                    <div id="patientHistoryDisplay" class="history-list">
+                        <p class="context-empty">No history available</p>
                     </div>
-                </div>
-
-                <!-- Controls -->
-                <div class="sidebar-section">
-                    <h3 class="sidebar-title">Controls</h3>
-                    <button class="control-button" id="resetButton">
-                        <span class="button-icon">↻</span> Reset Agent
-                    </button>
                 </div>
 
                 <!-- Agent Info -->
@@ -126,6 +192,14 @@
                         <label>API Status</label>
                         <p id="apiStatus">Checking...</p>
                     </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">Admin Controls</h3>
+                    <button class="control-button" id="resetButton">
+                        <span class="button-icon">↻</span> Reset Agent
+                    </button>
                 </div>
 
                 <!-- Audit Log Preview -->

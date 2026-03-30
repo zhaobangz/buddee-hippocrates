@@ -1,11 +1,19 @@
 {
-  "venvPath": ".",
-  "venv": "venv",
-  "extraPaths": [
-    ".",
-    "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages"
+  "include": [
+    "."
   ],
-  "reportMissingImports": "warning",
-  "pythonVersion": "3.12",
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "venv"
+  ],
+  "venvPath": "/opt/miniconda3/envs",
+  "venv": "buddi",
+  "executionEnvironments": [
+    {
+      "root": "."
+    }
+  ],
+  "pythonVersion": "3.11",
   "pythonPlatform": "Darwin"
 }

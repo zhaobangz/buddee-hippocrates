@@ -1,8 +1,7 @@
 # core/config.py
 import os
 import json
-from dotenv import load_dotenv  # type: ignore
-
+from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
@@ -16,7 +15,7 @@ class Config:
     # LLM provider configuration
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "deepseek")
     LLM_API_KEY = os.getenv("LLM_API_KEY")
-    LLM_API_URL = os.getenv("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
+    LLM_API_URL = os.getenv("LLM_API_URL", "https://api.deepseek.com/v3/chat/completions")
     LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v3-chat-standard")
 
     # Try fallback to credentials.json if API key not set
@@ -61,3 +60,29 @@ class Config:
     FORCE_CPU = os.getenv("FORCE_CPU", "False").lower() == "true"
     # PREFERRED_DEVICE can be 'auto', 'cuda', 'mps', or 'cpu'
     PREFERRED_DEVICE = os.getenv("PREFERRED_DEVICE", "auto").lower()
+
+# class PatientInfo:
+#     """The set of information put in by the patient and verified by the medical professional.
+    
+#     This is currently a placeholder for the clinical data schema.
+#     """
+#     DATA_SCHEMA = {
+#         "patient_id": "",
+#         "official_government_name": "",
+#         "variants": [],
+#         "phenotypes": [],
+#         "lab_abnormalities": [],
+#         "organ_status": {},
+#         "current_medications": [],
+#         "allergies": [],
+#         "contraindications": [],
+#         "primary_condition": {},
+#         "clinical_notes": [],
+#         "demographics": {
+#             "age_years": None,
+#             "sex": "",
+#             "weight_kg": None,
+#             "height_cm": None,
+#             "ethnicity": ""
+#         }
+#     }
