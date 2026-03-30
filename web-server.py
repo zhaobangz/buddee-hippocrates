@@ -12,6 +12,7 @@ import time
 import signal
 from pathlib import Path
 
+
 # Configuration
 BACKEND_PORT = 8000
 FRONTEND_PORT = 3000
