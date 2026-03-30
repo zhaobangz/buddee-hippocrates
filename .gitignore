@@ -1,0 +1,36 @@
+# Environments
+.env
+.venv
+venv/
+env/
+ENV/
+bin/
+lib/
+share/
+include/
+pyvenv.cfg
+pip-selfcheck.json
+
+# Tooling
+node_modules/
+.pyre/
+.pytest_cache/
+.vscode/
+__pycache__/
+*.pyc
+
+# Clinical Data (Keep local unless explicitly intended for cloud)
+audit_log.json
+memory.json
+prior_auth_store.json
+*.faiss
+*.pkl
+
+# Logs
+logs/
+*.log
+
+# Misc
+.DS_Store
+.input_history
+frontend.pid

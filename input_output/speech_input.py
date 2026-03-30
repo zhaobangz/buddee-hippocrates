@@ -1,5 +1,5 @@
-import speech_recognition as sr  # type: ignore
-from core.config import Config  # type: ignore
+import speech_recognition as sr
+from core.config import Config
 
 
 class SpeechInput:

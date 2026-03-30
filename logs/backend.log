@@ -1,24 +1,25 @@
 INFO:     Will watch for changes in these directories: ['/Users/williamzhu/Desktop/Developer/buddi']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [41025] using WatchFiles
-INFO:     Started server process [41030]
-INFO:     Waiting for application startup.
-INFO:backend.api:Initializing Buddi Clinical Agent...
-INFO:backend.api:Buddi Clinical Agent is ready!
-INFO:     Application startup complete.
---- Initializing OpenTelemetry Tracing ---
-⚠ Tracing collector not found at http://localhost:4318 (Silently dropping spans).
-INFO:     127.0.0.1:59228 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59228 - "GET /api/status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59235 - "GET /api/patient-context HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59236 - "GET /api/audit-log?count=5 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59236 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59236 - "GET /api/status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59235 - "GET /api/patient-context HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59228 - "GET /api/audit-log?count=5 HTTP/1.1" 200 OK
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:backend.api:Agent shutdown complete
-INFO:     Application shutdown complete.
-INFO:     Finished server process [41030]
-INFO:     Stopping reloader process [41025]
+INFO:     Started reloader process [31896] using WatchFiles
+/opt/miniconda3/envs/buddi/lib/python3.11/site-packages/uvicorn/server.py:75: RuntimeWarning: coroutine 'Server.serve' was never awaited
+  return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+Process SpawnProcess-1:
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/buddi/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/opt/miniconda3/envs/buddi/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/opt/miniconda3/envs/buddi/lib/python3.11/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/opt/miniconda3/envs/buddi/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+                                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/buddi/lib/python3.11/site-packages/uvicorn/config.py", line 490, in get_loop_factory
+    loop_factory: Callable[..., Any] | None = import_from_string(LOOP_FACTORIES[self.loop])
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/envs/buddi/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module)
+                                     ^^^^^^
+UnboundLocalError: cannot access local variable 'module' where it is not associated with a value
+INFO:     Stopping reloader process [31896]

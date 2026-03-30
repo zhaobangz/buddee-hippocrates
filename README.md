@@ -2,55 +2,62 @@
 
 > **Healthcare Workflow Intelligence powered by Agentic AI**
 
-Buddi Clinical Agent is an AI-powered clinical workflow system that automates healthcare administrative tasks, provides clinical decision support, and orchestrates care activities. Built with a modular agent architecture, it's designed to start with prior authorization automation and expand into a full clinical operating system.
+Buddi Clinical Agent is an advanced, AI-driven clinical workflow system that automates healthcare administrative tasks, provides decision-critical clinical support, and orchestrates care activities across a distributed medical team. Built with a modular agentic architecture, it leverages Retrieval-Augmented Generation (RAG) to ground its responses in verified clinical guidelines.
+
+## ✨ Premium Web Interface
+Buddi features a state-of-the-art, healthcare-grade web terminal designed for high-stakes clinical environments:
+- **🎛️ Multi-View Workspace**: Switch between Chat, **Risk Dashboard** (Heatmap), and **Shadow Mode** (Expert Comparison).
+- **🧠 Perception Widget**: Siri-inspired integrated audio/screen capture for automated clinical note-taking and OCR.
+- **💎 Glassmorphism Design**: High-premium teal-themed UI with responsive micro-animations and medical-grade aesthetics.
+- **📊 Live Context Panel**: Real-time tracking of patient demographics, conditions, medications, and recent history.
 
 ## 🏥 Clinical Workflows
 
 | Workflow | Description |
 |----------|-------------|
-| **Prior Authorization** | Generates and tracks insurance prior auth forms (Medicare, Medicaid, Commercial) |
-| **Patient Brief** | Creates pre-visit intelligence briefs with risk flags, missing labs, and suggested questions |
-| **Clinical Guidelines** | Maps patient conditions to ADA, ACC/AHA, GINA, APA guidelines with treatment step-up logic |
-| **Follow-Up Tracking** | Automates patient follow-ups with symptom checks, medication adherence, and escalation |
-| **Scheduling** | Coordinates labs, imaging, and referrals as a workflow orchestrator |
-| **Safety Layer** | Validates clinical actions, blocks unauthorized territory, and writes HIPAA-ready audit logs |
+| **Prior Authorization** | Automated form generation for Medicare, Medicaid, and Commercial insurance with intelligent clinical justification. |
+| **Risk Dashboard** | A real-time heatmap of patient focus areas (A1C, BP, Adherence) and automated risk assessment. |
+| **Shadow Mode** | Side-by-side comparison of AI suggestions against expert baselines for training and quality assurance. |
+| **Patient Brief** | Pre-visit intelligence summarizing risks, missing labs, and suggested clinical questions based on EHR records. |
+| **Clinical Guidelines** | RAG-powered mapping to ADA, ACC/AHA, GINA, and APA guidelines with structured treatment suggestions. |
+| **Care Coordination** | coordinate labs, imaging, and referrals directly through the agentic interface. |
+| **Safety Layer** | HIPAA-compliant audit logging with human-in-the-loop validation for all high-risk clinical actions. |
 
 ## 🏗 Modular Architecture
 
-```
-┌────────────────────────────────────────────────┐
-│              Web UI / API Layer                │
-│         (FastAPI + HTML/JS Frontend)           │
-├────────────────────────────────────────────────┤
-│              Agent Orchestrator                │
-│     (Intent Detection → Workflow Routing)      │
-├────────────────────────────────────────────────┤
-│             Safety & Audit Layer               │
-│   (Action validation, human approval, logs)    │
-├────────────────────────────────────────────────┤
-│            Medical Tool Layer                  │
-│  ┌──────────┬──────────┬──────────────────┐   │
-│  │EHR Reader│Prior Auth│Clinical Guidelines│   │
-│  ├──────────┼──────────┼──────────────────┤   │
-│  │Follow-Up │Scheduling│   Web Search     │   │
-│  └──────────┴──────────┴──────────────────┘   │
-├────────────────────────────────────────────────┤
-│         Memory (Patient + Provider Context)    │
-├────────────────────────────────────────────────┤
-│              LLM Manager (DeepSeek)            │
-└────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    UI[Premium Web UI / Dashboard] --> API[FastAPI Backend]
+    API --> Agent[Agentic Orchestrator]
+    Agent --> Intent[Intent Detection / Router]
+    Intent --> Tools[Medical Tool Layer]
+    subgraph Tools
+        PA[Prior Auth]
+        EHR[EHR / Briefly]
+        RAG[Clinical RAG Engine]
+        SCH[Scheduling / Follow-up]
+    end
+    Tools --> RAG_V[FAISS Vector Store]
+    Tools --> LLM[DeepSeek-V3 / Transformers]
+    Agent --> Memory[Secure Memory / Patient Context]
+    Agent --> Safety[Safety & Audit Layer]
 ```
 
 ## 🚀 Quick Start
 
 ### 1. Install Dependencies
-Ensure you have Python 3.9+ installed, then run:
+Ensure you have Python 3.11+ and Node.js for frontend assets (optional). Then run:
+
 ```bash
+# Set up the isolated virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
 # Install core AI, web, and medical libraries
 pip install -r requirements.txt
 
-# macOS only: Install system dependencies for voice/summarization
-brew install portaudio tesseract ffmpeg
+# macOS only: Install system dependencies for OCR and Audio
+brew install tesseract portaudio ffmpeg faiss
 ```
 
 ### 2. Configure Environment
@@ -60,48 +67,21 @@ cp .env.example .env
 ```
 
 ### 3. Run the System
-Use the development launcher to start both the Backend and Frontend:
+Use the robust, isolated launcher to start both the FastAPI Backend and Web Server:
 ```bash
-chmod +x run-web-dev.sh
-./run-web-dev.sh
+chmod +x run-web.sh
+./run-web.sh
 ```
-The Web UI will be available at: **http://localhost:5000**
+- **Web UI URL**: [http://localhost:3000](http://localhost:3000)
+- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## 📋 Clinical Usage Examples
+## 🔰 Environment Protection
+Buddi includes a custom **Environment Guardian** in `./run-web.sh` that detects and bypasses corrupted system libraries (like `uvicorn` name conflicts) by prioritizing the project-local virtual environment and absolute pathing.
 
-```
-> Set patient John Smith, ID 12345, diabetes, on metformin
-✅ Patient context set
-
-> Generate a prior authorization for insulin therapy
-⚠ HUMAN APPROVAL REQUIRED (Prior Auth Submit)
-> yes
-📋 Prior Authorization Form generated (PA-XXXXXXXX)
-
-> Look up clinical guidelines for diabetes
-📚 ADA Standards of Care — treatment step-up suggestions
-
-> Create a medication adherence follow-up
-✅ Follow-up created (FU-XXXXXXXX)
-
-> Schedule a lab for HbA1c
-🔬 Lab scheduled (TASK-XXXXXXXX)
-```
-
-## 🛡 Safety & Compliance
-
+## ⚖️ Regulatory & Safety
 - **Clinical Boundaries**: The system is hard-coded to block diagnosis or prescription actions.
-- **Human-in-the-loop**: Sensitive actions (like submitting Prior Auth) require explicit human approval.
-- **Audit Trails**: All actions are logged to `audit_log.json` for HIPAA compliance foundations.
-- **Response Sanitization**: All LLM outputs pass through a safety layer to ensure appropriate clinical language.
+- **Compliance**: HIPAA foundations are provided via an encrypted audit stream (`audit_log.json`).
+- **Human-in-the-loop**: High-risk actions (Prior Auth, Referrals) require explicit human confirmation.
 
-## 🧪 Testing
-```bash
-python -m pytest tests/ -v
-```
-
-## ⚖️ Regulatory Notes
-
-Buddi is designed as a **Clinical Decision Support (CDS)** tool. It is not intended to replace professional medical judgment. 
-- **HIPAA**: Foundation in place via audit logging. Production requires encryption at rest/transit.
-- **FDA**: System avoids diagnosis/prescription territory to minimize regulatory risk under current FDA software guidance.
+---
+Buddi is a **Clinical Decision Support (CDS)** tool. It is not intended to replace professional medical judgment. 

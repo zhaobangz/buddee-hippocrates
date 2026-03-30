@@ -11,10 +11,33 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from core.config import Config
+from core.storage import SecureStorage
+
+storage = SecureStorage()
+
+
+# ── PII/PHI Redaction Patterns ───────────────────────────────────────
+
+PII_PATTERNS = {
+    "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
+    "EMAIL": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+    "PHONE": r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
+    "DOB": r"\b\d{1,2}/\d{1,2}/\d{2,4}\b",
+    "ZIP": r"\b\d{5}(?:-\d{4})?\b",
+}
+
+
+def redact_pii(text: str) -> str:
+    """Redact Personal Identifiable Information (PII) from text."""
+    redacted = text
+    for label, pattern in PII_PATTERNS.items():
+        redacted = re.sub(pattern, f"[{label}_REDACTED]", redacted)
+    return redacted
 
 
 # ── Actions that require human approval ──────────────────────────────
@@ -145,6 +168,7 @@ def log_audit_event(
     event_type: str,
     details: Optional[Dict[str, Any]] = None,
     user_id: str = "system",
+    reasoning_chain: Optional[str] = None,
 ) -> None:
     """Write an audit event to the audit log file.
 
@@ -154,17 +178,27 @@ def log_audit_event(
     if not Config.ENABLE_AUDIT_LOG:
         return
 
+    # Redact PII from details if they contain strings
+    safe_details = {}
+    if details:
+        for k, v in details.items():
+            if isinstance(v, str):
+                safe_details[k] = redact_pii(v)
+            else:
+                safe_details[k] = v
+
     event = {
         "timestamp": datetime.now().isoformat(),
         "event_type": event_type,
         "user_id": user_id,
-        "details": details or {},
+        "details": safe_details,
     }
 
+    if reasoning_chain:
+        event["reasoning_chain"] = redact_pii(reasoning_chain)
+
     try:
-        # Append as a JSON line
-        with open(Config.AUDIT_LOG_FILE, "a") as f:
-            f.write(json.dumps(event) + "\n")
+        storage.append_json(Config.AUDIT_LOG_FILE, event)
     except Exception as e:
         print(f"Error writing audit log: {e}")
 
@@ -174,16 +208,10 @@ def get_recent_audit_events(count: int = 20) -> List[Dict[str, Any]]:
     if not os.path.exists(Config.AUDIT_LOG_FILE):
         return []
 
-    events: List[Dict[str, Any]] = []
     try:
-        with open(Config.AUDIT_LOG_FILE, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        events.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
+        data = storage.load_json(Config.AUDIT_LOG_FILE)
+        if isinstance(data, list):
+             return data[-int(count):]
     except Exception:
         pass
 

@@ -8,9 +8,15 @@ Starts with a built-in guideline database; designed for future integration
 with live guideline APIs (UpToDate, DynaMed, etc.).
 """
 
-from __future__ import annotations
-
 from typing import Any, Dict, List, Optional
+import json
+
+from core.rag_engine import get_rag_engine
+from core.llm_manager import LLMManager
+from core.safety import log_audit_event, redact_pii
+
+llm = LLMManager()
+rag = get_rag_engine()
 
 
 # ── Built-in Guideline Database ──────────────────────────────────────
@@ -88,54 +94,101 @@ GUIDELINES_DB: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# Aliases for fuzzy matching
-_CONDITION_ALIASES: Dict[str, str] = {
-    "diabetes": "type_2_diabetes",
-    "type 2 diabetes": "type_2_diabetes",
-    "dm2": "type_2_diabetes",
-    "t2dm": "type_2_diabetes",
-    "htn": "hypertension",
-    "high blood pressure": "hypertension",
-    "high cholesterol": "hyperlipidemia",
-    "cholesterol": "hyperlipidemia",
-    "dyslipidemia": "hyperlipidemia",
-    "mdd": "depression",
-    "major depression": "depression",
-}
+# ── RAG Seeding ───────────────────────────────────────────────────────
+
+def seed_rag_if_empty():
+    """Seed the RAG engine with the built-in guidelines if empty."""
+    if not rag.metadata:
+        docs = []
+        for key, g in GUIDELINES_DB.items():
+            text = (
+                f"Condition: {g['condition']}\n"
+                f"Source: {g['source']}\n"
+                f"First Line: {g['first_line']}\n"
+                f"Second Line: {g['second_line']}\n"
+                f"Third Line: {g['third_line']}\n"
+                f"Targets: {json.dumps(g['targets'])}\n"
+                f"Monitoring: {', '.join(g['monitoring'])}\n"
+                f"Considerations: {', '.join(g['key_considerations'])}"
+            )
+            docs.append({
+                "text": text,
+                "domain": "clinical_guideline",
+                "condition": g["condition"],
+                "key": key
+            })
+        rag.add_documents(docs)
+
+# Initialize RAG with static data
+seed_rag_if_empty()
 
 
 def lookup_guideline(condition: str, patient_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Look up clinical guidelines for a given condition.
+    """Look up clinical guidelines for a given condition using RAG.
 
     Args:
-        condition: Condition name or alias (e.g., 'diabetes', 'htn').
+        condition: Condition name or search term.
         patient_context: Optional patient data to contextualize the lookup.
 
     Returns:
-        dict with guideline fields or an error message.
+        dict with guideline fields or an search results.
     """
-    key = condition.lower().strip()
-    key = _CONDITION_ALIASES.get(key, key)
+    # Search RAG
+    results = rag.search(condition, top_k=1)
+    
+    if not results:
+        return {
+            "error": f"No guideline found for '{condition}'.",
+            "tip": "Try searching for a specific condition like 'diabetes' or 'hypertension'.",
+        }
 
-    if key in GUIDELINES_DB:
-        guideline = dict(GUIDELINES_DB[key])
+    guideline = results[0]
+    
+    # Add patient-specific notes if context provided
+    if patient_context:
+        guideline["patient_specific_notes"] = _contextualize(guideline.get("condition", ""), patient_context)
 
-        # Add patient-specific notes if context provided
-        if patient_context:
-            guideline["patient_specific_notes"] = _contextualize(key, patient_context)
+    return guideline
 
-        return guideline
 
-    # Fuzzy search
-    matches = [k for k in GUIDELINES_DB if condition.lower() in k]
-    if matches:
-        return dict(GUIDELINES_DB[matches[0]])
+def reconcile_multi_morbidity(patient_context: Dict[str, Any]) -> str:
+    """Implement logic for 'multi-morbid' patients.
+    
+    Resolves potential medication contraindications across multiple guidelines.
+    """
+    conditions = patient_context.get("conditions", [])
+    if len(conditions) < 2:
+        return "Not enough conditions for multi-morbidity mapping."
 
-    return {
-        "error": f"No guideline found for '{condition}'.",
-        "available_conditions": list(GUIDELINES_DB.keys()),
-        "tip": "Try one of the available conditions or an alias like 'diabetes', 'htn', etc.",
-    }
+    # Fetch guidelines for all conditions
+    all_guidelines = []
+    for cond in conditions:
+        res = rag.search(cond, top_k=1)
+        if res:
+            all_guidelines.append(res[0])
+
+    if not all_guidelines:
+        return "Could not retrieve guidelines for the patient's conditions."
+
+    # Use LLM to reconcile
+    prompt = f"""
+System: You are an expert clinical pharmacologist.
+Task: Reconcile clinical guidelines for a multi-morbid patient.
+Patient Context: {json.dumps(patient_context)}
+Guidelines to Reconcile: {json.dumps(all_guidelines)}
+
+Identify potential contraindications, medication interactions, or necessary adjustments (e.g., Metformin in CKD, ACE/ARB in renal failure).
+Provide a "Combined Clinical Strategy".
+"""
+    
+    reconciliation = llm.ask_llm(prompt)
+    
+    log_audit_event("multi_morbidity_reconciliation", {
+        "conditions": conditions,
+        "reconciliation_preview": reconciliation[:200]
+    })
+    
+    return reconciliation
 
 
 def suggest_next_step(condition: str, current_treatment: str = "") -> str:

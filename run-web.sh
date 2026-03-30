@@ -5,6 +5,10 @@
 
 set -e
 
+# Change to the directory of the script
+cd "$(dirname "$0")"
+PROJECT_ROOT="$PWD"
+
 echo "=========================================="
 echo "   Buddi Agent - Web Interface"
 echo "=========================================="
@@ -16,16 +20,19 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check if Python is available
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is not installed or not in PATH"
-    exit 1
+# Find the best Python interpreter
+if [ -f "$PROJECT_ROOT/venv/bin/python3" ]; then
+    PYTHON_CMD="$PROJECT_ROOT/venv/bin/python3"
+    echo -e "${BLUE}Using local venv: $PYTHON_CMD${NC}"
+else
+    PYTHON_CMD="python3"
+    echo -e "${YELLOW}Warning: venv not found. Using system python3${NC}"
 fi
 
-# Check if uvicorn is installed
-if ! python3 -c "import uvicorn" 2>/dev/null; then
-    echo "Installing required packages..."
-    pip install fastapi uvicorn[standard]
+# Check if Python is available
+if ! command -v "$PYTHON_CMD" &> /dev/null; then
+    echo "❌ Python is not installed or not in PATH"
+    exit 1
 fi
 
 # Function to kill background processes on exit
@@ -41,12 +48,14 @@ trap cleanup EXIT
 
 # Start backend
 echo "Starting backend (FastAPI)..."
-python3 -m uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000 &
+# Force-clear port 8000 to prevent 'Address already in use' errors on macOS
+lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+"$PYTHON_CMD" -m uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo -e "${GREEN}✓ Backend PID: $BACKEND_PID${NC}"
 
 # Give backend time to start
-sleep 2
+sleep 3
 
 # Check if backend started successfully
 if ! kill -0 $BACKEND_PID 2>/dev/null; then
@@ -57,9 +66,14 @@ fi
 # Start frontend
 echo ""
 echo "Starting frontend (Web Server)..."
-cd "$(dirname "$0")/web"
-python3 -m http.server 3000 &
-FRONTEND_PID=$!
+# Use a subshell to start the frontend so we don't change the current directory permanently
+(
+    cd "$PROJECT_ROOT/web"
+    "$PYTHON_CMD" -m http.server 3000 &
+    echo $! > "$PROJECT_ROOT/frontend.pid"
+)
+FRONTEND_PID=$(cat "$PROJECT_ROOT/frontend.pid")
+rm "$PROJECT_ROOT/frontend.pid"
 echo -e "${GREEN}✓ Frontend PID: $FRONTEND_PID${NC}"
 
 # Give frontend time to start

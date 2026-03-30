@@ -8,9 +8,14 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+import json
+
+from core.llm_manager import LLMManager
+from core.safety import log_audit_event
+
+llm = LLMManager()
 
 _FOLLOW_UP_STORE_FILE = "follow_up_store.json"
 
@@ -133,14 +138,14 @@ def check_follow_ups(patient_id: Optional[str] = None, status: str = "all") -> L
 def process_follow_up_response(
     follow_up_id: str,
     response: str,
-    risk_detected: bool = False,
+    risk_detected: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Process a patient's response to a follow-up.
 
     Args:
         follow_up_id: The follow-up identifier.
         response: The patient's response text.
-        risk_detected: If True, escalate the follow-up.
+        risk_detected: If None, use AI/Sentiment to detect. If provided, overrides AI.
 
     Returns:
         Updated follow-up record.
@@ -149,11 +154,18 @@ def process_follow_up_response(
     if follow_up_id not in store:
         return {"error": f"Follow-up ID '{follow_up_id}' not found."}
 
+    # Perform Sentiment Analysis if risk not explicitly provided
+    analysis = {"urgency": "low", "red_flags": [], "sentiment": "neutral"}
+    if risk_detected is None:
+        analysis = analyze_follow_up_sentiment(response)
+        risk_detected = analysis.get("urgency") == "high" or len(analysis.get("red_flags", [])) > 0
+
     record = store[follow_up_id]
     record["responses"].append({
         "text": response,
         "timestamp": datetime.now().isoformat(),
         "risk_detected": risk_detected,
+        "ai_analysis": analysis
     })
 
     if risk_detected:
@@ -167,6 +179,35 @@ def process_follow_up_response(
     store[follow_up_id] = record
     _save_store(store)
     return record
+
+
+def analyze_follow_up_sentiment(response: str) -> Dict[str, Any]:
+    """Use AI to analyze patient response for clinical 'Red Flags' or urgent sentiment."""
+    prompt = f"""
+System: You are an expert clinical triage nurse.
+Task: Analyze this patient's follow-up response for urgency and red flags.
+
+Response: "{response}"
+
+Respond in JSON format:
+{{
+    "urgency": "high" | "medium" | "low",
+    "red_flags": ["list of clinical concerns"],
+    "sentiment": "positive" | "negative" | "neutral",
+    "summary": "Short 1-sentence summary"
+}}
+Only respond with the JSON.
+"""
+    try:
+        res = llm.ask_llm(prompt)
+        if "```json" in res:
+            res = res.split("```json")[1].split("```")[0].strip()
+        data = json.loads(res)
+        
+        log_audit_event("follow_up_analysis_completed", data)
+        return data
+    except Exception:
+        return {"urgency": "low", "red_flags": [], "sentiment": "neutral"}
 
 
 def get_overdue_follow_ups() -> List[Dict[str, Any]]:
