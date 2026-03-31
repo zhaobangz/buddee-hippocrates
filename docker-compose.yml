@@ -1,10 +1,17 @@
 version: '3.8'
+
 services:
-  app:
+  buddi:
     build: .
-    container_name: buddi_app
+    container_name: buddi_clinical_agent
     env_file: .env
+    ports:
+      - "8000:8000"  # Backend API
+      - "3000:3000"  # Frontend Dashboard
     volumes:
       - ./:/app:delegated
-    command: ["python", "main.py"]
+      - audit_data:/app/data
     restart: unless-stopped
+
+volumes:
+  audit_data:
