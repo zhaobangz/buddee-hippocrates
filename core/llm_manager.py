@@ -49,6 +49,38 @@ class LLMManager:
         messages.append({'role': 'user', 'content': user_input})
         return messages
 
+    _local_pipeline = None
+
+    @classmethod
+    def get_pipeline(cls):
+        if cls._local_pipeline is None:
+            if transformers is None:
+                return None
+            
+            device_str, device_index = get_torch_device(Config.PREFERRED_DEVICE, Config.FORCE_CPU)
+            try:
+                # Use FP16 for efficiency on MPS/CUDA
+                kwargs = {}
+                if torch is not None and device_str in ('mps', 'cuda'):
+                    kwargs["torch_dtype"] = torch.float16
+                
+                # device_index 0 for CUDA, -1 for CPU/MPS (MPS is usually -1 in pipeline + device_map)
+                # But for MPS, device_map="auto" is often better
+                cls._local_pipeline = transformers.pipeline(
+                    'text-generation', 
+                    model=Config.LLM_MODEL, 
+                    device_map="auto" if device_str != 'cpu' else None,
+                    **kwargs
+                )
+            except Exception:
+                # Fallback to standard loading if device_map fails
+                cls._local_pipeline = transformers.pipeline(
+                    'text-generation', 
+                    model=Config.LLM_MODEL, 
+                    device=device_index
+                )
+        return cls._local_pipeline
+
     def ask_llm(self, user_input: str, timeout: Optional[int] = 15) -> str:
         """Send a chat request to the configured LLM provider and return text.
 
@@ -57,24 +89,26 @@ class LLMManager:
         """
         # If configured to use a local model, try to run locally (and prefer GPU)
         if Config.LLM_PROVIDER and Config.LLM_PROVIDER.lower() == 'local':
-            # require transformers to be installed
-            if transformers is None:
+            pipe = self.get_pipeline()
+            if pipe is None:
                 return "Local model requested but the 'transformers' package is not installed."
 
-            # Try to load a local model and run on preferred device
-            device_str, device_index = get_torch_device(Config.PREFERRED_DEVICE, Config.FORCE_CPU)
             try:
-                # use pipeline for text-generation if available
-                pipe = transformers.pipeline('text-generation', model=self.model, device=device_index)
-                out = pipe(user_input, max_length=512, do_sample=False)
+                messages = self._build_messages(user_input)
+                # Use MedGemma chat template if available
+                out = pipe(messages, max_new_tokens=512, do_sample=False)
+                
                 if isinstance(out, list) and out:
-                    return out[0].get('generated_text', str(out[0]))
+                    # Logic for chat-based output
+                    gen = out[0].get('generated_text')
+                    if isinstance(gen, list) and len(gen) > 0:
+                         return gen[-1].get('content', str(gen[-1]))
+                    return str(gen)
                 return str(out)
             except Exception as e:
                 # Fall back to remote API if configured
                 if not self.api_key or not self.api_url:
-                    return f"Failed to run local model on device {device_str}: {e}"
-                # otherwise continue to try remote provider
+                    return f"Failed to run local model: {e}"
 
         if not self.api_key or not self.api_url:
             return "LLM is not configured (missing API key or URL)."

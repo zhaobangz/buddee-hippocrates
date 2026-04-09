@@ -13,10 +13,10 @@ class Config:
     """
 
     # LLM provider configuration
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "deepseek")
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "local")
     LLM_API_KEY = os.getenv("LLM_API_KEY")
-    LLM_API_URL = os.getenv("LLM_API_URL", "https://api.deepseek.com/v3/chat/completions")
-    LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v3-chat-standard")
+    LLM_API_URL = os.getenv("LLM_API_URL", "https://api.huggingface.co/models/google/medgemma-1.5-4b-it")
+    LLM_MODEL = os.getenv("LLM_MODEL", "google/medgemma-1.5-4b-it")
 
     # Try fallback to credentials.json if API key not set
     if not LLM_API_KEY and os.path.exists("config/credentials.json"):
@@ -29,7 +29,7 @@ class Config:
 
     # Memory and assistant identity
     MAX_MEMORY_HISTORY = int(os.getenv("MAX_MEMORY_HISTORY", 50))
-    ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Buddi Clinical Agent")
+    ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Buddi Clinical Agent (Powered by MedGemma)")
     MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "True").lower() == "true"
 
     # Perception features

@@ -205,8 +205,9 @@ def log_audit_event(
 
 def get_recent_audit_events(count: int = 20) -> List[Dict[str, Any]]:
     """Read the most recent audit events from the log file."""
+    events: List[Dict[str, Any]] = []
     if not os.path.exists(Config.AUDIT_LOG_FILE):
-        return []
+        return events
 
     try:
         data = storage.load_json(Config.AUDIT_LOG_FILE)
@@ -215,4 +216,4 @@ def get_recent_audit_events(count: int = 20) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    return events 
+    return events
