@@ -23,6 +23,9 @@ Buddi features a state-of-the-art, healthcare-grade web terminal designed for hi
 | **Care Coordination** | coordinate labs, imaging, and referrals directly through the agentic interface. |
 | **Safety Layer** | HIPAA-compliant audit logging with human-in-the-loop validation for all high-risk clinical actions. |
 
+## 📈 Startup Strategy
+For information on Buddi's vision, revenue model, and go-to-market strategy, see the [Business Model](docs/BUSINESS_MODEL.md).
+
 ## 🏗 Modular Architecture
 
 ```mermaid

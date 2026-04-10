@@ -1,6 +1,6 @@
 # Cloud Deployment Guide - Buddi Clinical Agent
 
-Buddi Clinical Agent is architecture-ready for high-availability deployment to AWS, Google Cloud (GCP), or Azure. This guide details the process for migrating the clinical system from a local terminal to a production cloud environment.
+Buddi is architecture-ready for high-availability deployment to AWS, Google Cloud (GCP), or Azure. This guide details the process for migrating the clinical system from a local terminal to a production cloud environment.
 
 ## 🏗 Architecture Compliance
 
