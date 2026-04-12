@@ -466,10 +466,18 @@ function addMessageToChat(text, className) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${className}`;
 
-    const pre = document.createElement('pre');
-    pre.className = 'message-content';
-    pre.textContent = text;
-    messageDiv.appendChild(pre);
+    if (className.includes('system-message')) {
+        messageDiv.innerHTML = `
+            <div class="system-icon-wrapper"><i class="ph-fill ph-sparkle"></i></div>
+            <pre class="message-content" style="font-family: inherit; margin: 0;">${text}</pre>
+        `;
+    } else {
+        const pre = document.createElement('pre');
+        pre.className = 'message-content';
+        pre.textContent = text;
+        messageDiv.appendChild(pre);
+    }
+    
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
