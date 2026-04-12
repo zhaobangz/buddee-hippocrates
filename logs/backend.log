@@ -1,6 +1,6 @@
 INFO:     Will watch for changes in these directories: ['/Users/williamzhu/Desktop/Developer/buddi']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [31896] using WatchFiles
+INFO:     Started reloader process [52790] using WatchFiles
 /opt/miniconda3/envs/buddi/lib/python3.11/site-packages/uvicorn/server.py:75: RuntimeWarning: coroutine 'Server.serve' was never awaited
   return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
 RuntimeWarning: Enable tracemalloc to get the object allocation traceback
@@ -22,4 +22,4 @@ Traceback (most recent call last):
     module = importlib.import_module(module)
                                      ^^^^^^
 UnboundLocalError: cannot access local variable 'module' where it is not associated with a value
-INFO:     Stopping reloader process [31896]
+INFO:     Stopping reloader process [52790]
