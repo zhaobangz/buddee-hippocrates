@@ -31,7 +31,7 @@ try:
     from serving import predictor as medgemma_predictor
     from data_accessors import dicom_wsi
     MEDGEMMA_SDK_AVAILABLE = True
-except ImportError:
+except Exception:
     MEDGEMMA_SDK_AVAILABLE = False
 
 
