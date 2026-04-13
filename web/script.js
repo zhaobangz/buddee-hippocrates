@@ -1,19 +1,19 @@
 /**
- * Buddi Clinical Agent — Web UI Frontend Logic
+ * Buddi Clinical Agent — Premium Web UI Frontend Logic
  * Healthcare Workflow Intelligence
  */
 
 // Configuration
-// If the frontend is served from a server, try to guess the API URL
 const DEFAULT_API_PORT = 8000;
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? `${window.location.protocol}//${window.location.hostname}:${DEFAULT_API_PORT}/api`
-    : '/api'; // Fallback for production/relative paths
+    : '/api';
 
 const RECONNECT_INTERVAL = 5000;
 
 // State
 let agentStatus = { connected: false, lastCheckTime: null };
+let isListening = false;
 
 // DOM Elements
 const messagesContainer = document.getElementById('messagesContainer');
@@ -41,7 +41,7 @@ const perceptionStatus = document.getElementById('perceptionStatus');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing Buddi Clinical Agent Web UI...');
+    console.log('Initializing Buddi Premium UI...');
 
     chatForm.addEventListener('submit', handleSendMessage);
     resetButton.addEventListener('click', handleReset);
@@ -49,11 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Mode Toggle
     patientModeToggle.addEventListener('change', (e) => {
-        document.body.classList.toggle('patient-mode', e.target.checked);
         if (e.target.checked) {
-            addMessageToChat("Patient Mode Active: Providing simplified, patient-friendly explanations.", "system-message");
+            addMessageToChat("Patient Mode Active: Providing simplified, patient-friendly explanations.", "system");
         } else {
-            addMessageToChat("Clinical Mode Active: Full technical precision enabled.", "system-message");
+            addMessageToChat("Clinical Mode Active: Full technical precision enabled.", "system");
         }
     });
 
@@ -72,30 +71,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // Shadow Mode Comparison
     compareShadowBtn.addEventListener('click', handleShadowCompare);
 
-    // Image Upload (OCR)
+    // Image Upload (OCR Mockup)
     imageUpload.addEventListener('change', handleImageOCR);
 
-    // Mic Interaction Mockup
-    let isListening = false;
+    // Mic Interaction
     micBtn.addEventListener('click', () => {
         isListening = !isListening;
         if (isListening) {
             micBtn.classList.add('active');
             micRings.classList.add('animating');
             perceptionStatus.textContent = 'Buddi is listening...';
-            perceptionStatus.style.color = '#3fb2d6';
-            addMessageToChat('[PERCEPTION] Live audio capture enabled.', 'system-message');
+            addMessageToChat('Live audio capture enabled. Speak clearly.', 'system');
         } else {
             micBtn.classList.remove('active');
             micRings.classList.remove('animating');
-            perceptionStatus.textContent = 'Perception Idle';
-            perceptionStatus.style.color = 'var(--text-muted)';
-            addMessageToChat('[PERCEPTION] Live capture stopped.', 'system-message');
+            perceptionStatus.textContent = 'Awaiting input...';
+            addMessageToChat('Live capture stopped.', 'system');
         }
     });
 
-    // Workflow quick-action buttons
-    document.querySelectorAll('.workflow-btn').forEach(btn => {
+    // Workflow quick-action chips
+    document.querySelectorAll('.chip').forEach(btn => {
         btn.addEventListener('click', () => {
             const message = btn.getAttribute('data-workflow');
             if (message) {
@@ -108,6 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAgentStatus();
     setInterval(checkAgentStatus, RECONNECT_INTERVAL);
 });
+
 // ── Agent Status ────────────────────────────────────────────────────
 
 async function checkAgentStatus() {
@@ -125,7 +122,6 @@ async function checkAgentStatus() {
         }
     } catch (error) {
         setAgentStatus(false);
-        console.warn('Agent API unreachable:', error);
     }
 }
 
@@ -134,29 +130,46 @@ function setAgentStatus(connected) {
     agentStatus.lastCheckTime = new Date();
 
     if (connected) {
-        statusDot.className = 'status-dot';
-        statusText.textContent = 'Connected';
+        statusDot.classList.add('online');
+        statusText.textContent = 'System Online';
+        statusText.style.color = 'var(--primary)';
         sendButton.disabled = false;
-        document.getElementById('apiStatus').textContent = '✓ API is running';
+        document.getElementById('apiStatus').textContent = 'ACTIVE';
+        document.getElementById('apiStatus').classList.add('status-tag');
     } else {
-        statusDot.className = 'status-dot error';
-        statusText.textContent = 'Disconnected';
+        statusDot.classList.remove('online');
+        statusText.textContent = 'System Offline';
+        statusText.style.color = 'var(--danger)';
         sendButton.disabled = true;
-        document.getElementById('apiStatus').textContent = '✗ API is offline';
+        document.getElementById('apiStatus').textContent = 'OFFLINE';
+        document.getElementById('apiStatus').classList.remove('status-tag');
     }
 }
 
 function switchTab(tab) {
+    chatContainer.classList.remove('active');
+    dashboardView.classList.remove('active');
+    shadowView.classList.remove('active');
+    document.getElementById('historyView').classList.remove('active');
+    
     chatContainer.style.display = 'none';
     dashboardView.style.display = 'none';
     shadowView.style.display = 'none';
+    document.getElementById('historyView').style.display = 'none';
 
     if (tab === 'chat') {
+        chatContainer.classList.add('active');
         chatContainer.style.display = 'flex';
     } else if (tab === 'dashboard') {
+        dashboardView.classList.add('active');
         dashboardView.style.display = 'flex';
         renderRiskHeatmap();
+    } else if (tab === 'history') {
+        document.getElementById('historyView').classList.add('active');
+        document.getElementById('historyView').style.display = 'flex';
+        loadPatientHistory();
     } else if (tab === 'shadow') {
+        shadowView.classList.add('active');
         shadowView.style.display = 'flex';
     }
 }
@@ -168,8 +181,8 @@ async function loadAgentInfo() {
         const response = await fetch(`${API_BASE_URL}/status`);
         if (response.ok) {
             const data = await response.json();
-            document.getElementById('assistantName').textContent = data.assistant_name || 'N/A';
-            document.getElementById('safetyEnabled').textContent = data.safety_enabled ? '✅ Active' : '❌ Disabled';
+            document.getElementById('assistantName').textContent = data.assistant_name || 'Buddi v2';
+            document.getElementById('safetyEnabled').textContent = data.safety_enabled ? 'ACTIVE' : 'DISABLED';
         }
     } catch (error) {
         console.error('Error loading agent info:', error);
@@ -189,43 +202,19 @@ async function loadPatientContext() {
             if (ctx && ctx.patient_id) {
                 display.innerHTML = `
                     <div class="patient-info">
-                        <p><strong>${ctx.name || 'Unknown'}</strong></p>
-                        <p class="patient-detail">ID: ${ctx.patient_id}</p>
+                        <p><strong>${ctx.name || 'Unknown Patient'}</strong></p>
+                        <p class="patient-detail">MRN: ${ctx.patient_id}</p>
                         ${ctx.conditions && ctx.conditions.length ? `<p class="patient-detail">Dx: ${ctx.conditions.join(', ')}</p>` : ''}
-                        ${ctx.medications && ctx.medications.length ? `<p class="patient-detail">Meds: ${ctx.medications.join(', ')}</p>` : ''}
-                        ${ctx.allergies && ctx.allergies.length ? `<p class="patient-detail allergy">⚠ Allergies: ${ctx.allergies.join(', ')}</p>` : ''}
+                        ${ctx.medications && ctx.medications.length ? `<p class="patient-detail">Rx: ${ctx.medications.join(', ')}</p>` : ''}
+                        ${ctx.allergies && ctx.allergies.length ? `<p class="patient-detail allergy">Allergies: ${ctx.allergies.join(', ')}</p>` : ''}
                     </div>
                 `;
             } else {
-                display.innerHTML = '<p class="context-empty">No patient set</p>';
+                display.innerHTML = '<p class="empty-state">No patient selected</p>';
             }
         }
     } catch (error) {
         console.error('Error loading patient context:', error);
-    }
-}
-
-async function loadPatientHistory() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/patient-history?count=5`);
-        if (response.ok) {
-            const data = await response.json();
-            const display = document.getElementById('patientHistoryDisplay');
-            if (data.history && data.history.length > 0) {
-                display.innerHTML = data.history.map(item => `
-                    <div class="history-item">
-                        <div class="history-item-header">
-                            <span>User query</span>
-                        </div>
-                        <div class="history-item-content">${item.user}</div>
-                    </div>
-                `).join('');
-            } else {
-                display.innerHTML = '<p class="context-empty">No history available</p>';
-            }
-        }
-    } catch (error) {
-        console.error('Error loading patient history:', error);
     }
 }
 
@@ -237,14 +226,14 @@ async function loadRiskAssessment() {
             const container = document.getElementById('riskIndicatorContainer');
             if (data.risks && data.risks.length > 0) {
                 container.innerHTML = data.risks.map(r => `
-                    <span class="risk-badge ${r.level}">${r.label.split('—')[0].trim()}</span>
+                    <span class="risk-badge ${r.level}">${r.label}</span>
                 `).join('');
+                
+                if (dashboardView.classList.contains('active')) {
+                    renderRiskHeatmap(data.risks);
+                }
             } else {
                 container.innerHTML = '';
-            }
-            // If the dashboard is visible, update the heatmap too
-            if (dashboardView.style.display !== 'none') {
-                renderRiskHeatmap(data.risks);
             }
         }
     } catch (error) {
@@ -252,123 +241,72 @@ async function loadRiskAssessment() {
     }
 }
 
+async function loadPatientHistory() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/patient-history?count=15`);
+        if (response.ok) {
+            const data = await response.json();
+            const display = document.getElementById('patientHistoryDisplay');
+            if (data.history && data.history.length > 0) {
+                display.innerHTML = data.history.map(item => `
+                    <div class="history-item">
+                        <div class="history-item-header">
+                            <span class="history-label"><i class="ph ph-user"></i> USER</span>
+                            <span class="history-time">SESSION INTERACTION</span>
+                        </div>
+                        <div class="history-item-content">${item.user || ''}</div>
+                        <div class="history-item-header">
+                            <span class="history-label"><i class="ph ph-robot"></i> BUDDI</span>
+                        </div>
+                        <div class="history-item-content bot">${(item.bot || '').replace(/\n/g, '<br>')}</div>
+                    </div>
+                `).join('');
+            } else {
+                display.innerHTML = '<p class="empty-state">No medical history for this session.</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading history:', error);
+    }
+}
+
 function renderRiskHeatmap(risks = []) {
     const heatmap = document.getElementById('riskHeatmap');
     if (!risks || risks.length === 0) {
-        heatmap.innerHTML = '<p class="context-empty">No clinical risks detected to visualize.</p>';
+        heatmap.innerHTML = '<p class="empty-state">No population risk data available.</p>';
         return;
     }
 
     heatmap.innerHTML = risks.map(r => `
         <div class="heatmap-card">
-            <div style="font-weight: 600; font-size: 0.9rem;">${r.label.split('—')[0]}</div>
-            <div style="font-size: 0.75rem; color: var(--text-secondary);">${r.label.split('—')[1] || ''}</div>
+            <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 4px;">${r.label}</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">Real-time monitoring active</div>
             <div class="heat-level heat-${r.level}"></div>
         </div>
     `).join('');
-}
-
-async function handleShadowCompare() {
-    const expertAction = expertActionInput.value.trim();
-    if (!expertAction) {
-        showError('Please enter your manual charting action first.');
-        return;
-    }
-
-    // We'll use the last user message as the input message
-    const historyRes = await fetch(`${API_BASE_URL}/patient-history?count=1`);
-    const history = await historyRes.json();
-    const lastMessage = (history.history && history.history.length > 0) 
-        ? history.history[0].user 
-        : "Patient presents for routine follow-up.";
-
-    showLoading(true);
-    try {
-        const response = await fetch(`${API_BASE_URL}/shadow-mode/compare`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: lastMessage,
-                expert_action: expertAction
-            })
-        });
-
-        if (!response.ok) throw new Error('Shadow mode comparison failed');
-        
-        const data = await response.json();
-        renderShadowComparison(data);
-    } catch (error) {
-        showError(error.message);
-    } finally {
-        showLoading(false);
-    }
-}
-
-function renderShadowComparison(data) {
-    shadowComparisonOutput.innerHTML = `
-        <div class="comparison-result">
-            <div class="comparison-stat">
-                <h3>Intent Match</h3>
-                <span class="match-badge match-${data.match}">${data.match ? 'MATCHED' : 'DIVERGED'}</span>
-            </div>
-            <div class="comparison-stat">
-                <h4>Agent Intent Detection</h4>
-                <p style="font-size: 0.85rem; color: var(--primary-light);">${data.agent_suggestion}</p>
-            </div>
-            <div class="comparison-stat">
-                <h4>Expert Baseline</h4>
-                <p style="font-size: 0.85rem; color: var(--text-secondary);">${data.expert_baseline}</p>
-            </div>
-        </div>
-    `;
-}
-
-async function handleImageOCR(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    showLoading(true);
-    addMessageToChat(`[SYSTEM] Initializing Medical OCR for ${file.name}...`, 'system-message');
-    
-    // In a prototype, we simulate the OCR processing time
-    setTimeout(() => {
-        showLoading(false);
-        const mockOcrText = "MEDICAL RECORD EXTRACT:\nPatient: John Smith\nID: 12345\nConditions: T2DM, Hypertension\nLab: HbA1c 7.7 (2026-03-20)\nNote: Patient reports mild tingling in feet.";
-        userInput.value = `Process this medical record extract: ${mockOcrText}`;
-        addMessageToChat(`[OCR COMPLETED] Data extracted from image.`, 'system-message');
-    }, 2000);
-}
-
-async function handleClearPatient() {
-    if (!agentStatus.connected) {
-        showError('Agent API is not available');
-        return;
-    }
-    try {
-        await fetch(`${API_BASE_URL}/patient-context`, { method: 'DELETE' });
-        loadPatientContext();
-        addMessageToChat('Patient context cleared.', 'system-message');
-    } catch (error) {
-        showError(`Failed to clear patient: ${error.message}`);
-    }
 }
 
 // ── Audit Log ───────────────────────────────────────────────────────
 
 async function loadAuditLog() {
     try {
-        const response = await fetch(`${API_BASE_URL}/audit-log?count=5`);
+        const response = await fetch(`${API_BASE_URL}/audit-log?count=8`);
         if (response.ok) {
             const data = await response.json();
             const auditLog = document.getElementById('auditLog');
 
             if (data.events && data.events.length > 0) {
                 auditLog.innerHTML = data.events.map(e => {
-                    const time = new Date(e.timestamp).toLocaleTimeString();
-                    return `<div class="audit-entry"><span class="audit-time">${time}</span> ${e.event_type}</div>`;
+                    const time = new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return `
+                        <div class="audit-entry">
+                            <span class="audit-time">${time}</span>
+                            <span class="audit-text">${e.event_type}</span>
+                        </div>
+                    `;
                 }).join('');
             } else {
-                auditLog.innerHTML = '<p class="context-empty">No activity yet</p>';
+                auditLog.innerHTML = '<p class="empty-state">Audit feed silent</p>';
             }
         }
     } catch (error) {
@@ -376,26 +314,22 @@ async function loadAuditLog() {
     }
 }
 
-// ── Chat ────────────────────────────────────────────────────────────
+// ── Chat Interaction ────────────────────────────────────────────────
 
 async function handleSendMessage(event) {
     event.preventDefault();
     const message = userInput.value.trim();
 
-    if (!message) {
-        showError('Please enter a message');
-        return;
-    }
+    if (!message) return;
     if (!agentStatus.connected) {
-        showError('Agent API is not available. Please check the backend.');
+        showError('System offline. Please wait for reconnection.');
         return;
     }
 
-    addMessageToChat(message, 'user-message');
+    addMessageToChat(message, 'user');
     userInput.value = '';
-    userInput.focus();
+    userInput.style.height = 'auto';
     showLoading(true);
-    sendButton.disabled = true;
 
     try {
         const response = await fetch(`${API_BASE_URL}/chat`, {
@@ -404,104 +338,142 @@ async function handleSendMessage(event) {
             body: JSON.stringify({ message: message }),
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to get response');
-        }
+        if (!response.ok) throw new Error('API request failed');
 
         const data = await response.json();
-        addMessageToChat(data.response, 'agent-message');
+        addMessageToChat(data.response, 'agent');
 
-        // Refresh context panels after each message
+        // Refresh side panels
         loadPatientContext();
-        loadPatientHistory();
         loadRiskAssessment();
         loadAuditLog();
     } catch (error) {
-        console.error('Error sending message:', error);
-        showError(`Failed to send message: ${error.message}`);
-        addMessageToChat(`Error: ${error.message}`, 'system-message');
+        showError(`Communication Error: ${error.message}`);
+        addMessageToChat(`Fault in connection layer: ${error.message}`, 'system');
     } finally {
         showLoading(false);
-        sendButton.disabled = false;
-        userInput.focus();
     }
 }
 
-// ── Reset ───────────────────────────────────────────────────────────
+function addMessageToChat(text, type) {
+    const messageNode = document.createElement('div');
+    messageNode.className = `message ${type}`;
 
-async function handleReset() {
-    if (!confirm('Reset the agent? This will clear memory and patient context.')) return;
-    if (!agentStatus.connected) {
-        showError('Agent API is not available');
-        return;
-    }
-
-    showLoading(true);
-    resetButton.disabled = true;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/reset`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-        });
-
-        if (!response.ok) throw new Error('Failed to reset agent');
-
-        messagesContainer.innerHTML = '';
-        addMessageToChat('Agent reset. Memory and patient context cleared.', 'system-message');
-        loadPatientContext();
-        loadAuditLog();
-    } catch (error) {
-        showError(`Failed to reset: ${error.message}`);
-    } finally {
-        showLoading(false);
-        resetButton.disabled = false;
-    }
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function addMessageToChat(text, className) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${className}`;
-
-    if (className.includes('system-message')) {
-        messageDiv.innerHTML = `
-            <div class="system-icon-wrapper"><i class="ph-fill ph-sparkle"></i></div>
-            <pre class="message-content" style="font-family: inherit; margin: 0;">${text}</pre>
+    if (type === 'system') {
+        messageNode.innerHTML = `
+            <i class="ph-fill ph-sparkle"></i>
+            <div class="message-body">${text}</div>
         `;
     } else {
-        const pre = document.createElement('pre');
-        pre.className = 'message-content';
-        pre.textContent = text;
-        messageDiv.appendChild(pre);
+        messageNode.innerHTML = `
+            <div class="message-body">${text}</div>
+        `;
     }
-    
-    messagesContainer.appendChild(messageDiv);
+
+    messagesContainer.appendChild(messageNode);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-function showLoading(show) {
-    const spinner = document.getElementById('loadingSpinner');
-    if (show) {
-        spinner.classList.add('active');
-    } else {
-        spinner.classList.remove('active');
+// ── Specialized Workflows ───────────────────────────────────────────
+
+async function handleShadowCompare() {
+    const expertAction = expertActionInput.value.trim();
+    if (!expertAction) {
+        showError('Baseline charting required for comparison.');
+        return;
     }
+
+    const chatMessages = messagesContainer.querySelectorAll('.message.user');
+    const lastUserMessage = chatMessages.length > 0 
+        ? chatMessages[chatMessages.length - 1].querySelector('.message-content').textContent 
+        : "Initial session state analysis.";
+
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE_URL}/shadow-mode/compare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: lastUserMessage,
+                expert_action: expertAction
+            })
+        });
+
+        if (!response.ok) throw new Error('Eval server error');
+        
+        const data = await response.json();
+        shadowComparisonOutput.innerHTML = `
+            <div class="comparison-card">
+                <div style="margin-bottom: 16px;">
+                    <span class="status-tag" style="background: ${data.match ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${data.match ? '#10b981' : '#fca5a5'};">
+                        ${data.match ? 'VALIDATED' : 'DIVERGENCE DETECTED'}
+                    </span>
+                </div>
+                <p style="font-size: 0.9rem; border-left: 2px solid var(--primary); padding-left: 12px; margin-bottom: 12px;">
+                    <strong>Agent Intent:</strong> ${data.agent_suggestion}
+                </p>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">
+                    <strong>Human Baseline:</strong> ${data.expert_baseline}
+                </p>
+            </div>
+        `;
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function handleImageOCR(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    showLoading(true);
+    addMessageToChat(`Scanning medical image: ${file.name}...`, 'system');
+    
+    setTimeout(() => {
+        showLoading(false);
+        const mockOcrText = "MEDICAL RECORD EXTRACT: Patient John Smith (ID 12345). HbA1c 7.7. T2DM diagnostic history.";
+        userInput.value = `Patient data extracted: ${mockOcrText}. Generate clinical summary.`;
+    }, 1500);
+}
+
+async function handleClearPatient() {
+    try {
+        await fetch(`${API_BASE_URL}/patient-context`, { method: 'DELETE' });
+        loadPatientContext();
+        addMessageToChat('Context purged successfully.', 'system');
+    } catch (error) {
+        showError('Purge failed');
+    }
+}
+
+async function handleReset() {
+    if (!confirm('Execute system reset?')) return;
+    showLoading(true);
+    try {
+        await fetch(`${API_BASE_URL}/reset`, { method: 'POST' });
+        messagesContainer.innerHTML = '';
+        addMessageToChat('System reset complete. Awaiting new session.', 'system');
+        loadPatientContext();
+    } catch (error) {
+        showError('Reset failed');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// ── Global Helpers ──────────────────────────────────────────────────
+
+function showLoading(show) {
+    if (show) loadingSpinner.classList.add('active');
+    else loadingSpinner.classList.remove('active');
 }
 
 function showError(message) {
     toastMessage.textContent = message;
     errorToast.classList.add('show');
-    setTimeout(() => { errorToast.classList.remove('show'); }, 5000);
+    setTimeout(() => errorToast.classList.remove('show'), 4000);
 }
 
-userInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        chatForm.dispatchEvent(new Event('submit'));
-    }
-});
-
-console.log('Buddi Clinical Agent Web UI initialized');
+console.log('Buddi Core Engine Interface Stable');

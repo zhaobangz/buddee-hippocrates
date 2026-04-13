@@ -26,6 +26,12 @@ FRONTEND_LOG="logs/frontend.log"
 # Create logs directory
 mkdir -p logs
 
+# Port cleanup logic
+echo "Checking for existing processes on ports $BACKEND_PORT and $FRONTEND_PORT..."
+lsof -ti :$BACKEND_PORT | xargs kill -9 2>/dev/null || true
+lsof -ti :$FRONTEND_PORT | xargs kill -9 2>/dev/null || true
+echo -e "${GREEN}✓ Ports cleared${NC}"
+
 echo "Configuration:"
 echo "  Backend:  http://localhost:$BACKEND_PORT"
 echo "  Frontend: http://localhost:$FRONTEND_PORT"
@@ -36,10 +42,7 @@ PYTHON_PATH=$(which python3)
 
 # Check if required packages are installed
 echo "Checking dependencies..."
-if ! "$PYTHON_PATH" -c "import fastapi" 2>/dev/null; then
-    echo "Installing required packages..."
-    "$PYTHON_PATH" -m pip install fastapi uvicorn[standard]
-fi
+"$PYTHON_PATH" -m pip install -r requirements.txt > /dev/null 2>&1
 echo -e "${GREEN}✓ Dependencies OK${NC}"
 
 # Function to kill background processes on exit

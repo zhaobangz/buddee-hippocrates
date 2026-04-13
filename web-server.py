@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 # Configuration
-BACKEND_PORT = 8000
+BACKEND_PORT = 8001
 FRONTEND_PORT = 3000
 BACKEND_HOST = "0.0.0.0"
 

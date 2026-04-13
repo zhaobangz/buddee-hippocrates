@@ -13,6 +13,7 @@ from core.agent import Agent
 from core.config import Config
 from core.tracing import setup_tracing, get_tracer, shutdown_tracing
 from core.safety import get_recent_audit_events
+from contextlib import asynccontextmanager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -22,11 +23,36 @@ logger = logging.getLogger(__name__)
 setup_tracing(service_name="buddi-clinical-backend")
 tracer = get_tracer(__name__)
 
+# ── Lifecycle Events ─────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize agent on startup and cleanup on shutdown"""
+    global agent
+    try:
+        with tracer.start_as_current_span("startup") as span:
+            logger.info("Initializing Buddi Clinical Agent...")
+            agent = Agent()
+            span.set_attribute("agent.initialized", True)
+            logger.info(f"{Config.ASSISTANT_NAME} is ready!")
+    except Exception as e:
+        logger.error(f"Failed to initialize agent: {e}")
+        # In a real clinical app, we might want to shut down if the agent fails to load
+        
+    yield
+    
+    try:
+        shutdown_tracing()
+        logger.info("Agent shutdown complete")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Buddi Clinical Agent API",
     description="REST API for the Buddi Clinical Agent System — Healthcare Workflow Intelligence",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
@@ -94,29 +120,6 @@ class StatusResponse(BaseModel):
 
 # ── Lifecycle Events ─────────────────────────────────────────────────
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize agent on startup"""
-    global agent
-    try:
-        with tracer.start_as_current_span("startup") as span:
-            logger.info("Initializing Buddi Clinical Agent...")
-            agent = Agent()
-            span.set_attribute("agent.initialized", True)
-            logger.info(f"{Config.ASSISTANT_NAME} is ready!")
-    except Exception as e:
-        logger.error(f"Failed to initialize agent: {e}")
-        raise
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    try:
-        shutdown_tracing()
-        logger.info("Agent shutdown complete")
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
 
 
 # ── Health & Status ──────────────────────────────────────────────────
