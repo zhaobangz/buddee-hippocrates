@@ -1,90 +1,75 @@
-# Buddi Clinical Agent System
+# Buddi Clinical Agent 
 
-> **Healthcare Workflow Intelligence powered by Agentic AI**
+> **High-impact Healthcare Workflow Intelligence**
 
-Buddi Clinical Agent is an advanced, AI-driven clinical workflow system that automates healthcare administrative tasks, provides decision-critical clinical support, and orchestrates care activities across a distributed medical team. Built with a modular agentic architecture, it leverages Retrieval-Augmented Generation (RAG) to ground its responses in verified clinical guidelines.
+Buddi is a lean, high-performance clinical decision support system designed for speed, clarity, and clinician value. It integrates real-time RAG (Retrieval-Augmented Generation), patient risk assessment, and workflow automation into a premium glassmorphic dashboard.
 
-## ✨ Premium Web Interface
-Buddi features a state-of-the-art, healthcare-grade web terminal designed for high-stakes clinical environments:
-- **🎛️ Multi-View Workspace**: Switch between Chat, **Risk Dashboard** (Heatmap), and **Shadow Mode** (Expert Comparison).
-- **🧠 Perception Widget**: Siri-inspired integrated audio/screen capture for automated clinical note-taking and OCR.
-- **💎 Glassmorphism Design**: High-premium teal-themed UI with responsive micro-animations and medical-grade aesthetics.
-- **📊 Live Context Panel**: Real-time tracking of patient demographics, conditions, medications, and recent history.
+## 🎯 Core Capabilities
+1. **AI Clinical Chat**: RAG-powered decision support grounded in medical guidelines.
+2. **Patient Intelligence**: Automated profile summaries covering demographics, risks, and medical history.
+3. **Risk Dashboard**: Visual heatmap of patient severity for rapid prioritization.
+4. **Workflow Automation**: One-click Prior Authorization and Scheduling orchestration.
+5. **Shadow Mode**: Side-by-side validation of agent intent vs. expert baseline for QA.
+6. **Audit Trail**: Every action is cryptographically tracked for HIPAA foundations.
 
-## 🏥 Clinical Workflows
-
-| Workflow | Description |
-|----------|-------------|
-| **Prior Authorization** | Automated form generation for Medicare, Medicaid, and Commercial insurance with intelligent clinical justification. |
-| **Risk Dashboard** | A real-time heatmap of patient focus areas (A1C, BP, Adherence) and automated risk assessment. |
-| **Shadow Mode** | Side-by-side comparison of AI suggestions against expert baselines for training and quality assurance. |
-| **Patient Brief** | Pre-visit intelligence summarizing risks, missing labs, and suggested clinical questions based on EHR records. |
-| **Clinical Guidelines** | RAG-powered mapping to ADA, ACC/AHA, GINA, and APA guidelines with structured treatment suggestions. |
-| **Care Coordination** | coordinate labs, imaging, and referrals directly through the agentic interface. |
-| **Safety Layer** | HIPAA-compliant audit logging with human-in-the-loop validation for all high-risk clinical actions. |
-
-## 📈 Startup Strategy
-For information on Buddi's vision, revenue model, and go-to-market strategy, see the [Business Model](docs/BUSINESS_MODEL.md).
-
-## 🏗 Modular Architecture
-
-```mermaid
-graph TD
-    UI[Premium Web UI / Dashboard] --> API[FastAPI Backend]
-    API --> Agent[Agentic Orchestrator]
-    Agent --> Intent[Intent Detection / Router]
-    Intent --> Tools[Medical Tool Layer]
-    subgraph Tools
-        PA[Prior Auth]
-        EHR[EHR / Briefly]
-        RAG[Clinical RAG Engine]
-        SCH[Scheduling / Follow-up]
-    end
-    Tools --> RAG_V[FAISS Vector Store]
-    Tools --> LLM[DeepSeek-V3 / Transformers]
-    Agent --> Memory[Secure Memory / Patient Context]
-    Agent --> Safety[Safety & Audit Layer]
-```
+## 🏗 Lean Architecture
+- **Frontend**: React + Vite + Tailwind (Modern Clinical Terminal)
+- **Backend**: FastAPI (Consolidated Service Registry with OpenTelemetry Tracing)
+- **Engine**: Intent-Driven Orchestrator with FAISS-based RAG grounding.
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
-Ensure you have Python 3.11+ and Node.js for frontend assets (optional). Then run:
+### 1. Prerequisites
+- **Python**: 3.9 or higher
+- **Node.js**: 18.x or higher
+- **Homebrew (macOS)**: `brew install faiss` (recommended for RAG stability)
 
+### 2. Installation
 ```bash
-# Set up the isolated virtual environment
+# Clone the repository and enter the directory
+cd buddi
+
+# Setup Python Virtual Environment
 python3 -m venv venv
 source venv/bin/activate
-
-# Install core AI, web, and medical libraries
 pip install -r requirements.txt
 
-# macOS only: Install system dependencies for OCR and Audio
-brew install tesseract portaudio ffmpeg faiss
-```
+# Setup Frontend Dependencies
+cd frontend
+npm install
+cd ..
 
-### 2. Configure Environment
-```bash
+# Configure Environment
 cp .env.example .env
-# Edit .env and add your LLM API key
+# Edit .env with your LLM_API_KEY
 ```
 
-### 3. Run the System
-Use the robust, isolated launcher to start both the FastAPI Backend and Web Server:
+### 3. Launching the System
+The unified launcher starts both the FastAPI backend and the Vite frontend:
 ```bash
-chmod +x run-web.sh
-./run-web.sh
+python start.py
 ```
-- **Web UI URL**: [http://localhost:3000](http://localhost:3000)
-- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## 🔰 Environment Protection
-Buddi includes a custom **Environment Guardian** in `./run-web.sh` that detects and bypasses corrupted system libraries (like `uvicorn` name conflicts) by prioritizing the project-local virtual environment and absolute pathing.
+- **Dashboard**: [http://localhost:5173](http://localhost:5173)
+- **API (Direct)**: [http://localhost:8001](http://localhost:8001)
+- **Interactive API Docs**: [http://localhost:8001/docs](http://localhost:8001/docs)
 
-## ⚖️ Regulatory & Safety
-- **Clinical Boundaries**: The system is hard-coded to block diagnosis or prescription actions.
-- **Compliance**: HIPAA foundations are provided via an encrypted audit stream (`audit_log.json`).
-- **Human-in-the-loop**: High-risk actions (Prior Auth, Referrals) require explicit human confirmation.
+## 📁 Repository Structure
+```
+buddi/
+├── app/                # Modular Backend (Under Development)
+├── backend/            # Consolidated Production API (v3.1)
+├── frontend/           # Vite-powered React Dashboard
+├── core/               # LLM Orchestrator, RAG, and Memory
+├── tools/              # Clinical workflow implementations
+├── docs/               # Detailed documentation and guides
+└── start.py            # Unified system launcher
+```
+
+## 🛡 Safety & Compliance
+- **Guardrails**: Hard-coded blocking of diagnosis/prescription actions.
+- **CDS**: Buddi is a Clinical Decision Support tool, not a medical provider.
+- **Audit**: Every action is cryptographically tracked in `audit_log.json`.
 
 ---
-Buddi is a **Clinical Decision Support (CDS)** tool. It is not intended to replace professional medical judgment. 
+Buddi is designed for Staff Engineers to build on and Clinicians to actually use.

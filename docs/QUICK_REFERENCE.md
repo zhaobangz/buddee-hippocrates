@@ -12,11 +12,11 @@ pip install -r requirements.txt
 cp .env.example .env && nano .env
 
 # 3. Launch Premium Workspace (Starts Backend + Frontend)
-chmod +x run-web.sh && ./run-web.sh
+python start.py
 ```
 
-**Clinical Dashboard:** [http://localhost:3000](http://localhost:3000)
-**Interactive API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+**Clinical Dashboard:** [http://localhost:5173](http://localhost:5173)
+**Interactive API Docs:** [http://localhost:8001/docs](http://localhost:8001/docs)
 
 ---
 
@@ -24,12 +24,12 @@ chmod +x run-web.sh && ./run-web.sh
 
 | Workflow Icon | Action | Backend Component |
 | :--- | :--- | :--- |
-| **👤 Demo** | Set Demo Patient Context | `/api/patient-context` |
-| **⚠️ Risk** | Perform Risk Assessment | `/api/risk-assessment` |
-| **🕰️ History** | Show Clinical History | `/api/patient-history` |
-| **📋 PA** | Generate Prior Auth | `tools/prior_auth.py` |
+| **👤 Demo** | Set Demo Patient Context | `/api/patient` (POST) |
+| **⚠️ Risk** | Perform Risk Assessment | `/api/risk` (GET) |
+| **🕰️ History** | Show Clinical History | `/api/patient` (GET) |
+| **📋 PA** | Generate Prior Auth | `tools/clinical_workflows.py` |
 | **🏥 Brief** | Load Patient Brief | `tools/ehr_reader.py` |
-| **🎙️ Mic** | Start Audio Capture | `ui/widget.py` |
+| **🚀 Shadow** | Agent QA Validation | `/api/shadow-mode/compare` |
 
 ---
 
@@ -44,15 +44,16 @@ chmod +x run-web.sh && ./run-web.sh
 
 ---
 
-## 🔌 API Quick-Mapp (Port 8000)
+## 🔌 API Quick-Map (Port 8001)
 
 | Endpoint | Method | Result Layout |
 | :--- | :--- | :--- |
 | `/api/chat` | POST | Unified Clinical Response |
-| `/api/risk-assessment` | GET | **Risk Heatmap Data** |
+| `/api/risk` | GET | **Risk Heatmap Data** |
+| `/api/patient` | GET | **Intelligence Brief + History** |
 | `/api/shadow-mode/compare` | POST | **Side-by-Side Validation** |
 | `/api/status` | GET | Terminal Heartbeat |
-| `/api/audit-log` | GET | Global Activity Log |
+| `/api/audit` | GET | Global Activity Log |
 
 ---
 
@@ -65,3 +66,4 @@ chmod +x run-web.sh && ./run-web.sh
 ---
 
 **Clinical Pulse**: 💚 **Connected** | **RAG Index**: 📚 **Grounding Active** | **UI/UX**: 💎 **Premium Dashboard Ready**
+

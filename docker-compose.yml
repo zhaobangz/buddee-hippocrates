@@ -1,17 +1,28 @@
 version: '3.8'
 
 services:
-  buddi:
+  api:
     build: .
-    container_name: buddi_clinical_agent
-    env_file: .env
     ports:
-      - "8000:8000"  # Backend API
-      - "3000:3000"  # Frontend Dashboard
+      - "8000:8000"
     volumes:
-      - ./:/app:delegated
-      - audit_data:/app/data
-    restart: unless-stopped
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - DEV_MODE=true
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-volumes:
-  audit_data:
+  # Future: Add Redis for caching/rate-limiting
+  # redis:
+  #   image: redis:alpine
+  #   ports:
+  #     - "6379:6379"
+
+  # Future: Add Postgres for persistent storage
+  # db:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_DB: buddi_db
+  #     POSTGRES_USER: user
+  #     POSTGRES_PASSWORD: password

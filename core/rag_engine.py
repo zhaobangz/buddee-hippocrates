@@ -15,8 +15,10 @@ class RAGEngine:
         self.dimension = 384  # Dimension for all-MiniLM-L6-v2
         self.index = faiss.IndexFlatL2(self.dimension)
         self.metadata: List[Dict[str, Any]] = []
-        self.index_path = os.path.join(os.path.dirname(Config.AUDIT_LOG_FILE), "guidelines_index.faiss")
-        self.metadata_path = os.path.join(os.path.dirname(Config.AUDIT_LOG_FILE), "guidelines_metadata.pkl")
+        # Resolve paths relative to the project root (parent of core/)
+        _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.index_path = os.path.join(_project_root, "guidelines_index.faiss")
+        self.metadata_path = os.path.join(_project_root, "guidelines_metadata.pkl")
         
         # Load existing index if it exists
         self._load()
