@@ -1,49 +1,23 @@
-# Core LLM and AI Libraries
+# Buddi Clinical Dependencies
 python-dotenv
 requests
-transformers
-torch
-faiss-cpu
-uvloop
-sentence-transformers
-numpy
-
-# Web Framework (Backend API)
 fastapi
 uvicorn[standard]
 pydantic
-
-# Speech and Audio Processing
-SpeechRecognition
-pyaudio
-pyttsx3
-sounddevice
-pydub
+torch
+transformers
 numpy
-
-# Medical Document Processing
-PyPDF2
-Pillow
-pytesseract
-pandas
-easyocr
-openpyxl
-
-# Web Search & Summarization
-sumy
-nltk
-googlesearch-python
-lxml
-
-# Testing
-pytest
-
-# Security and Hardening
 cryptography
+openai
 
-# Tracing and Observability
+# Tracing & Observability
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-exporter-otlp
 opentelemetry-instrumentation
+opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-requests
+
+# Intelligence
+faiss-cpu
+sentence-transformers
