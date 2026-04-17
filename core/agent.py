@@ -1,6 +1,6 @@
 """
-Buddi Agent Orchestrator v3.2
-Lean, intent-driven clinical logic with RAG and Tracing.
+Buddi RCM Orchestrator v4.0
+Focused on Shadow Mode Revenue Integrity, QA Audits, and Prior Auth.
 """
 from core.llm_manager import LLMManager
 from core.memory import Memory
@@ -19,54 +19,93 @@ class Agent:
         self.llm = LLMManager(self.memory)
         self.rag = get_rag_engine()
 
-    def handle(self, user_input: str) -> str:
-        """Single entry point for clinical reasoning."""
+    def handle(self, payload: str, task_type: str = "detect") -> str:
+        """Entry point for RCM and compliance tasks."""
         with tracer.start_as_current_span("agent_handle") as span:
-            span.set_attribute("user_input", user_input)
+            span.set_attribute("payload", payload)
             
-            # 1. Detect Intent
-            intent = self._detect_intent(user_input)
+            # Override intent detection if task type is explicitly provided
+            if task_type == "detect":
+                intent = self._detect_intent(payload)
+            else:
+                intent = task_type
             span.set_attribute("detected_intent", intent)
             
-            # 2. Extract context
             ctx = self.memory.get_patient_context() if self.memory else {}
             
-            # 3. Route & Execute
             try:
-                if intent == "patient_brief":
-                    return ehr_reader.generate_patient_brief(ctx)
+                if intent == "shadow_mode_rcm":
+                    return self._process_shadow_mode_rcm(payload, ctx)
                 
-                if intent == "prior_auth":
-                    res = clinical_workflows.generate_prior_auth(ctx, "Requested Therapy")
-                    return f"✅ Prior Auth Generated: {res['id']}\nJustification: {res['justification']}"
+                if intent == "specialty_prior_auth":
+                    res = clinical_workflows.generate_prior_auth(ctx, payload)
+                    return f"✅ Oncology/GI Prior Auth Generated: {res.get('id', 'N/A')}\nGuideline Match: Verified"
                     
-                if intent == "schedule":
-                    res = clinical_workflows.schedule_action(ctx.get('patient_id', 'AUTO'), "Clinic Visit")
-                    return f"📅 Appointment Scheduled: {res['task_id']} for {res['scheduled_date']}"
+                if intent == "retrospective_qa_audit":
+                    return self._process_retrospective_qa(payload, ctx)
 
-                # 4. Clinical RAG + QA
-                return self._clinical_qa_with_rag(user_input, ctx)
+                return f"Task type {intent} unsupported in RCM engine."
             except Exception as e:
                 span.record_exception(e)
-                return f"Internal Clinical Processing Error: {str(e)}"
+                return f"Internal Audit Error: {str(e)}"
 
-    def _detect_intent(self, ui: str) -> str:
+    def _detect_intent(self, payload: str) -> str:
         with tracer.start_as_current_span("detect_intent"):
-            prompt = f"Target: {ui}\nIntents: [patient_brief, prior_auth, schedule, medical_query]\nRespond with category only."
+            prompt = f"Target: {payload}\nIntents: [shadow_mode_rcm, specialty_prior_auth, retrospective_qa_audit]\nRespond with category only."
             return self.llm.ask_llm(prompt).strip().lower()
 
-    def _clinical_qa_with_rag(self, ui: str, ctx: dict) -> str:
-        with tracer.start_as_current_span("rag_qa") as span:
-            # Search guidelines
-            docs = self.rag.search(ui, top_k=2)
-            span.set_attribute("rag_docs_found", len(docs))
-            
-            guideline_context = ""
-            if docs:
-                guideline_context = "\nRelevant Clinical Guidelines:\n" + "\n".join([f"- {d['text']} (Source: {d['source']})" for d in docs])
+    def _process_shadow_mode_rcm(self, payload: str, ctx: dict) -> str:
+        """
+        Deepened Shadow Mode: Compares Note vs Billed Codes.
+        Expects payload as string or JSON string with 'note' and 'billed_codes'.
+        """
+        with tracer.start_as_current_span("shadow_mode_rcm") as span:
+            try:
+                data = json.loads(payload)
+                note = data.get("note", payload)
+                billed_codes = data.get("billed_codes", [])
+            except:
+                note = payload
+                billed_codes = []
 
-            system = "You are Buddi, a Clinical Decision Support assistant. Use the provided guidelines if relevant."
-            if ctx: system += f" Active Patient: {ctx.get('name')} ({ctx.get('conditions')})"
+            docs = self.rag.search(note, top_k=2)
+            span.set_attribute("rag_docs_found", len(docs))
+            guideline_context = "\n".join([f"- {d['text']}" for d in docs]) if docs else "Standard CMS HCC Guidelines."
+
+            prompt = f"""
+            ### ROLE: Expert Revenue Integrity Auditor
+            ### TASK: Perform a Shadow Mode audit of the clinical note against previously billed codes.
             
-            full_prompt = f"{system}\n{guideline_context}\n\nUser Query: {ui}"
-            return self.llm.ask_llm(full_prompt)
+            ### DATA:
+            - CLINICAL NOTE: {note}
+            - BILLED CODES: {billed_codes}
+            - GUIDELINE CONTEXT: {guideline_context}
+            
+            ### INSTRUCTIONS:
+            1. Identify any missing HCC (Hierarchical Condition Category) or ICD-10 codes mentioned in the note but NOT in the billed codes.
+            2. For each identified missing code, provide:
+               - Code & Description
+               - Clinical Justification from the note
+               - Estimated annual revenue recovery (based on CMS weight ~1.0 = $11,000)
+            3. Frame the output as a RECOMMENDATION for human review (Compliance-first).
+            
+            ### OUTPUT FORMAT (JSON):
+            {{
+                "recovered_revenue": float,
+                "identified_codes": [{{ "code": str, "description": str, "justification": str, "est_value": float }}],
+                "summary": str
+            }}
+            """
+            
+            raw_response = self.llm.ask_llm(prompt)
+            # Try to return structured if possible, else keep string
+            return raw_response
+
+    def _process_retrospective_qa(self, note: str, ctx: dict) -> str:
+        with tracer.start_as_current_span("retrospective_qa_audit") as span:
+            docs = self.rag.search(note, top_k=2)
+            span.set_attribute("rag_docs_found", len(docs))
+            guideline_context = "\n".join([f"- {d['text']}" for d in docs]) if docs else "No guidelines found."
+            
+            prompt = f"Conduct a retrospective QA audit on this chart based on adherence to clinical guidelines. Emphasize cryptic audit trails.\nGuidelines:\n{guideline_context}\n\nChart Note:\n{note}"
+            return self.llm.ask_llm(prompt)

@@ -26,3 +26,9 @@ class Config:
     # --- Infrastructure ---
     BACKEND_PORT = 8001
     FRONTEND_PORT = 5173
+
+    # --- Safety & Audit ---
+    ENABLE_AUDIT_LOG = True
+    AUDIT_LOG_FILE = "audit_log.json"
+    ENABLE_SAFETY_LAYER = True
+    REQUIRE_HUMAN_APPROVAL = True

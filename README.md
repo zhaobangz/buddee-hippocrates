@@ -1,27 +1,24 @@
-# Buddi Clinical Agent 
+# Buddi RCM & Compliance AI
 
-> **High-impact Healthcare Workflow Intelligence**
+> **Invisible Revenue Integrity and Compliance Auditing**
 
-Buddi is a lean, high-performance clinical decision support system designed for speed, clarity, and clinician value. It integrates real-time RAG (Retrieval-Augmented Generation), patient risk assessment, and workflow automation into a premium glassmorphic dashboard.
+Buddi is an enterprise-grade AI engine designed for Revenue Cycle Management (RCM) and compliance auditing. Abandoning the "swiss army knife" approach to clinical assistance, Buddi focuses exclusively on high-ROI, low-friction, backend integrations.
 
 ## 🎯 Core Capabilities
-1. **AI Clinical Chat**: RAG-powered decision support grounded in medical guidelines.
-2. **Patient Intelligence**: Automated profile summaries covering demographics, risks, and medical history.
-3. **Risk Dashboard**: Visual heatmap of patient severity for rapid prioritization.
-4. **Workflow Automation**: One-click Prior Authorization and Scheduling orchestration.
-5. **Shadow Mode**: Side-by-side validation of agent intent vs. expert baseline for QA.
-6. **Audit Trail**: Every action is cryptographically tracked for HIPAA foundations.
+1. **Shadow Mode Revenue Integrity**: Runs invisibly on post-visit charts. Compares physician notes against billed codes to flag missed HCC (Hierarchical Condition Category) codes and recover revenue immediately.
+2. **Specialty-Specific Prior Auth**: Hyper-focused prior authorization engine tailored for high-friction workflows like Oncology step-therapy and GI biologics.
+3. **Retrospective QA Auditor**: Automated auditing of random clinical charts for adherence to established clinical guidelines, securely backed by RAG.
+4. **Cryptographic Audit Trail**: Every automated action, prompt, and RAG retrieval is cryptographically tracked to provide complete algorithmic transparency and liability protection for compliance teams.
+5. **EHR Integration Ready**: Designed strictly for backend API integration (e.g., through Redox / Health Gorilla), operating transparently without a separate clinician dashboard.
 
 ## 🏗 Lean Architecture
-- **Frontend**: React + Vite + Tailwind (Modern Clinical Terminal)
-- **Backend**: FastAPI (Consolidated Service Registry with OpenTelemetry Tracing)
+- **Backend API**: FastAPI (Python) - Secure integration endpoint.
 - **Engine**: Intent-Driven Orchestrator with FAISS-based RAG grounding.
 
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
 - **Python**: 3.9 or higher
-- **Node.js**: 18.x or higher
 - **Homebrew (macOS)**: `brew install faiss` (recommended for RAG stability)
 
 ### 2. Installation
@@ -34,42 +31,31 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Setup Frontend Dependencies
-cd frontend
-npm install
-cd ..
-
 # Configure Environment
 cp .env.example .env
 # Edit .env with your LLM_API_KEY
 ```
 
 ### 3. Launching the System
-The unified launcher starts both the FastAPI backend and the Vite frontend:
+The launcher starts the FastAPI backend:
 ```bash
 python start.py
 ```
 
-- **Dashboard**: [http://localhost:5173](http://localhost:5173)
 - **API (Direct)**: [http://localhost:8001](http://localhost:8001)
 - **Interactive API Docs**: [http://localhost:8001/docs](http://localhost:8001/docs)
 
 ## 📁 Repository Structure
 ```
 buddi/
-├── app/                # Modular Backend (Under Development)
 ├── backend/            # Consolidated Production API (v3.1)
-├── frontend/           # Vite-powered React Dashboard
 ├── core/               # LLM Orchestrator, RAG, and Memory
 ├── tools/              # Clinical workflow implementations
 ├── docs/               # Detailed documentation and guides
-└── start.py            # Unified system launcher
+└── start.py            # API launcher
 ```
 
 ## 🛡 Safety & Compliance
-- **Guardrails**: Hard-coded blocking of diagnosis/prescription actions.
-- **CDS**: Buddi is a Clinical Decision Support tool, not a medical provider.
+- **Guardrails**: Complete focus on retrospective and administrative tasks.
 - **Audit**: Every action is cryptographically tracked in `audit_log.json`.
-
----
-Buddi is designed for Staff Engineers to build on and Clinicians to actually use.
+- **SaMD Exclusion**: Complies with FDA Jan 2026 update by providing full algorithmic transparency and not functioning as a medical device.

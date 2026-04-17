@@ -164,21 +164,22 @@ def sanitize_response(response: str) -> str:
 
 # ── Audit Logging ─────────────────────────────────────────────────────
 
+def _calculate_event_hash(event: Dict[str, Any]) -> str:
+    """Calculate a stable SHA-256 hash for an event."""
+    event_string = json.dumps(event, sort_keys=True)
+    return hashlib.sha256(event_string.encode('utf-8')).hexdigest()
+
 def log_audit_event(
     event_type: str,
     details: Optional[Dict[str, Any]] = None,
     user_id: str = "system",
     reasoning_chain: Optional[str] = None,
 ) -> None:
-    """Write an audit event to the audit log file.
-
-    Each event is a JSON object appended to a JSON-lines file.
-    This provides the foundation for HIPAA compliance audit trails.
-    """
+    """Write a cryptographically chained audit event to the log file."""
     if not Config.ENABLE_AUDIT_LOG:
         return
 
-    # Redact PII from details if they contain strings
+    # Redact PII
     safe_details = {}
     if details:
         for k, v in details.items():
@@ -187,20 +188,65 @@ def log_audit_event(
             else:
                 safe_details[k] = v
 
-    event = {
+    # Get the last event to chain the hash
+    previous_hash = "GENESIS"
+    if os.path.exists(Config.AUDIT_LOG_FILE):
+        try:
+            logs = storage.load_json(Config.AUDIT_LOG_FILE)
+            if logs and isinstance(logs, list):
+                last_event = logs[-1]
+                previous_hash = last_event.get("current_hash", "UNKNOWN")
+        except:
+            pass
+
+    event: Dict[str, Any] = {
         "timestamp": datetime.now().isoformat(),
         "event_type": event_type,
         "user_id": user_id,
         "details": safe_details,
+        "previous_hash": previous_hash,
     }
 
     if reasoning_chain:
         event["reasoning_chain"] = redact_pii(reasoning_chain)
 
+    # Sign the event
+    event["current_hash"] = _calculate_event_hash(event)
+
     try:
         storage.append_json(Config.AUDIT_LOG_FILE, event)
     except Exception as e:
         print(f"Error writing audit log: {e}")
+
+def verify_audit_chain() -> Dict[str, Any]:
+    """Verify the integrity of the entire audit chain."""
+    if not os.path.exists(Config.AUDIT_LOG_FILE):
+        return {"valid": True, "message": "No audit logs to verify."}
+
+    try:
+        logs = storage.load_json(Config.AUDIT_LOG_FILE)
+        if not isinstance(logs, list):
+            return {"valid": False, "message": "Audit log format invalid."}
+
+        expected_prev_hash = "GENESIS"
+        for i, event in enumerate(logs):
+            # Check previous hash link
+            if event.get("previous_hash") != expected_prev_hash:
+                return {"valid": False, "index": i, "message": f"Broken chain at event {i}. Expected {expected_prev_hash}, found {event.get('previous_hash')}"}
+            
+            # Re-calculate hash to check for tampering
+            temp_event = event.copy()
+            actual_hash = temp_event.pop("current_hash")
+            recalculated_hash = _calculate_event_hash(temp_event)
+            
+            if actual_hash != recalculated_hash:
+                return {"valid": False, "index": i, "message": f"Tampering detected at event {i}. Hash mismatch."}
+            
+            expected_prev_hash = actual_hash
+
+        return {"valid": True, "message": f"Successfully verified {len(logs)} events."}
+    except Exception as e:
+        return {"valid": False, "message": f"Verification error: {str(e)}"}
 
 
 def get_recent_audit_events(count: int = 20) -> List[Dict[str, Any]]:
