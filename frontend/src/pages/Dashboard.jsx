@@ -9,37 +9,22 @@ import {
   Info
 } from 'lucide-react';
 import useStore from '../store/useStore';
-
-const Dashboard = () => {
-  const patient = useStore((state) => state.currentPatient);
-
-  const riskFactors = [
-    { label: 'A1C Volatility', value: 'High', color: 'rose', trend: 'up', info: 'Last 3 checks show increasing levels' },
-    { label: 'BP Control', value: 'Moderate', color: 'amber', trend: 'down', info: 'Stabilizing after med adjustment' },
-    { label: 'Med Adherence', value: 'Optimal', color: 'emerald', trend: 'steady', info: '98% refill consistency' },
-    { label: 'Comorbidity Risk', value: 'Moderate', color: 'amber', trend: 'up', info: 'Weight gain of 4lbs in 2 weeks' }
-  ];
-
-  const getColorClass = (color) => {
-    switch (color) {
-      case 'rose': return 'bg-rose-500/10 border-rose-500/20 text-rose-500';
-      case 'amber': return 'bg-amber-500/10 border-amber-500/20 text-amber-500';
-      case 'emerald': return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500';
-      default: return 'bg-slate-500/10 border-slate-500/20 text-slate-500';
-    }
-  };
+import AnalyticsDashboard from '../components/AnalyticsDashboard';
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100 tracking-tight">Clinical Overview</h1>
-          <p className="text-slate-500 mt-1">Surfacing intelligence for {patient.name}</p>
+          <h1 className="text-3xl font-bold text-slate-100 tracking-tight">Executive Integrity Dashboard</h1>
+          <p className="text-slate-500 mt-1">Real-time revenue recovery and audit monitoring</p>
         </div>
-        <div className="flex space-x-3">
-           <button className="btn-secondary text-sm">Case Export</button>
-           <button className="btn-primary text-sm bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20 border-0">Initiate Prior Auth</button>
-        </div>
+      </div>
+
+      <AnalyticsDashboard />
+
+      <div className="pt-8 border-t border-white/5">
+        <h2 className="text-xl font-bold text-slate-100 mb-6 tracking-tight">Clinical Focus: {patient.name}</h2>
+        {/* Risk Heatmap Grid moved here if needed or kept as is */}
       </div>
 
       {/* Risk Heatmap Grid */}

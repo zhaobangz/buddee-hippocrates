@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8001/api';
+const API_BASE = 'http://localhost:8000/api';
 
 const useStore = create((set, get) => ({
   // Patient Context
   currentPatient: {
-    id: 'P-8829',
+    id: 'PT-9012',
     name: 'Marcus Holloway',
     conditions: ['Type 2 Diabetes', 'Hypertension'],
     medications: ['Metformin 1000mg', 'Lisinopril 10mg'],
@@ -18,7 +18,7 @@ const useStore = create((set, get) => ({
     {
       id: 1,
       role: 'assistant',
-      content: 'System Online. Awaiting clinical query.',
+      content: 'Clinical System Online. Ready for patient context or queries.',
       timestamp: new Date().toISOString()
     }
   ],
@@ -29,31 +29,34 @@ const useStore = create((set, get) => ({
   })),
 
   sendMessage: async (text) => {
-    const { addMessage } = get();
+    const { addMessage, currentPatient } = get();
     addMessage({ role: 'user', content: text });
     
     try {
-      const resp = await axios.post(`${API_BASE}/chat`, { message: text });
+      const resp = await axios.post(`${API_BASE}/chat/chat`, { 
+        message: text,
+        patient_id: currentPatient.id
+      });
       addMessage({ 
         role: 'assistant', 
         content: resp.data.response,
-        status: resp.data.status
+        citations: resp.data.citations,
+        intent: resp.data.intent_detected
       });
     } catch (err) {
       addMessage({ 
         role: 'assistant', 
-        content: "Error: Could not connect to clinical backend. Ensure 'python start.py' is running on port 8001.",
+        content: "Error: Could not connect to Buddi Backend. Ensure the FastAPI server is running on port 8000.",
         isError: true
       });
     }
   },
 
-  fetchPatientProfile: async () => {
+  fetchPatientProfile: async (patientId) => {
+    const id = patientId || get().currentPatient.id;
     try {
-      const resp = await axios.get(`${API_BASE}/patient`);
-      if (resp.data.status === 'success') {
-        set({ currentPatient: resp.data.context });
-      }
+      const resp = await axios.get(`${API_BASE}/patient/${id}`);
+      set({ currentPatient: resp.data });
     } catch (err) {
       console.error("Failed to fetch patient profile");
     }
@@ -63,8 +66,8 @@ const useStore = create((set, get) => ({
   auditEvents: [],
   fetchAuditLogs: async () => {
     try {
-      const resp = await axios.get(`${API_BASE}/audit`);
-      set({ auditEvents: resp.data.events });
+      const resp = await axios.get(`${API_BASE}/audit/`);
+      set({ auditEvents: resp.data });
     } catch (err) {
       console.error("Failed to fetch audit logs");
     }
