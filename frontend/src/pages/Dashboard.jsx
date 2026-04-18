@@ -11,6 +11,25 @@ import {
 import useStore from '../store/useStore';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 
+const Dashboard = () => {
+  const { currentPatient: patient } = useStore();
+
+  const getColorClass = (color) => {
+    switch (color) {
+      case 'rose': return 'bg-rose-500/10 text-rose-500';
+      case 'amber': return 'bg-amber-500/10 text-amber-500';
+      case 'emerald': return 'bg-emerald-500/10 text-emerald-500';
+      default: return 'bg-slate-500/10 text-slate-500';
+    }
+  };
+
+  const riskFactors = [
+    { label: 'Hyperkalemia Risk', value: 'High', color: 'rose', trend: 'up', info: 'K+ level 5.4 in last draw' },
+    { label: 'Adherence', value: '98%', color: 'emerald', trend: 'down', info: 'Last fill 14 days ago' },
+    { label: 'BP Control', value: '138/88', color: 'amber', trend: 'up', info: 'Stage 1 Hypertension' },
+    { label: 'A1c Target', value: '7.4', color: 'amber', trend: 'down', info: 'Target < 7.0' }
+  ];
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-end">
@@ -24,10 +43,8 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard';
 
       <div className="pt-8 border-t border-white/5">
         <h2 className="text-xl font-bold text-slate-100 mb-6 tracking-tight">Clinical Focus: {patient.name}</h2>
-        {/* Risk Heatmap Grid moved here if needed or kept as is */}
       </div>
 
-      {/* Risk Heatmap Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {riskFactors.map((risk, index) => (
           <motion.div
@@ -62,14 +79,13 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard';
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Clinical Summary */}
         <div className="lg:col-span-2 glass-panel rounded-3xl p-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-8 opacity-5">
-            <Activity className="w-48 h-48" />
+            <ActivityIcon className="w-48 h-48" />
           </div>
           
           <h3 className="text-lg font-bold text-slate-100 mb-6 flex items-center">
-            <CheckCircle2 className="w-5 h-5 mr-3 text-medical-400" />
+            <CheckCircle2 className="w-5 h-5 mr-3 text-indigo-400" />
             AI Care Coordination Plan
           </h3>
 
@@ -80,7 +96,7 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard';
                   <h4 className="text-sm font-bold text-slate-200">Lab Discrepancy Detected</h4>
                   <p className="text-xs text-slate-500 mt-1 max-w-md">Patient reported fatigue but last CBC (Feb) was normal. Suggested action: Repeat iron studies and ferritin.</p>
                 </div>
-                <button className="text-[10px] font-bold text-medical-400 hover:underline">ORDER NOW</button>
+                <button className="text-[10px] font-bold text-indigo-400 hover:underline">ORDER NOW</button>
               </div>
             </div>
             
@@ -106,7 +122,6 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard';
           </div>
         </div>
 
-        {/* Suggestion Engine */}
         <div className="glass-panel rounded-3xl p-6 bg-indigo-500/5 border-indigo-500/10">
           <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Suggested Questions</h3>
           <div className="space-y-3">
@@ -128,8 +143,7 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard';
   );
 };
 
-// Internal icon
-const Activity = ({ className }) => (
+const ActivityIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
   </svg>
