@@ -17,8 +17,6 @@ from core.safety import get_recent_audit_events
 from core.tracing import setup_tracing, get_tracer, shutdown_tracing
 from contextlib import asynccontextmanager
 
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
