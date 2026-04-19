@@ -7,7 +7,7 @@ from app.core.logging import logger
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Buddi Clinical Agent — Production-ready backend for healthcare workflows."
+    description="Buddi — Production-ready backend for healthcare workflows."
 )
 
 # CORS Setup
