@@ -7,6 +7,7 @@ from core.memory import Memory
 from core.config import Config
 from core.tracing import get_tracer
 from core.rag_engine import get_rag_engine
+from core.schemas import ShadowModeResponse
 from tools import ehr_reader, clinical_workflows
 from typing import Optional, Dict, Any
 import json
@@ -97,9 +98,17 @@ class Agent:
             }}
             """
             
-            raw_response = self.llm.ask_llm(prompt)
-            # Try to return structured if possible, else keep string
-            return raw_response
+            try:
+                response_obj = self.llm.ask_llm_structured(prompt, ShadowModeResponse)
+                return response_obj.model_dump_json()
+            except Exception as e:
+                span.record_exception(e)
+                return json.dumps({
+                    "error": str(e), 
+                    "recovered_revenue": 0.0, 
+                    "identified_codes": [], 
+                    "summary": "Failed to parse structured output."
+                })
 
     def _process_retrospective_qa(self, note: str, ctx: dict) -> str:
         with tracer.start_as_current_span("retrospective_qa_audit") as span:

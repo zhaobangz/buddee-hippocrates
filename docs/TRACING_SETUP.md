@@ -36,8 +36,7 @@ This starts the OTLP collector on **port 4318**.
 
 ### Step 3: Launch the Integrated Agent
 ```bash
-chmod +x run-web.sh
-./run-web.sh
+python start.py
 ```
 
 ### Step 4: Analyze Clinical Spans

@@ -5,7 +5,7 @@ Buddi is architecture-ready for high-availability deployment to AWS, Google Clou
 ## 🏗 Architecture Compliance
 
 - ✅ **Backend**: Stateless FastAPI REST API (OIDC & JWT compatible).
-- ✅ **Frontend**: Premium multi-view workspace (CDN & Static Hosting ready).
+- ✅ **Frontend**: Premium multi-view workspace (CDN & Static Hosting ready - Deprecated).
 - ✅ **AI Layers**: RAG engine with FAISS vector store persistence.
 - ✅ **HIPAA Foundation**: Integrated clinical audit logging (Serialized JSON).
 - ✅ **Isolation**: Environment Guardian enabled for containerized stability.
@@ -22,7 +22,7 @@ Buddi is architecture-ready for high-availability deployment to AWS, Google Clou
 
 1. **Verify Clinical RAG**: Check that your guidelines (ADA, ACC/AHA) are indexed in the `guidelines_index.faiss`.
 2. **Setup Provider**: Choose your LLM engine (DeepSeek-V3, GPT-4o, etc.) and update the production `.env`.
-3. **Internal URLs**: Update `web/script.js` to point to your secure production API domain instead of `localhost:8000`.
+3. **Internal URLs**: If using any frontend components, update them to point to your secure production API domain instead of `localhost:8001`.
 4. **CORS Protocol**: Update `backend/api.py` to allow only your production frontend origin.
 
 ## ☁️ Google Cloud Deployment (Recommended)
@@ -43,8 +43,8 @@ gcloud run deploy buddi-terminal-api \
   --allow-unauthenticated
 ```
 
-### 3. Static Hosting (Frontend)
-Deploy the `web/` folder to Firebase Hosting or a GCS Bucket configured for static website hosting.
+### 3. Enterprise Integrations
+Connect your EHR system (Epic/Cerner) via Redox or Health Gorilla APIs securely via HTTPS directly to your Cloud Run endpoint.
 
 ## 🛡 Production Security & HIPAA
 
@@ -52,7 +52,7 @@ Deploy the `web/` folder to Firebase Hosting or a GCS Bucket configured for stat
 - **📄 Immutable Audits**: Map a Persistent Volume (PV) to `/data/` to ensure `audit_log.json` and `memory.json` are preserved across redeployments.
 - **🗳 RAG Persistence**: Ensure the `.faiss` vector index is included in the container build or loaded via cloud storage on startup.
 - **🔑 Secrets**: Use Cloud Secret Manager for your LLM API keys and clinical credentials.
-- **🐳 Environment Guardian**: The `./run-web.sh` logic is pre-configured to ensure the agent runs in a clean, isolated environment even within diverse cloud container runtimes.
+- **🐳 Environment Guardian**: The `start.py` logic is pre-configured to ensure the backend launches with the proper module paths and environment.
 
 ---
 

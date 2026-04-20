@@ -11,12 +11,12 @@ pip install -r requirements.txt
 # 2. Add LLM Credentials
 cp .env.example .env && nano .env
 
-# 3. Launch Premium Workspace (Starts Backend + Frontend)
+# 3. Launch System
 python start.py
 ```
 
-**Clinical Dashboard:** [http://localhost:5173](http://localhost:5173)
 **Interactive API Docs:** [http://localhost:8001/docs](http://localhost:8001/docs)
+*(Note: The legacy React dashboard at `http://localhost:5173` is deprecated in favor of API integrations)*
 
 ---
 
@@ -27,9 +27,9 @@ python start.py
 | **👤 Demo** | Set Demo Patient Context | `/api/patient` (POST) |
 | **⚠️ Risk** | Perform Risk Assessment | `/api/risk` (GET) |
 | **🕰️ History** | Show Clinical History | `/api/patient` (GET) |
-| **📋 PA** | Generate Prior Auth | `tools/clinical_workflows.py` |
+| **📋 PA** | Generate Prior Auth | `/api/process` & `tools/clinical_workflows.py` |
 | **🏥 Brief** | Load Patient Brief | `tools/ehr_reader.py` |
-| **🚀 Shadow** | Agent QA Validation | `/api/shadow-mode/compare` |
+| **🚀 Shadow** | Agent QA Validation | `/api/process` |
 
 ---
 
@@ -48,12 +48,10 @@ python start.py
 
 | Endpoint | Method | Result Layout |
 | :--- | :--- | :--- |
-| `/api/chat` | POST | Unified Clinical Response |
-| `/api/risk` | GET | **Risk Heatmap Data** |
-| `/api/patient` | GET | **Intelligence Brief + History** |
-| `/api/shadow-mode/compare` | POST | **Side-by-Side Validation** |
-| `/api/status` | GET | Terminal Heartbeat |
-| `/api/audit` | GET | Global Activity Log |
+| `/api/process` | POST | Process RCM tasks or QA audits |
+| `/api/health` | GET | Terminal Heartbeat & Status |
+| `/api/audit` | GET | Global Activity Log with Crypto Hashes |
+| `/api/audit/verify` | GET | Verify integrity of the audit chain |
 
 ---
 
