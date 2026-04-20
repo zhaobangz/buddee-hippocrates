@@ -1,72 +1,83 @@
-import faiss
-import numpy as np
 import os
-import pickle
+import logging
 from typing import List, Dict, Any, Optional
-from sentence_transformers import SentenceTransformer
-from core.config import Config
-from core.safety import redact_pii
+from langchain_openai import OpenAIEmbeddings
+from core.database import SessionLocal
+from core.models import DocumentChunk
+import uuid
+
+logger = logging.getLogger(__name__)
 
 class RAGEngine:
-    """FAISS-based Retrieval-Augmented Generation Engine for Clinical Guidelines."""
+    """PostgreSQL pgvector-based RAG Engine (Replacing FAISS)."""
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        self.model = SentenceTransformer(model_name)
-        self.dimension = 384  # Dimension for all-MiniLM-L6-v2
-        self.index = faiss.IndexFlatL2(self.dimension)
-        self.metadata: List[Dict[str, Any]] = []
-        # Resolve paths relative to the project root (parent of core/)
-        _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.index_path = os.path.join(_project_root, "guidelines_index.faiss")
-        self.metadata_path = os.path.join(_project_root, "guidelines_metadata.pkl")
+    def __init__(self):
+        try:
+            from app.core.config import settings
+            key = settings.OPENAI_API_KEY
+        except ImportError:
+            key = os.getenv("OPENAI_API_KEY")
         
-        # Load existing index if it exists
-        self._load()
+        try:
+            self.embeddings = OpenAIEmbeddings(api_key=key)
+        except Exception:
+            self.embeddings = None
+            logger.warning("OPENAI_API_KEY not found. RAG embeddings will fail.")
 
     def add_documents(self, documents: List[Dict[str, Any]]):
-        """Add guidelines/documents to the vector store.
-        
-        Expected doc format: {"text": "...", "condition": "...", "source": "..."}
-        """
-        texts = [doc["text"] for doc in documents]
-        embeddings = self.model.encode(texts)
-        
-        # Add to FAISS index
-        self.index.add(np.array(embeddings).astype("float32"))
-        
-        # Store metadata
-        self.metadata.extend(documents)
-        self._save()
-
-    def search(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        """Search for relevant guidelines based on a query."""
-        query_embedding = self.model.encode([query])
-        distances, indices = self.index.search(np.array(query_embedding).astype("float32"), top_k)
-        
-        results = []
-        for i, idx in enumerate(indices[0]):
-            if idx != -1 and idx < len(self.metadata):
-                res = self.metadata[idx].copy()
-                res["relevance_score"] = float(1 / (1 + distances[0][i]))
-                results.append(res)
-        
-        return results
-
-    def _save(self):
-        """Save index and metadata to disk."""
-        faiss.write_index(self.index, self.index_path)
-        with open(self.metadata_path, "wb") as f:
-            pickle.dump(self.metadata, f)
-
-    def _load(self):
-        """Load index and metadata from disk."""
-        if os.path.exists(self.index_path) and os.path.exists(self.metadata_path):
+        """Add guidelines/documents to the vector store."""
+        if not self.embeddings:
+            return
+            
+        texts = [doc.get("text", "") for doc in documents]
+        try:
+            doc_embeddings = self.embeddings.embed_documents(texts)
+            db = SessionLocal()
             try:
-                self.index = faiss.read_index(self.index_path)
-                with open(self.metadata_path, "rb") as f:
-                    self.metadata = pickle.load(f)
+                for idx, doc in enumerate(documents):
+                    chunk = DocumentChunk(
+                        content=doc.get("text", ""),
+                        embedding=doc_embeddings[idx]
+                    )
+                    db.add(chunk)
+                db.commit()
             except Exception as e:
-                print(f"Error loading RAG index: {e}")
+                logger.error(f"Failed to add documents to Postgres RAG: {e}")
+                db.rollback()
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error embedding documents: {e}")
+
+    def search(self, query: str, top_k: int = 3, filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Search for relevant guidelines using pgvector cosine_distance."""
+        if not self.embeddings:
+            return []
+            
+        try:
+            query_embedding = self.embeddings.embed_query(query)
+            db = SessionLocal()
+            try:
+                docs = db.query(DocumentChunk).order_by(
+                    DocumentChunk.embedding.cosine_distance(query_embedding)
+                ).limit(top_k).all()
+                
+                results = []
+                for doc in docs:
+                    results.append({
+                        "text": doc.content,
+                        "relevance_score": 0.0,
+                        "chunk_id": str(doc.id)
+                    })
+                return results
+            except Exception as e:
+                logger.error(f"RAG Postgres Search failed: {e}")
+                return []
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error searching embeddings: {e}")
+            return []
 
 # Global instance
 _rag_instance: Optional[RAGEngine] = None

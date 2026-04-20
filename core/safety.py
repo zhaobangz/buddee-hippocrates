@@ -13,6 +13,7 @@ import json
 import os
 import re
 from datetime import datetime
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from core.config import Config
@@ -174,10 +175,10 @@ def log_audit_event(
     details: Optional[Dict[str, Any]] = None,
     user_id: str = "system",
     reasoning_chain: Optional[str] = None,
-) -> None:
-    """Write a cryptographically chained audit event to the log file."""
+) -> str:
+    """Write a cryptographically chained audit event to the log file and return the hash."""
     if not Config.ENABLE_AUDIT_LOG:
-        return
+        return ""
 
     # Redact PII
     safe_details = {}
@@ -217,6 +218,8 @@ def log_audit_event(
         storage.append_json(Config.AUDIT_LOG_FILE, event)
     except Exception as e:
         print(f"Error writing audit log: {e}")
+        
+    return event["current_hash"]
 
 def verify_audit_chain() -> Dict[str, Any]:
     """Verify the integrity of the entire audit chain."""

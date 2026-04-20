@@ -46,13 +46,19 @@ python start.py
 - **Interactive API Docs**: [http://localhost:8001/docs](http://localhost:8001/docs)
 
 ## 📁 Repository Structure
-```
+```text
 buddi/
-├── backend/            # Consolidated Production API (v3.1)
-├── core/               # LLM Orchestrator, RAG, and Memory
-├── tools/              # Clinical workflow implementations
-├── docs/               # Detailed documentation and guides
-└── start.py            # API launcher
+├── app/               # Legacy modular FastAPI structure (v2.x) - Pre-pivot clinical dashboard API
+├── backend/           # Consolidated Production API (v4.0) - Current active system (port 8001)
+├── config/            # System configuration and application settings
+├── core/              # LLM Orchestrator, FAISS RAG Engine, Safety Validation, and Memory
+├── data/              # SQLite databases for memory and agent intelligence
+├── docs/              # Detailed documentation, cloud deployment guides, and tracing setup
+├── frontend/          # Deprecated Vite/React dashboard (legacy clinical UI)
+├── scripts/           # System verification, RAG seeding, and startup checks
+├── tools/             # Clinical workflow implementations (FHIR client, EHR reader)
+├── requirements.txt   # System dependencies
+└── start.py           # Unified System Launcher
 ```
 
 ## 🛡 Safety & Compliance

@@ -21,3 +21,8 @@ opentelemetry-instrumentation-requests
 # Intelligence
 faiss-cpu
 sentence-transformers
+# Postgres Database & ORM
+sqlalchemy
+alembic
+psycopg2-binary
+pgvector
