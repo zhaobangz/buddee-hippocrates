@@ -12,17 +12,14 @@ class RAGEngine:
     """PostgreSQL pgvector-based RAG Engine (Replacing FAISS)."""
 
     def __init__(self):
+        key = os.getenv("OPENAI_API_KEY")
         try:
-            from app.core.config import settings
-            key = settings.OPENAI_API_KEY
-        except ImportError:
-            key = os.getenv("OPENAI_API_KEY")
-        
-        try:
-            self.embeddings = OpenAIEmbeddings(api_key=key)
+            self.embeddings = OpenAIEmbeddings(api_key=key) if key else None
+            if not key:
+                logger.warning("OPENAI_API_KEY not found. RAG embeddings disabled.")
         except Exception:
             self.embeddings = None
-            logger.warning("OPENAI_API_KEY not found. RAG embeddings will fail.")
+            logger.warning("RAG embedding client failed to initialize.")
 
     def add_documents(self, documents: List[Dict[str, Any]]):
         """Add guidelines/documents to the vector store."""

@@ -19,7 +19,17 @@ from typing import Any, Dict, List, Optional
 from core.config import Config
 from core.storage import SecureStorage
 
-storage = SecureStorage()
+# Lazy storage — SecureStorage refuses to construct without BUDDI_STORAGE_KEY.
+# Deferring instantiation means importing this module (e.g. in tests or during
+# --help) does not require secrets to be present in the environment.
+_storage: "SecureStorage | None" = None
+
+
+def _get_storage() -> SecureStorage:
+    global _storage
+    if _storage is None:
+        _storage = SecureStorage()
+    return _storage
 
 
 # ── PII/PHI Redaction Patterns ───────────────────────────────────────
@@ -193,11 +203,11 @@ def log_audit_event(
     previous_hash = "GENESIS"
     if os.path.exists(Config.AUDIT_LOG_FILE):
         try:
-            logs = storage.load_json(Config.AUDIT_LOG_FILE)
+            logs = _get_storage().load_json(Config.AUDIT_LOG_FILE)
             if logs and isinstance(logs, list):
                 last_event = logs[-1]
                 previous_hash = last_event.get("current_hash", "UNKNOWN")
-        except:
+        except Exception:
             pass
 
     event: Dict[str, Any] = {
@@ -215,7 +225,7 @@ def log_audit_event(
     event["current_hash"] = _calculate_event_hash(event)
 
     try:
-        storage.append_json(Config.AUDIT_LOG_FILE, event)
+        _get_storage().append_json(Config.AUDIT_LOG_FILE, event)
     except Exception as e:
         print(f"Error writing audit log: {e}")
         
@@ -227,7 +237,7 @@ def verify_audit_chain() -> Dict[str, Any]:
         return {"valid": True, "message": "No audit logs to verify."}
 
     try:
-        logs = storage.load_json(Config.AUDIT_LOG_FILE)
+        logs = _get_storage().load_json(Config.AUDIT_LOG_FILE)
         if not isinstance(logs, list):
             return {"valid": False, "message": "Audit log format invalid."}
 
@@ -259,7 +269,7 @@ def get_recent_audit_events(count: int = 20) -> List[Dict[str, Any]]:
         return events
 
     try:
-        data = storage.load_json(Config.AUDIT_LOG_FILE)
+        data = _get_storage().load_json(Config.AUDIT_LOG_FILE)
         if isinstance(data, list):
              return data[-int(count):]
     except Exception:

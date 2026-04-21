@@ -1,110 +1,152 @@
-"""Clinical Storage Utility — Production Hardening.
+"""Clinical Storage Utility — Production Hardening (SEC-05).
 
-Provides encrypted I/O for sensitive patient data (Memory, Audit Logs).
-Implements AESnd / Fernet symmetric encryption.
+Provides encrypted I/O for sensitive patient data.
+
+Security properties:
+  * The master passphrase (``BUDDI_STORAGE_KEY``) has *no* default. If it is
+    not set, construction raises ``ValueError`` so the process fails to start
+    rather than silently encrypting PHI with a publicly known key.
+  * Each record is encrypted with a fresh ``os.urandom(16)`` salt. The salt is
+    stored as a prefix alongside the ciphertext, so every file is independently
+    protected against pre-computed / rainbow-table attacks.
 """
 
-import os
-import json
+from __future__ import annotations
+
 import base64
-from typing import Any, Dict, Optional
+import json
+import os
+from typing import Any, Optional
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-class SecureStorage:
-    def __init__(self, encryption_key: Optional[str] = None):
-        """Initialize secure storage with a key or environment variable.
-        
-        Args:
-            encryption_key: Raw key or passphrase for storage encryption.
-        """
-        # Get key from env if not provided
-        self.key = encryption_key or os.getenv("BUDDI_STORAGE_KEY", "clinical-dev-key-not-for-prod")
-        self._fernet = self._derive_fernet(self.key)
+SALT_LEN = 16  # 128-bit salt, per NIST SP 800-132
+PBKDF2_ITERATIONS = 200_000
 
-    def _derive_fernet(self, secret: str) -> Fernet:
-        """Derive a cryptographic key from a passphrase."""
-        # Note: In production, salt should be unique and stored separately
-        salt = b"buddi-clinical-salt-2024" 
+
+class SecureStorage:
+    """Envelope-encrypt JSON/text blobs with a per-record PBKDF2 salt."""
+
+    def __init__(self, encryption_key: Optional[str] = None):
+        secret = encryption_key or os.getenv("BUDDI_STORAGE_KEY")
+        if not secret:
+            raise ValueError(
+                "BUDDI_STORAGE_KEY is required for at-rest PHI encryption. "
+                "Refusing to start without a configured key."
+            )
+        if secret.strip().lower() in {
+            "clinical-dev-key-not-for-prod",
+            "change-me",
+            "dev",
+        }:
+            raise ValueError("BUDDI_STORAGE_KEY must not be a development default.")
+        self._secret: bytes = secret.encode("utf-8")
+
+    # ------------------------------------------------------------------
+    # Key derivation
+    # ------------------------------------------------------------------
+    def _derive_fernet(self, salt: bytes) -> Fernet:
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
-            iterations=100000,
+            iterations=PBKDF2_ITERATIONS,
         )
-        key = base64.urlsafe_b64encode(kdf.derive(secret.encode()))
-        return Fernet(key)
+        derived = base64.urlsafe_b64encode(kdf.derive(self._secret))
+        return Fernet(derived)
 
+    def _encrypt(self, plaintext: bytes) -> bytes:
+        salt = os.urandom(SALT_LEN)
+        token = self._derive_fernet(salt).encrypt(plaintext)
+        # Store [salt || ciphertext]. Fernet tokens are url-safe base64, so we
+        # keep the salt as raw bytes and concatenate — readers split at offset
+        # ``SALT_LEN``.
+        return salt + token
+
+    def _decrypt(self, blob: bytes) -> bytes:
+        if len(blob) <= SALT_LEN:
+            raise ValueError("Ciphertext too short — missing salt prefix.")
+        salt, token = blob[:SALT_LEN], blob[SALT_LEN:]
+        return self._derive_fernet(salt).decrypt(token)
+
+    # ------------------------------------------------------------------
+    # JSON
+    # ------------------------------------------------------------------
     def save_json(self, file_path: str, data: Any) -> bool:
-        """Encrypt and save data as JSON to a file."""
         try:
-            json_data = json.dumps(data).encode()
-            encrypted_data = self._fernet.encrypt(json_data)
-            
+            json_data = json.dumps(data).encode("utf-8")
             with open(file_path, "wb") as f:
-                f.write(encrypted_data)
+                f.write(self._encrypt(json_data))
             return True
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - defensive I/O path
             print(f"SecureStorage Error (Save): {e}")
             return False
 
     def load_json(self, file_path: str) -> Optional[Any]:
-        """Decrypt and load JSON data from a file."""
         if not os.path.exists(file_path):
             return None
-            
         try:
             with open(file_path, "rb") as f:
-                encrypted_data = f.read()
-            
-            # If the file is not encrypted (plain JSON), handle gracefully
-            stripped = encrypted_data.strip()
+                blob = f.read()
+            # Graceful handling of legacy plain-JSON files left over from
+            # pre-encryption runs.
+            stripped = blob.strip()
             if stripped.startswith(b"{") or stripped.startswith(b"["):
-                 try:
-                     return json.loads(encrypted_data.decode())
-                 except Exception:
-                     # If it's pure JSON-lines, convert to list
-                     if b"\n" in stripped:
-                         return [json.loads(line) for line in encrypted_data.decode().split("\n") if line.strip()]
-
-            decrypted_data = self._fernet.decrypt(encrypted_data)
-            return json.loads(decrypted_data.decode())
+                try:
+                    return json.loads(blob.decode("utf-8"))
+                except Exception:
+                    if b"\n" in stripped:
+                        return [
+                            json.loads(line)
+                            for line in blob.decode("utf-8").split("\n")
+                            if line.strip()
+                        ]
+            decrypted = self._decrypt(blob)
+            return json.loads(decrypted.decode("utf-8"))
         except Exception as e:
             print(f"SecureStorage Error (Load): {e}")
             return None
 
+    # ------------------------------------------------------------------
+    # Text
+    # ------------------------------------------------------------------
     def save_text(self, file_path: str, text: str) -> bool:
-        """Encrypt and save raw text to a file."""
         try:
-            encrypted_data = self._fernet.encrypt(text.encode())
             with open(file_path, "wb") as f:
-                f.write(encrypted_data)
+                f.write(self._encrypt(text.encode("utf-8")))
             return True
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             print(f"SecureStorage Error (SaveText): {e}")
             return False
 
     def load_text(self, file_path: str) -> Optional[str]:
-        """Decrypt and load text from a file."""
         if not os.path.exists(file_path):
             return None
-            
         try:
             with open(file_path, "rb") as f:
-                encrypted_data = f.read()
-            
-            decrypted_data = self._fernet.decrypt(encrypted_data)
-            return decrypted_data.decode()
+                return self._decrypt(f.read()).decode("utf-8")
         except Exception as e:
             print(f"SecureStorage Error (LoadText): {e}")
             return None
 
+    # ------------------------------------------------------------------
+    # List append
+    # ------------------------------------------------------------------
     def append_json(self, file_path: str, item: Any) -> bool:
-        """Append an item to a list in an encrypted JSON file."""
         data = self.load_json(file_path) or []
         if not isinstance(data, list):
             data = [data]
-        if isinstance(data, list):
-            data.append(item)
+        data.append(item)
         return self.save_json(file_path, data)
+
+    def delete_text_file(self, file_path: str) -> bool:
+        try:
+            os.remove(file_path)
+            return True
+        except FileNotFoundError:
+            return False
+        except Exception as e:  # pragma: no cover
+            print(f"SecureStorage Error (Delete): {e}")
+            return False

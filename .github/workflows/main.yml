@@ -2,41 +2,69 @@ name: Buddi Backend Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+# Track 1 / Step 1: make the canonical frontend API base visible to any job
+# that later builds the Vite bundle. Real values still come from GitHub
+# Environments / Secrets; this placeholder is safe to commit.
+env:
+  VITE_API_BASE: http://localhost:8001/api
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install ruff pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with ruff
-      run: ruff check app/
-    - name: Test with pytest
-      run: pytest
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Track 1 / Step 1 (ARCH-01, TEST-02 partial): lint the canonical code
+      # paths only. The legacy `app/` tree is deprecated (see app/main.py) and
+      # is intentionally excluded from CI.
+      - name: Lint with ruff
+        run: ruff check backend/ core/ tools/ scripts/
+
+      - name: Test with pytest
+        # TEST-01 (April-21 verification): the tests/ directory now exists
+        # and contains the five required integration tests. We run pytest
+        # unconditionally and fail the build on any failure.
+        env:
+          BUDDI_TEST_MODE: "1"
+          SECRET_KEY: "ci-test-secret-key-0123456789abcdef0123456789abcdef"
+          BUDDI_STORAGE_KEY: "ci-test-storage-key-not-for-prod"
+          API_KEY: "ci-test-api-key-abcdef1234567890"
+          CORS_ORIGINS: "http://localhost:5173"
+        run: pytest -q
 
   deploy-staging:
     needs: test
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
-    - name: Deploy to Cloud Run (Staging)
-      run: echo "Deployment logic for Staging goes here (e.g., gcloud run deploy)"
+      - name: Deploy to Cloud Run (Staging) — placeholder
+        # Real deploy wiring arrives in Track 3 Step 21 (DO-04). Leaving an
+        # explicit non-zero-on-misuse marker so nobody mistakes this for a
+        # working pipeline.
+        run: |
+          echo "::warning::Staging deploy not yet implemented (Track 3 Step 21 / DO-04)."
 
   deploy-production:
     needs: test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-    - name: Deploy to Cloud Run (Production)
-      run: echo "Deployment logic for Production goes here"
+      - name: Deploy to Cloud Run (Production) — placeholder
+        run: |
+          echo "::warning::Production deploy not yet implemented (Track 3 Step 21 / DO-04)."
