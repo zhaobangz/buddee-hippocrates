@@ -1,28 +1,59 @@
-version: '3.8'
+# Buddi — local/staging compose.
+#
+# Track 1 / Step 1 (ARCH-01, CFG-01, DO-01): canonical surface is backend.api:app
+# on port 8001. The following items are deliberately left for later tracks and
+# are flagged inline to avoid silent regression:
+#   - DO-05: Remove the `.:/app` bind-mount (Track 2 Step 11).
+#   - CFG-04: Parameterize DEV_MODE (Track 3).
+#   - Track 2 Step 10 will introduce the Redis service for distributed rate
+#     limiting; the stub is left commented for that step.
+version: "3.8"
 
 services:
   api:
     build: .
+    image: buddi-api:local
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
+      # TODO(Track 2 Step 11 / DO-05): remove this bind-mount.
       - .:/app
     env_file:
       - .env
     environment:
+      # TODO(Track 3 / CFG-04): DEV_MODE=${DEV_MODE:-false}
       - DEV_MODE=true
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      - PORT=8001
+      - PYTHONPATH=/app
+    # `--reload` is dev-only; see start_dev.py for the local dev loop. The
+    # compose command mirrors the Dockerfile CMD so `docker compose up` runs
+    # the canonical production-parity process.
+    command: >
+      uvicorn backend.api:app
+      --host 0.0.0.0
+      --port 8001
+      --proxy-headers
+      --forwarded-allow-ips=*
 
-  # Future: Add Redis for caching/rate-limiting
+  # TODO(Track 2 Step 10 / SEC-07): Redis for slowapi distributed rate limiting.
   # redis:
-  #   image: redis:alpine
+  #   image: redis:7-alpine
   #   ports:
   #     - "6379:6379"
 
-  # Future: Add Postgres for persistent storage
+  # TODO(Track 1 Step 2 / DB-01, DB-02): enable Postgres+pgvector once migrations
+  # are wired. Keeping this commented prevents accidentally binding an unmigrated
+  # database.
   # db:
-  #   image: postgres:15-alpine
+  #   image: pgvector/pgvector:pg16
   #   environment:
   #     POSTGRES_DB: buddi_db
-  #     POSTGRES_USER: user
-  #     POSTGRES_PASSWORD: password
+  #     POSTGRES_USER: buddi
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+  #   volumes:
+  #     - buddi_pgdata:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+# volumes:
+#   buddi_pgdata:
