@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { 
   Send, 
   Mic, 
@@ -36,7 +36,7 @@ const ChatPage = () => {
     <div className="flex flex-col h-full max-w-4xl mx-auto">
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 pb-24">
         <AnimatePresence initial={false}>
-          {messages.map((msg, index) => (
+          {messages.map((msg) => (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -89,11 +89,14 @@ const ChatPage = () => {
             <button className="p-2 text-slate-500 hover:text-white transition-colors">
               <Paperclip className="w-5 h-5" />
             </button>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+              // FE-07 (April-21 re-audit): `onKeyPress` was removed from the
+              // browser spec and triggers a React 18 warning. `onKeyDown`
+              // is the supported, accessibility-friendly replacement.
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Type clinical query or action (e.g. 'Draft Prior Auth for Farxiga')..."
               className="flex-1 bg-transparent border-0 focus:ring-0 text-sm py-3 text-slate-200"
             />

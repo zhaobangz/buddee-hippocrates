@@ -1,16 +1,57 @@
-# React + Vite
+# Buddi Frontend (Vite + React)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This directory contains Buddi's optional web UI for local development/demo flows.
 
-Currently, two official plugins are available:
+## Current status
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- The backend (`backend.api:app`) is the canonical production surface.
+- This frontend is actively runnable for dev, but not all UI actions are fully aligned with the current backend route set.
+- API base URL is configured via `VITE_API_BASE` (see `.env.example`).
 
-## React Compiler
+## Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 20+
+- npm 10+
+- Backend running on `http://localhost:8001` (or another URL you set in `VITE_API_BASE`)
 
-## Expanding the ESLint configuration
+## Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+```
+
+Default local env:
+
+```env
+VITE_API_BASE=http://localhost:8001/api
+```
+
+## Run
+
+```bash
+# from frontend/
+npm run dev
+```
+
+Vite dev server: `http://localhost:5173`
+
+You can also start both backend + frontend from repo root:
+
+```bash
+python start_dev.py
+```
+
+## Build
+
+```bash
+npm run build
+npm run preview
+```
+
+## Integration notes (important)
+
+`src/store/useStore.js` currently includes some legacy calls (for example `/chat/chat`, `/patient/:id`, `/audit/`) that do not map 1:1 to the backend v4.1 routes. The backend routes currently available are documented in the root `README.md` and `docs/FRONTEND_BACKEND_CONNECTION.md`.
+
+When wiring production UI behavior, use the canonical backend endpoints (e.g. `/api/health`, `/ingest/fhir`, `/audit/query`, `/prior-auth/generate`).

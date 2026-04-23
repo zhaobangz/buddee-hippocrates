@@ -1,67 +1,141 @@
-# Buddi RCM & Compliance AI
+# Buddi RCM & Compliance Platform
 
-> **Invisible Revenue Integrity and Compliance Auditing**
+Buddi is a FastAPI-first backend for revenue integrity and compliance workflows (shadow-mode coding review, prior-auth lifecycle support, and audit traceability), with an optional React frontend used mainly for local development demos.
 
-Buddi is an enterprise-grade AI engine designed for Revenue Cycle Management (RCM) and compliance auditing. Abandoning the "swiss army knife" approach to clinical assistance, Buddi focuses exclusively on high-ROI, low-friction, backend integrations.
+## Current project status
 
-## 🎯 Core Capabilities
-1. **Shadow Mode Revenue Integrity**: Runs invisibly on post-visit charts. Compares physician notes against billed codes to flag missed HCC (Hierarchical Condition Category) codes and recover revenue immediately.
-2. **Specialty-Specific Prior Auth**: Hyper-focused prior authorization engine tailored for high-friction workflows like Oncology step-therapy and GI biologics.
-3. **Retrospective QA Auditor**: Automated auditing of random clinical charts for adherence to established clinical guidelines, securely backed by RAG.
-4. **Cryptographic Audit Trail**: Every automated action, prompt, and RAG retrieval is cryptographically tracked to provide complete algorithmic transparency and liability protection for compliance teams.
-5. **EHR Integration Ready**: Designed strictly for backend API integration (e.g., through Redox / Health Gorilla), operating transparently without a separate clinician dashboard.
+- ✅ **Canonical runtime:** `backend.api:app` on port `8001`
+- ✅ **Auth enforced on every route:** `X-API-Key` or `Authorization: Bearer ...`
+- ✅ **DB model + migrations:** PostgreSQL + Alembic + `pgvector`
+- ✅ **FHIR ingest path:** `POST /ingest/fhir` with structural validation and size guardrails
+- ✅ **Tracing:** OpenTelemetry spans exported to OTLP HTTP (`localhost:4318`) when available
+- ⚠️ **Frontend:** present and runnable, but some store calls still target legacy endpoints (see `frontend/README.md`)
 
-## 🏗 Lean Architecture
-- **Backend API**: FastAPI (Python) - Secure integration endpoint.
-- **Engine**: Intent-Driven Orchestrator with FAISS-based RAG grounding.
+---
 
-## 🚀 Quick Start
+## Architecture (what is actually in use)
 
-### 1. Prerequisites
-- **Python**: 3.9 or higher
-- **Homebrew (macOS)**: `brew install faiss` (recommended for RAG stability)
+- **Backend API:** FastAPI (`backend/api.py`)
+- **Agent orchestration:** `core/agent.py`
+- **LLM adapter:** `core/llm_manager.py`
+- **RAG retrieval:** PostgreSQL/pgvector-backed retrieval (`core/rag_engine.py`)
+- **Safety + audit helpers:** `core/safety.py`
+- **Migrations:** Alembic (`alembic/`)
 
-### 2. Installation
+---
+
+## Quick start (local backend)
+
+### 1) Prerequisites
+
+- Python 3.11 recommended
+- PostgreSQL 16+ with `pgvector` extension available
+
+### 2) Install dependencies
+
 ```bash
-# Clone the repository and enter the directory
-cd buddi
-
-# Setup Python Virtual Environment
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
-# Configure Environment
-cp .env.example .env
-# Edit .env with your LLM_API_KEY
 ```
 
-### 3. Launching the System
-The launcher starts the FastAPI backend:
+### 3) Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Set at minimum:
+
+- `SECRET_KEY` (required, min length validated)
+- `BUDDI_STORAGE_KEY` (required)
+- `DATABASE_URL` (must **not** use `postgres:postgres` outside test mode)
+- `API_KEY` (recommended for service-to-service auth)
+- `LLM_API_KEY` / `OPENAI_API_KEY` as needed
+
+### 4) Run DB migrations
+
+```bash
+alembic upgrade head
+```
+
+### 5) Start production-parity API process
+
 ```bash
 python start.py
 ```
 
-- **API (Direct)**: [http://localhost:8001](http://localhost:8001)
-- **Interactive API Docs**: [http://localhost:8001/docs](http://localhost:8001/docs)
+Backend is available at:
 
-## 📁 Repository Structure
-```text
-buddi/
-├── app/               # Legacy modular FastAPI structure (v2.x) - Pre-pivot clinical dashboard API
-├── backend/           # Consolidated Production API (v4.0) - Current active system (port 8001)
-├── config/            # System configuration and application settings
-├── core/              # LLM Orchestrator, FAISS RAG Engine, Safety Validation, and Memory
-├── data/              # SQLite databases for memory and agent intelligence
-├── docs/              # Detailed documentation, cloud deployment guides, and tracing setup
-├── frontend/          # Deprecated Vite/React dashboard (legacy clinical UI)
-├── scripts/           # System verification, RAG seeding, and startup checks
-├── tools/             # Clinical workflow implementations (FHIR client, EHR reader)
-├── requirements.txt   # System dependencies
-└── start.py           # Unified System Launcher
+- `http://localhost:8001`
+- Swagger docs: `http://localhost:8001/docs`
+
+---
+
+## Development workflow
+
+Use the dev launcher when you want auto-reload and optional frontend boot:
+
+```bash
+python start_dev.py
 ```
 
-## 🛡 Safety & Compliance
-- **Guardrails**: Complete focus on retrospective and administrative tasks.
-- **Audit**: Every action is cryptographically tracked in `audit_log.json`.
-- **SaMD Exclusion**: Complies with FDA Jan 2026 update by providing full algorithmic transparency and not functioning as a medical device.
+This starts:
+
+- backend with `--reload` on `http://127.0.0.1:8001`
+- Vite frontend on `http://localhost:5173` (if `frontend/` exists)
+
+---
+
+## API surface (v4.1)
+
+All routes below require authentication.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/health` | GET | Service + DB status |
+| `/ingest/fhir` | POST | Validated FHIR Bundle ingest for shadow-mode processing |
+| `/encounter/{encounter_id}/process` | POST | Queue/process marker for encounter workflow |
+| `/billing/suggest` | GET | Retrieve HCC suggestions (optional `encounter_id`) |
+| `/prior-auth/generate` | POST | Create draft prior-authorization request |
+| `/audit/query` | GET | Return recent audit events |
+
+Auth example:
+
+```bash
+curl -H "Authorization: Bearer $API_KEY" http://localhost:8001/api/health
+```
+
+---
+
+## Verification commands
+
+```bash
+pytest -q
+python scripts/verify_system.py
+BUDDI_TEST_MODE=1 python scripts/verify_reaudit_fixes.py
+```
+
+---
+
+## Repository map
+
+```text
+backend/     FastAPI routes, auth, FHIR adapter
+core/        agent orchestration, config, storage, safety, RAG, tracing
+alembic/     migration config and revisions
+frontend/    optional React/Vite operator UI (dev/demo surface)
+scripts/     smoke checks, seeding, and verification utilities
+tests/       pytest integration coverage for API/auth paths
+docs/        operational and setup guides
+```
+
+---
+
+## Additional docs
+
+- `docs/QUICK_REFERENCE.md`
+- `docs/FRONTEND_BACKEND_CONNECTION.md`
+- `docs/WEB_SETUP_GUIDE.md`
+- `docs/CLOUD_DEPLOYMENT_GUIDE.md`
+- `docs/TRACING_SETUP.md`
