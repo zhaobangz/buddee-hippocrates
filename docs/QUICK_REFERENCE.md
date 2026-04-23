@@ -1,67 +1,70 @@
-# Buddi Clinical Agent - Quick Reference
+# Buddi Quick Reference (Current v4.1)
 
-## 🚀 Emergency Startup (Absolute Path Mode)
+## 1) Local setup
 
 ```bash
-# 1. Activate isolated environment
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+```
 
-# 2. Add LLM Credentials
-cp .env.example .env && nano .env
+Minimum required `.env` values:
 
-# 3. Launch System
+- `SECRET_KEY`
+- `BUDDI_STORAGE_KEY`
+- `DATABASE_URL`
+- `API_KEY`
+
+## 2) Database + run
+
+```bash
+alembic upgrade head
 python start.py
 ```
 
-**Interactive API Docs:** [http://localhost:8001/docs](http://localhost:8001/docs)
-*(Note: The legacy React dashboard at `http://localhost:5173` is deprecated in favor of API integrations)*
+Docs: `http://localhost:8001/docs`
 
----
+Dev mode (backend reload + optional frontend):
 
-## 🏥 Clinical UI Terminal Mapping
+```bash
+python start_dev.py
+```
 
-| Workflow Icon | Action | Backend Component |
-| :--- | :--- | :--- |
-| **👤 Demo** | Set Demo Patient Context | `/api/patient` (POST) |
-| **⚠️ Risk** | Perform Risk Assessment | `/api/risk` (GET) |
-| **🕰️ History** | Show Clinical History | `/api/patient` (GET) |
-| **📋 PA** | Generate Prior Auth | `/api/process` & `tools/clinical_workflows.py` |
-| **🏥 Brief** | Load Patient Brief | `tools/ehr_reader.py` |
-| **🚀 Shadow** | Agent QA Validation | `/api/process` |
+## 3) Auth header (required)
 
----
+```bash
+Authorization: Bearer <API_KEY>
+```
 
-## 🧠 Core Intelligence Circuits
+or
 
-| Feature | Intelligence Mode | Primary File |
-| :--- | :--- | :--- |
-| **Guideline RAG** | FAISS Vector Search + SentenceTransformers | `core/rag_engine.py` |
-| **Agent Core** | Intent Router & Tool Orchestrator | `core/agent.py` |
-| **Memory** | Encrypted Patient & Provider Context | `core/memory.py` |
-| **Safety** | HIPAA-foundation Audit & Action Validator | `core/safety.py` |
+```bash
+X-API-Key: <API_KEY>
+```
 
----
+## 4) API endpoints
 
-## 🔌 API Quick-Map (Port 8001)
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/health` | GET | API + DB status |
+| `/ingest/fhir` | POST | Ingest validated FHIR bundle |
+| `/encounter/{encounter_id}/process` | POST | Encounter process marker |
+| `/billing/suggest` | GET | Read HCC suggestions |
+| `/prior-auth/generate` | POST | Generate prior-auth draft |
+| `/audit/query` | GET | Read recent audit events |
 
-| Endpoint | Method | Result Layout |
-| :--- | :--- | :--- |
-| `/api/process` | POST | Process RCM tasks or QA audits |
-| `/api/health` | GET | Terminal Heartbeat & Status |
-| `/api/audit` | GET | Global Activity Log with Crypto Hashes |
-| `/api/audit/verify` | GET | Verify integrity of the audit chain |
+## 5) Smoke checks
 
----
+```bash
+pytest -q
+python scripts/verify_system.py
+BUDDI_TEST_MODE=1 python scripts/verify_reaudit_fixes.py
+```
 
-## 🛡 Mandatory Safety Boundaries
+## 6) Common troubleshooting
 
-- **Block (Red)**: Direct Diagnosis or Prescription creation is strictly prohibited.
-- **Gated (Yellow)**: Prior Authorization submission and Referral scheduling require **Human Confirmation**.
-- **Audit (Blue)**: All medical actions are serialized to `audit_log.json` for HIPAA foundations.
-
----
-
-**Clinical Pulse**: 💚 **Connected** | **RAG Index**: 📚 **Grounding Active** | **UI/UX**: 💎 **Premium Dashboard Ready**
+- **401 on every endpoint**: missing/invalid `API_KEY` header.
+- **Startup fails with config error**: insecure or empty `SECRET_KEY` / `BUDDI_STORAGE_KEY` / `DATABASE_URL`.
+- **DB errors**: verify Postgres is reachable and `alembic upgrade head` succeeded.
 

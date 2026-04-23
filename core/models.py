@@ -1,17 +1,56 @@
-import uuid
+"""SQLAlchemy ORM definitions for the Buddi clinical data model.
+
+Re-audit (April 21) follow-ups applied here:
+
+* CQ-04 — every ``default=datetime.datetime.utcnow`` has been replaced with
+  the timezone-aware ``_utcnow`` helper. ``datetime.utcnow()`` is deprecated
+  in Python 3.12 and scheduled for removal in 3.14. Because every affected
+  column is ``DateTime(timezone=True)``, swapping in
+  ``datetime.now(timezone.utc)`` preserves the stored value (an aware UTC
+  instant) while silencing the deprecation warning.
+
+* DB-05 — ``RecoveryEvent.id`` is now a proper ``PG_UUID`` column with
+  ``uuid.uuid4`` as the default, instead of a free-form string. This removes
+  the string-index overhead on joins and guarantees DB-level uniqueness.
+"""
+
+from __future__ import annotations
+
 import datetime
-from sqlalchemy import Column, String, Float, DateTime, Boolean, ForeignKey, Text, Integer, BigInteger
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB, BYTEA
-from sqlalchemy.orm import declarative_base, relationship
+import uuid
+
 from pgvector.sqlalchemy import Vector
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import BYTEA, JSONB, UUID as PG_UUID
+from sqlalchemy.orm import declarative_base, relationship  # noqa: F401  (relationship re-exported for future models)
 
 Base = declarative_base()
+
+
+def _utcnow() -> datetime.datetime:
+    """Timezone-aware UTC 'now' — replacement for the deprecated
+    ``datetime.utcnow()``. Used as a SQLAlchemy ``default=`` callable so every
+    row stamps its creation time consistently across Python versions.
+    """
+    return datetime.datetime.now(datetime.timezone.utc)
+
 
 class Tenant(Base):
     __tablename__ = "tenants"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -19,7 +58,8 @@ class Patient(Base):
     tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     external_ehr_id = Column(String(255))
     demographics_encrypted = Column(BYTEA)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class Encounter(Base):
     __tablename__ = "encounters"
@@ -28,8 +68,9 @@ class Encounter(Base):
     patient_id = Column(PG_UUID(as_uuid=True), ForeignKey("patients.id"))
     encounter_date = Column(DateTime(timezone=True))
     hl7_event_type = Column(String(50))
-    status = Column(String(50), default='open')
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    status = Column(String(50), default="open")
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class ClinicalNote(Base):
     __tablename__ = "clinical_notes"
@@ -38,7 +79,8 @@ class ClinicalNote(Base):
     provider_id = Column(String(255))
     note_text = Column(Text)
     is_signed = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class BillingCode(Base):
     __tablename__ = "billing_codes"
@@ -48,7 +90,8 @@ class BillingCode(Base):
     code_type = Column(String(20))
     is_hcc = Column(Boolean, default=False)
     source = Column(String(50))
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class HccSuggestion(Base):
     __tablename__ = "hcc_suggestions"
@@ -57,9 +100,10 @@ class HccSuggestion(Base):
     suggested_code = Column(String(50))
     justification = Column(Text)
     confidence_score = Column(Float)
-    status = Column(String(50), default='pending')
+    status = Column(String(50), default="pending")
     llm_request_id = Column(PG_UUID(as_uuid=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class PriorAuthorizationRequest(Base):
     __tablename__ = "prior_authorization_requests"
@@ -67,19 +111,21 @@ class PriorAuthorizationRequest(Base):
     encounter_id = Column(PG_UUID(as_uuid=True), ForeignKey("encounters.id"))
     procedure_code = Column(String(50))
     payer_name = Column(String(255))
-    status = Column(String(50), default='draft')
+    status = Column(String(50), default="draft")
     submission_payload = Column(JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class PriorAuthState(Base):
     __tablename__ = "prior_auth_states"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prior_auth_id = Column(PG_UUID(as_uuid=True), ForeignKey("prior_authorization_requests.id"))
-    state = Column(String(50)) # Draft, pending_approval, submitted, approved, denied
-    changed_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    state = Column(String(50))  # Draft, pending_approval, submitted, approved, denied
+    changed_at = Column(DateTime(timezone=True), default=_utcnow)
     changed_by = Column(PG_UUID(as_uuid=True))
     reasoning = Column(Text)
+
 
 class LlmRequest(Base):
     __tablename__ = "llm_requests"
@@ -89,7 +135,8 @@ class LlmRequest(Base):
     prompt_template_version = Column(String(255))
     model = Column(String(255))
     full_prompt = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class LlmResponse(Base):
     __tablename__ = "llm_responses"
@@ -99,7 +146,8 @@ class LlmResponse(Base):
     parsed_json = Column(JSONB)
     tokens_used = Column(Integer)
     latency_ms = Column(Integer)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class RagRetrieval(Base):
     __tablename__ = "rag_retrievals"
@@ -107,7 +155,8 @@ class RagRetrieval(Base):
     llm_request_id = Column(PG_UUID(as_uuid=True), ForeignKey("llm_requests.id"))
     chunk_id = Column(PG_UUID(as_uuid=True))
     similarity_score = Column(Float)
-    retrieved_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    retrieved_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
@@ -118,6 +167,7 @@ class DocumentChunk(Base):
     chunk_index = Column(Integer)
     version = Column(Integer, default=1)
 
+
 class EhrIntegration(Base):
     __tablename__ = "ehr_integrations"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -125,9 +175,10 @@ class EhrIntegration(Base):
     ehr_vendor = Column(String(100))
     api_endpoint = Column(String(255))
     auth_credentials_encrypted = Column(BYTEA)
-    status = Column(String(50), default='active')
+    status = Column(String(50), default="active")
     last_sync = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class ComplianceFlag(Base):
     __tablename__ = "compliance_flags"
@@ -138,7 +189,8 @@ class ComplianceFlag(Base):
     description = Column(Text)
     severity = Column(String(50))
     resolved = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
@@ -148,14 +200,18 @@ class AuditEvent(Base):
     actor_id = Column(PG_UUID(as_uuid=True), nullable=True)
     event_type = Column(String(100))
     payload = Column(JSONB)
-    timestamp = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=_utcnow)
     cryptographic_hash = Column(Text)
     previous_hash = Column(Text)
 
+
 class RecoveryEvent(Base):
     __tablename__ = "recovery_events"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    audit_hash = Column(String, index=True) 
+    # DB-05: id is a real UUID, not a stringified one. This matches the rest
+    # of the data model, enables efficient index lookups, and prevents
+    # hex-formatting drift between callers.
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    audit_hash = Column(String, index=True)
     patient_id = Column(String)
     recovered_revenue = Column(Float)
-    timestamp = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=_utcnow)

@@ -1,46 +1,56 @@
-# Buddi API Integration Guide (Formerly Frontend-Backend Connection)
+# Frontend ↔ Backend Connection Guide (Current v4.1)
 
-> **NOTICE**: The "Glassmorphic React Dashboard" and clinical chat frontend have been officially deprecated as of the RCM/Compliance pivot. Buddi now operates purely as an invisible API integration layer for enterprise health systems.
+This document reflects the **current** integration contract between Buddi's optional React frontend and the canonical FastAPI backend.
 
-## 🏗 Architecture Overview
+## Runtime topology
 
-Buddi follows a **Decoupled API Model**:
-- **Core Engine (API)**: A FastAPI Python server running on **port 8001** (`backend/api.py`). It manages agent orchestration, RCM shadow-mode analysis, QA auditing, and safety validation.
-- **Enterprise Integration (EHR/Redox)**: Systems send clinical notes and encounter data securely to Buddi for asynchronous processing.
+- Backend: `backend.api:app` on `http://localhost:8001`
+- Frontend (optional): Vite on `http://localhost:5173`
+- Frontend API base env: `VITE_API_BASE` (default: `http://localhost:8001/api`)
 
-## 🛰 Communication Flow
+> Note: Backend routes are not uniformly prefixed with `/api` today. `GET /api/health` uses `/api`, while routes like `/ingest/fhir` and `/audit/query` do not.
 
-EHR clients and middleware interact exclusively via **RESTful JSON payloads**.
+## Authentication requirements
 
-### API Configuration
-```javascript
-const API_BASE_URL = 'http://localhost:8001/api';
-```
+All backend endpoints require auth via either:
 
-### Communication Modes
+- `X-API-Key: <API_KEY>`
+- `Authorization: Bearer <API_KEY or SECRET_KEY>`
 
-| Mode | Endpoint | Description |
-| :--- | :--- | :--- |
-| **Task Processing** | `POST /process` | Handles `shadow_mode_rcm`, `specialty_prior_auth`, or `retrospective_qa_audit` tasks. Returns algorithmic assessments with cryptographic audit signatures. |
-| **Status Monitor** | `GET /health` | Real-time health monitor ensuring safety layers are active. |
-| **Patient Intel (Sync)** | `POST /patient` | Endpoint for pushing patient demographics / history during active encounter audits. |
-| **Audit Compliance** | `GET /audit` | Secure endpoint for fetching the cryptographic trails of recent processing actions. |
+Frontend/API clients should attach an auth header on every request.
 
-## 🔓 EHR Integration Pathway
+## Current backend route map
 
-Buddi is designed for **Bidirectional EHR Integration**, typically facilitated by middle layers like **Redox** or **Health Gorilla**. 
-The system does not require clinicians to open new tabs. It reads documentation asynchronously (Shadow Mode) and writes back suggested codes or flags directly using the facility's FHIR specifications.
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/health` | GET | Liveness + DB status |
+| `/ingest/fhir` | POST | FHIR bundle ingest + shadow-mode processing |
+| `/encounter/{encounter_id}/process` | POST | Encounter processing marker |
+| `/billing/suggest` | GET | Retrieve HCC suggestions |
+| `/prior-auth/generate` | POST | Create prior-auth draft |
+| `/audit/query` | GET | Read recent audit events |
 
-## 🚀 Establishing the Service
+## Frontend alignment status
 
-Use the launcher to start the integration API:
+`frontend/src/store/useStore.js` still contains legacy paths:
+
+- `POST /chat/chat`
+- `GET /patient/:id`
+- `GET /audit/`
+
+Those do not match backend v4.1 routes. Treat them as transitional UI wiring, not production API contract.
+
+## Recommended local dev setup
+
+1. Start backend: `python start_dev.py` (or `python start.py`)
+2. Ensure frontend `.env.local` sets `VITE_API_BASE`
+3. Add auth headers to axios instance in `useStore.js`
+4. Point frontend calls to canonical endpoints above
+
+## Minimal connectivity test
+
 ```bash
-python start.py
+curl -H "Authorization: Bearer $API_KEY" http://localhost:8001/api/health
 ```
 
-## 🔍 Troubleshooting
-
-| Pulse | Cause | Prescription |
-| :--- | :--- | :--- |
-| **Offline** | Backend crashed | Ensure Python 3.9+ and pip dependencies are installed. |
-| **Unrecognized Task** | Bad Payload | Ensure `task_type` is one of the supported intents (e.g. `shadow_mode_rcm`). |
+If this succeeds, the backend is reachable and accepting authenticated traffic.

@@ -1,12 +1,19 @@
 # Buddi — local/staging compose.
 #
 # Track 1 / Step 1 (ARCH-01, CFG-01, DO-01): canonical surface is backend.api:app
-# on port 8001. The following items are deliberately left for later tracks and
-# are flagged inline to avoid silent regression:
-#   - DO-05: Remove the `.:/app` bind-mount (Track 2 Step 11).
-#   - CFG-04: Parameterize DEV_MODE (Track 3).
-#   - Track 2 Step 10 will introduce the Redis service for distributed rate
-#     limiting; the stub is left commented for that step.
+# on port 8001.
+#
+# Re-audit (April 21) follow-ups applied here:
+#   - DO-05 (FIXED): the full source bind-mount `.:/app` has been removed.
+#     Only the `data/` directory is mounted so persisted audit logs and
+#     encrypted PHI artifacts survive container restarts without exposing
+#     the whole source tree to a container breakout.
+#   - CFG-04 (FIXED): DEV_MODE is now parameterized via the environment so
+#     production compose-based deploys default to `false`. Local developers
+#     opt in via `.env` or `DEV_MODE=true docker compose up`.
+#
+# Track 2 Step 10 will introduce the Redis service for distributed rate
+# limiting; the stub is left commented for that step.
 version: "3.8"
 
 services:
@@ -16,13 +23,17 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      # TODO(Track 2 Step 11 / DO-05): remove this bind-mount.
-      - .:/app
+      # DO-05: only the runtime data directory is bind-mounted. Source code
+      # lives inside the image (COPY . . in the Dockerfile) and must NOT be
+      # overridable from the host.
+      - ./data:/app/data
     env_file:
       - .env
     environment:
-      # TODO(Track 3 / CFG-04): DEV_MODE=${DEV_MODE:-false}
-      - DEV_MODE=true
+      # CFG-04: default to `false` so an accidental `docker compose up` in a
+      # production-shaped environment never enables dev shortcuts. Local
+      # developers set `DEV_MODE=true` in `.env` (see .env.example).
+      - DEV_MODE=${DEV_MODE:-false}
       - PORT=8001
       - PYTHONPATH=/app
     # `--reload` is dev-only; see start_dev.py for the local dev loop. The

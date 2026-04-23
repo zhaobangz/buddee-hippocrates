@@ -69,7 +69,11 @@ class Settings(BaseSettings):
     # --- Infrastructure ---
     BACKEND_PORT: int = 8001
     FRONTEND_PORT: int = 5173
+    # SEC-04: DATABASE_URL is validated below. The default here is only used
+    # in test mode; production startup requires an explicit env var pointing
+    # at a database that is NOT the insecure ``postgres:postgres`` default.
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/buddi"
+
 
     # --- Safety & Audit ---
     ENABLE_AUDIT_LOG: bool = True
@@ -94,6 +98,34 @@ class Settings(BaseSettings):
         if v.strip().lower() in {"clinical-dev-key-not-for-prod", "change-me", "dev"}:
             raise ValueError("BUDDI_STORAGE_KEY must not be the dev default.")
         return v
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _reject_insecure_database_url(cls, v: str) -> str:
+        """SEC-04: refuse the ``postgres:postgres`` fallback outside test mode.
+
+        The ``BUDDI_TEST_MODE=1`` escape hatch lets CI and local tests keep
+        using the throwaway compose database. Any other environment must set
+        ``DATABASE_URL`` explicitly to a dedicated credential — a database
+        exposed with ``postgres:postgres`` is effectively public.
+        """
+        if os.getenv("BUDDI_TEST_MODE") == "1":
+            return v
+        lowered = v.strip().lower()
+        if not lowered:
+            raise ValueError(
+                "DATABASE_URL must be set explicitly. Set it to a connection "
+                "string pointing at a dedicated Postgres credential."
+            )
+        if "postgres:postgres@" in lowered:
+            raise ValueError(
+                "DATABASE_URL is using the insecure `postgres:postgres` "
+                "default. Provision a dedicated DB user / password and set "
+                "DATABASE_URL to that connection string before starting the "
+                "service."
+            )
+        return v
+
 
     @property
     def cors_origin_list(self) -> List[str]:

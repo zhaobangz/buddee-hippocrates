@@ -1,1 +1,24 @@
-Generic single-database configuration.
+# Alembic notes for Buddi
+
+This project uses a single-database Alembic setup targeting PostgreSQL.
+
+## Current behavior
+
+- `alembic/env.py` points `target_metadata` to `core.models.Base.metadata`.
+- `DATABASE_URL` from environment is preferred over `alembic.ini`.
+- `pgvector.sqlalchemy.Vector` is registered for stable autogenerate output.
+
+## Common commands
+
+From repo root:
+
+```bash
+alembic upgrade head
+alembic downgrade -1
+alembic revision --autogenerate -m "describe change"
+```
+
+## Notes
+
+- Initial migration (`58485b98e836_initial_schema.py`) creates all current core tables and ensures `CREATE EXTENSION IF NOT EXISTS vector`.
+- Production container startup runs `alembic upgrade head` before starting uvicorn.

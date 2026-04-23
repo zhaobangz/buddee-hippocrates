@@ -1,59 +1,74 @@
-# Cloud Deployment Guide - Buddi Clinical Agent
+# Cloud Deployment Guide (Current v4.1)
 
-Buddi is architecture-ready for high-availability deployment to AWS, Google Cloud (GCP), or Azure. This guide details the process for migrating the clinical system from a local terminal to a production cloud environment.
+This guide reflects the **current** Buddi deployment model: containerized FastAPI backend (`backend.api:app`) with PostgreSQL + Alembic migrations and authenticated API traffic.
 
-## 🏗 Architecture Compliance
+## What is production-canonical
 
-- ✅ **Backend**: Stateless FastAPI REST API (OIDC & JWT compatible).
-- ✅ **Frontend**: Premium multi-view workspace (CDN & Static Hosting ready - Deprecated).
-- ✅ **AI Layers**: RAG engine with FAISS vector store persistence.
-- ✅ **HIPAA Foundation**: Integrated clinical audit logging (Serialized JSON).
-- ✅ **Isolation**: Environment Guardian enabled for containerized stability.
+- Runtime API: `backend.api:app` on port `8001`
+- Container entrypoint runs: `alembic upgrade head && uvicorn ...`
+- Auth is required on all routes (`API_KEY` / bearer)
+- Health probe endpoint: `GET /api/health`
+- RAG retrieval uses PostgreSQL + `pgvector` (not FAISS index files)
 
-## 📡 Deployment Matrix
+## Required environment variables
 
-| Provider | Backend Hosting | Frontend Hosting | Persistent Memory |
-| :--- | :--- | :--- | :--- |
-| **Google Cloud** | Cloud Run (Container) | Firebase Hosting | Cloud Storage / Filestore |
-| **AWS** | AppRunner / ECS | S3 + CloudFront | EFS / RDS |
-| **Azure** | App Service | Static Web Apps | Azure Files / Blob |
+At minimum, set these as managed secrets/config:
 
-## 🚀 Deployment Checklist
+- `SECRET_KEY`
+- `BUDDI_STORAGE_KEY`
+- `DATABASE_URL`
+- `API_KEY` (recommended and expected by smoke checks + health probes)
+- `LLM_API_KEY` and/or `OPENAI_API_KEY`
+- `CORS_ORIGINS` (comma-separated explicit origins, no `*`)
 
-1. **Verify Clinical RAG**: Check that your guidelines (ADA, ACC/AHA) are indexed in the `guidelines_index.faiss`.
-2. **Setup Provider**: Choose your LLM engine (DeepSeek-V3, GPT-4o, etc.) and update the production `.env`.
-3. **Internal URLs**: If using any frontend components, update them to point to your secure production API domain instead of `localhost:8001`.
-4. **CORS Protocol**: Update `backend/api.py` to allow only your production frontend origin.
+## Container deployment checklist
 
-## ☁️ Google Cloud Deployment (Recommended)
+1. Build image from repo `Dockerfile`.
+2. Ensure target Postgres has `pgvector` enabled.
+3. Set `DATABASE_URL` to a dedicated credential (non-`postgres:postgres`).
+4. Provide `API_KEY` so health checks can authenticate.
+5. Route TLS traffic through your platform ingress/load balancer.
+6. Restrict CORS (`CORS_ORIGINS`) to known frontend origins.
 
-### 1. Containerize & Push
+## Example: generic Docker runtime
+
 ```bash
-# Push to Google Artifact Registry
-gcloud builds submit --tag gcr.io/YOUR-PROJECT/buddi-clinical-core
+docker build -t buddi-api:latest .
+
+docker run --rm -p 8001:8001 \
+  -e SECRET_KEY='replace-with-strong-secret' \
+  -e BUDDI_STORAGE_KEY='replace-with-strong-storage-key' \
+  -e API_KEY='replace-with-api-key' \
+  -e DATABASE_URL='postgresql://user:pass@host:5432/buddi' \
+  -e CORS_ORIGINS='https://app.example.com' \
+  -e LLM_API_KEY='...' \
+  buddi-api:latest
 ```
 
-### 2. Launch Clinical Core (Cloud Run)
+## Example: Google Cloud Run shape
+
 ```bash
-gcloud run deploy buddi-terminal-api \
-  --image gcr.io/YOUR-PROJECT/buddi-clinical-core \
+gcloud builds submit --tag gcr.io/YOUR_PROJECT/buddi-api
+
+gcloud run deploy buddi-api \
+  --image gcr.io/YOUR_PROJECT/buddi-api \
   --platform managed \
   --region us-central1 \
-  --set-env-vars "LLM_PROVIDER=deepseek,ENABLE_SAFETY_LAYER=True" \
-  --allow-unauthenticated
+  --set-env-vars PORT=8001 \
+  --set-secrets SECRET_KEY=SECRET_KEY:latest,BUDDI_STORAGE_KEY=BUDDI_STORAGE_KEY:latest,API_KEY=API_KEY:latest,DATABASE_URL=DATABASE_URL:latest,LLM_API_KEY=LLM_API_KEY:latest \
+  --no-allow-unauthenticated
 ```
 
-### 3. Enterprise Integrations
-Connect your EHR system (Epic/Cerner) via Redox or Health Gorilla APIs securely via HTTPS directly to your Cloud Run endpoint.
+> Note: `--no-allow-unauthenticated` aligns with backend behavior (all routes require auth).
 
-## 🛡 Production Security & HIPAA
+## Post-deploy smoke checks
 
-- **🔐 TLS/SSL**: Mandatory HTTPS for all clinical data in transit.
-- **📄 Immutable Audits**: Map a Persistent Volume (PV) to `/data/` to ensure `audit_log.json` and `memory.json` are preserved across redeployments.
-- **🗳 RAG Persistence**: Ensure the `.faiss` vector index is included in the container build or loaded via cloud storage on startup.
-- **🔑 Secrets**: Use Cloud Secret Manager for your LLM API keys and clinical credentials.
-- **🐳 Environment Guardian**: The `start.py` logic is pre-configured to ensure the backend launches with the proper module paths and environment.
+```bash
+BUDDI_BASE_URL=https://your-api.example.com \
+BUDDI_API_KEY=your-api-key \
+python scripts/verify_system.py
+```
 
----
+## CI/CD status in repo
 
-**Status**: ✅ **Cloud-Ready**. The Buddi Clinical Agent is structured for elastic scaling and healthcare-grade reliability in the cloud.
+`.github/workflows/main.yml` currently runs lint + tests. Staging/production deploy jobs are placeholders with warning markers and are not fully wired yet.

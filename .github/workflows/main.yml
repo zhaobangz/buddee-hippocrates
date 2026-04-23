@@ -30,9 +30,9 @@ jobs:
           pip install ruff pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # Track 1 / Step 1 (ARCH-01, TEST-02 partial): lint the canonical code
-      # paths only. The legacy `app/` tree is deprecated (see app/main.py) and
-      # is intentionally excluded from CI.
+      # Track 1 / Step 1 (ARCH-01, TEST-02, CQ-02): lint the canonical code
+      # paths. The legacy `app/` tree has been deleted (Track 2 Step 11) so
+      # this list is now the full set of first-party Python surfaces.
       - name: Lint with ruff
         run: ruff check backend/ core/ tools/ scripts/
 

@@ -1,63 +1,53 @@
-# Clinical Tracing Setup Guide
+# Tracing Setup Guide (OpenTelemetry)
 
-Tracing is deeply integrated into the Buddi Clinical Agent using OpenTelemetry. This provides real-time oversight and a forensic audit trail of all AI-driven clinical activities, tool executions, and RAG grounding steps.
+Buddi emits tracing spans via OpenTelemetry to an OTLP HTTP endpoint.
 
-## 🏥 Integrated Components
+## Current implementation points
 
-### 1. **Terminal Tracing** (`core/tracing.py`)
-- Initializes OpenTelemetry with an OTLP HTTP exporter.
-- Targets `localhost:4318` by default (compatible with VS Code Trace Viewer).
-- Provides simple hooks for adding precision tracing to new clinical workflow segments.
+- `core/tracing.py`
+  - Initializes a tracer provider once
+  - Configures OTLP exporter to `http://localhost:4318/v1/traces`
+- `backend/api.py`
+  - Startup span (`system_startup`)
+  - FHIR ingest span (`process_fhir_bundle`) with payload-size attributes
+- `core/agent.py`
+  - Top-level orchestration span (`agent_handle`)
+  - Intent detection + task-specific spans
+  - PHI-safe telemetry posture (payload hashes/sizes, no raw PHI fields)
 
-### 2. **Backend API Tracing** (`backend/api.py`)
-- Every chat interaction, **Risk Assessment**, and **Shadow Mode comparison** is captured in a dedicated trace span.
-- Attributes include input length, processing latency, and detected clinical intent.
+## Local trace viewing workflow
 
-### 3. **Intelligence Tracing** (`core/rag_engine.py` & `core/agent.py`)
-- **RAG Latency**: Measures vector search performance against the FAISS clinical index.
-- **Tool Orchestration**: Tracks the decision logic as the agent routes between:
-  - **EHR Reader** (Clinical PDF parsing)
-  - **Prior Auth** (Insurance form generation)
-  - **Guidelines** (Medical reference lookups)
-  - **Care Coordination** (Scheduling & Follow-ups)
+1. Start an OTLP-compatible collector (for example VS Code Trace Viewer collector on port `4318`).
+2. Run Buddi backend:
 
-## 📡 How to Monitor Traces
-
-### Step 1: Initialize Environment
-```bash
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Step 2: Activate Trace Collector
-In VS Code, run the command:
-`AI Toolkit: Open Trace Viewer`
-This starts the OTLP collector on **port 4318**.
-
-### Step 3: Launch the Integrated Agent
 ```bash
 python start.py
 ```
 
-### Step 4: Analyze Clinical Spans
-As you interact with the dashboard, the Trace Viewer will show:
-- **Timeline**: How long each clinical tool and RAG search took to execute.
-- **Metadata**: Targeted patient ID, identified intent, and safety validation flags.
-- **Grounding**: The specific guideline documents retrieved by the RAG engine during reasoning.
+3. Trigger API calls (for example `POST /ingest/fhir`).
+4. Inspect spans in your trace viewer.
 
-## 🛠 Adding Custom Spans
+## Example span attributes you should see
 
-To trace a new clinical tool or high-performance segment:
+- `payload_size_bytes`
+- `payload_hash`
+- `detected_intent`
+- `rag_docs_found`
+- `note_size_bytes` (FHIR path)
+
+## Adding custom spans
+
 ```python
 from core.tracing import get_tracer
 
 tracer = get_tracer(__name__)
 
-with tracer.start_as_current_span("clinical_tool_name") as span:
-    span.set_attribute("patient_id", "12345")
-    # Your clinical logic here
+with tracer.start_as_current_span("my_operation") as span:
+    span.set_attribute("component", "my-module")
+    # work
 ```
 
----
+## Notes
 
-**Status**: ✅ **Grounding Spans Active**. Buddi provides full clinical observability from the UI terminal down to the vector search logic.
+- If no collector is listening on `localhost:4318`, tracing export may fail silently/non-fatally depending on runtime.
+- `shutdown_tracing()` is currently a stub; graceful flush behavior can be expanded later if needed.
