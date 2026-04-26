@@ -19,6 +19,8 @@ import sys
 import time
 from typing import List, Optional
 
+from dotenv import load_dotenv
+
 
 DEV_HOST = os.environ.get("HOST", "127.0.0.1")
 DEV_PORT = int(os.environ.get("PORT", "8001"))
@@ -32,6 +34,7 @@ def _banner() -> None:
 
 
 def main() -> int:
+    load_dotenv()
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{os.getcwd()}{os.pathsep}{env.get('PYTHONPATH', '')}"
     env.setdefault("DEV_MODE", "true")
@@ -56,6 +59,12 @@ def main() -> int:
         # Surface the canonical backend URL to Vite via its standard env var.
         fe_env = env.copy()
         fe_env.setdefault("VITE_API_BASE", f"http://{DEV_HOST}:{DEV_PORT}/api")
+        # Local browser demo only: mirror the root API_KEY into Vite so the
+        # protected backend routes can be exercised without disabling auth.
+        # Production must use real user/session auth instead of exposing static
+        # tenant keys in a public bundle.
+        if env.get("API_KEY"):
+            fe_env.setdefault("VITE_API_KEY", env["API_KEY"])
         frontend = subprocess.Popen(["npm", "run", "dev"], cwd="frontend", env=fe_env)
     else:
         print("[start_dev.py] ⚠️  frontend/ not found; backend only.")

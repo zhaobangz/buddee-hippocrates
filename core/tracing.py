@@ -2,9 +2,11 @@
 Buddi Tracing System — OpenTelemetry Integration
 Provides clinical observability and audit forensic trails.
 """
+import os
+
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
@@ -22,13 +24,17 @@ def setup_tracing(service_name="buddi-clinical-agent"):
     # processor = BatchSpanProcessor(ConsoleSpanExporter())
     # provider.add_span_processor(processor)
     
-    # 2. OTLP Exporter (for VS Code Trace Viewer)
-    try:
-        otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
-        otlp_processor = BatchSpanProcessor(otlp_exporter)
-        provider.add_span_processor(otlp_processor)
-    except Exception as e:
-        print(f"Tracing: OTLP Exporter failed to initialize: {e}")
+    # 2. OTLP Exporter (optional for local trace viewer / production collector).
+    # Do not default to localhost:4318: if no collector is running, the exporter
+    # emits noisy connection errors during tests and local demos.
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+    if otlp_endpoint:
+        try:
+            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            otlp_processor = BatchSpanProcessor(otlp_exporter)
+            provider.add_span_processor(otlp_processor)
+        except Exception as e:
+            print(f"Tracing: OTLP Exporter failed to initialize: {e}")
 
     trace.set_tracer_provider(provider)
     _tracer_initialized = True
