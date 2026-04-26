@@ -4,7 +4,8 @@
 python-dotenv==1.0.1
 fastapi==0.135.2
 uvicorn[standard]==0.32.1
-starlette==1.0.0
+# FastAPI 0.135.2 requires Starlette >=0.46.0; 1.0.0 does not exist on PyPI.
+starlette==0.48.0
 pydantic==2.12.5
 pydantic-settings==2.14.0
 httpx==0.28.1
@@ -18,7 +19,8 @@ cryptography==46.0.7
 
 # --- LLM / AI ---
 openai==1.54.4
-langchain-openai==1.1.15
+# Compatible with openai 1.x; langchain-openai 1.1.x requires openai>=2.26.
+langchain-openai==0.2.9
 tiktoken==0.12.0
 
 # --- ML / Embeddings ---

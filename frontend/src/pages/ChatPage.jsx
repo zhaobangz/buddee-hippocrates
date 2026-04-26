@@ -1,11 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { 
   Send, 
-  Mic, 
-  Paperclip, 
   Sparkles, 
-  ChevronRight,
   ExternalLink,
   ShieldCheck,
   Stethoscope
@@ -86,9 +83,6 @@ const ChatPage = () => {
       <div className="absolute bottom-6 left-6 right-6 lg:left-0 lg:right-0 max-w-4xl mx-auto">
         <div className="glass-panel p-2 rounded-2xl border-white/10 shadow-2xl relative">
           <div className="flex items-center space-x-2">
-            <button className="p-2 text-slate-500 hover:text-white transition-colors">
-              <Paperclip className="w-5 h-5" />
-            </button>
             <input
               type="text"
               value={input}
@@ -101,9 +95,6 @@ const ChatPage = () => {
               className="flex-1 bg-transparent border-0 focus:ring-0 text-sm py-3 text-slate-200"
             />
             <div className="flex items-center space-x-1 pr-1">
-              <button className="p-2 text-slate-500 hover:text-medical-400 transition-colors">
-                <Mic className="w-5 h-5" />
-              </button>
               <button 
                 onClick={handleSend}
                 className="w-10 h-10 bg-medical-500 hover:bg-medical-400 text-white flex items-center justify-center rounded-xl transition-all shadow-lg shadow-medical-500/20"

@@ -6,8 +6,14 @@ import {
   History,
   AlertTriangle,
   Info,
+  CheckCircle2,
 } from 'lucide-react';
 import useStore from '../store/useStore';
+
+const truncate = (value, length = 18) => {
+  if (!value) return 'GENESIS';
+  return value.length > length ? `${value.slice(0, length)}…` : value;
+};
 
 /**
  * Audit & Safety surface.
@@ -23,7 +29,9 @@ import useStore from '../store/useStore';
  */
 const AuditPage = () => {
   const auditEvents = useStore((state) => state.auditEvents);
+  const auditVerification = useStore((state) => state.auditVerification);
   const fetchAuditLogs = useStore((state) => state.fetchAuditLogs);
+  const verifyAuditTrail = useStore((state) => state.verifyAuditTrail);
 
   useEffect(() => {
     fetchAuditLogs();
@@ -41,10 +49,27 @@ const AuditPage = () => {
             Verifiable transparency for all Agentic AI actions
           </p>
         </div>
-        <button className="btn-secondary text-xs flex items-center">
+        <button onClick={verifyAuditTrail} className="btn-secondary text-xs flex items-center">
           <Lock className="w-3 h-3 mr-2" />
-          Download Signed Audit Log (PDF)
+          Verify Audit Chain
         </button>
+      </div>
+
+      <div className="glass-panel p-5 rounded-2xl border-emerald-500/10 bg-emerald-500/5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-100 flex items-center">
+              <ShieldCheck className="w-4 h-4 mr-2 text-emerald-400" />
+              Tamper-Evident Hash Chain
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Every recommendation is not just logged — it is cryptographically chained for tamper-evident review.
+            </p>
+          </div>
+          <span className="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-widest">
+            {auditVerification?.status || 'not_checked'} · {auditVerification?.events_checked || 0} events
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -56,49 +81,63 @@ const AuditPage = () => {
           )}
           {auditEvents.map((event) => (
             <div
-              key={event.id}
-              className="glass-panel p-5 rounded-2xl flex items-center justify-between group hover:border-white/20 transition-all"
+              key={event.id || event.event_id}
+              className="glass-panel p-5 rounded-2xl group hover:border-white/20 transition-all"
             >
-              <div className="flex items-center space-x-4">
-                <div
-                  className={`p-3 rounded-xl ${
-                    event.risk === 'high'
-                      ? 'bg-rose-500/10 text-rose-500'
-                      : 'bg-emerald-500/10 text-emerald-500'
-                  }`}
-                >
-                  <History className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-200">
-                    {event.action}
-                  </p>
-                  <div className="flex items-center space-x-3 mt-1">
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      User: {event.user}
-                    </span>
-                    <span className="text-[10px] text-slate-600">•</span>
-                    <span className="text-[10px] text-slate-500">
-                      {event.timestamp}
-                    </span>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start space-x-4">
+                  <div
+                    className={`p-3 rounded-xl ${
+                      event.verification_status?.includes('broken') || event.verification_status?.includes('mismatch')
+                        ? 'bg-rose-500/10 text-rose-500'
+                        : 'bg-emerald-500/10 text-emerald-500'
+                    }`}
+                  >
+                    <History className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-200">
+                      {event.event_type || event.action}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Actor: {event.actor || event.user || 'system'}
+                      </span>
+                      <span className="text-[10px] text-slate-600">•</span>
+                      <span className="text-[10px] text-slate-500">
+                        {event.timestamp}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                <div className="flex items-center space-x-3">
+                  <span
+                    className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${
+                      event.verification_status?.includes('broken') || event.verification_status?.includes('mismatch')
+                        ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                        : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                    }`}
+                  >
+                    {event.verification_status || 'unchecked'}
+                  </span>
+                  <ExternalLink className="w-4 h-4 text-slate-600" />
+                </div>
               </div>
-              <div className="flex items-center space-x-4">
-                <span
-                  className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${
-                    event.risk === 'high'
-                      ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                      : event.risk === 'medium'
-                      ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                      : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                  }`}
-                >
-                  {event.risk} RISK
-                </span>
-                <button className="p-2 text-slate-600 hover:text-white transition-colors">
-                  <ExternalLink className="w-4 h-4" />
-                </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/5">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">Current Hash</p>
+                  <p className="text-[11px] font-mono text-slate-400 break-all">{truncate(event.current_hash || event.cryptographic_hash, 28)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">Previous Hash</p>
+                  <p className="text-[11px] font-mono text-slate-400 break-all">{truncate(event.previous_hash, 28)}</p>
+                </div>
+                {event.payload?.recovered_revenue !== undefined && (
+                  <div className="md:col-span-2 flex items-center text-[11px] text-emerald-400 font-bold">
+                    <CheckCircle2 className="w-3 h-3 mr-2" />
+                    Revenue recovery event: ${Number(event.payload.recovered_revenue || 0).toLocaleString()}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -121,6 +160,11 @@ const AuditPage = () => {
               by an external QSA/3PAO.
             </p>
           </div>
+
+          <button className="w-full glass-panel p-4 rounded-2xl text-xs font-bold text-slate-300 hover:text-white border-white/10 flex items-center justify-center">
+            <Lock className="w-3 h-3 mr-2" />
+            Export audit report (coming soon)
+          </button>
 
           <div className="glass-panel p-6 rounded-3xl bg-rose-500/5 border-rose-500/10">
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">
