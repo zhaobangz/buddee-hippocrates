@@ -9,9 +9,11 @@ before the app ever binds to a port, which is the HIPAA-safe posture.
 from __future__ import annotations
 
 import os
+import sys
+import warnings
 from typing import List, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -138,13 +140,34 @@ def _load_settings() -> Settings:
     """Load settings with a test-mode escape hatch so unit tests don't need
     real production secrets, while production startup still fails loudly if
     ``SECRET_KEY`` / ``BUDDI_STORAGE_KEY`` are missing."""
+    if os.getenv("BUDDI_TEST_MODE") == "1" and not os.getenv("CI") and "pytest" not in sys.modules:
+        warnings.warn(
+            "BUDDI_TEST_MODE=1 is set outside CI — ensure this is not production.",
+            stacklevel=2,
+        )  # Security: surface accidental test-mode auth bypasses during startup.
     if os.getenv("BUDDI_TEST_MODE") == "1":
         os.environ.setdefault(
             "SECRET_KEY",
             "test-only-secret-key-not-for-production-use-0123456789abcdef",
         )
         os.environ.setdefault("BUDDI_STORAGE_KEY", "test-only-storage-key-not-for-prod")
-    return Settings()  # type: ignore[call-arg]
+    try:
+        return Settings()  # type: ignore[call-arg]
+    except ValidationError as e:
+        problem_fields = sorted(
+            {
+                str(error.get("loc", ["unknown"])[0])
+                for error in e.errors()
+                if error.get("loc")
+            }
+        )
+        missing = ", ".join(problem_fields) if problem_fields else "unknown"
+        print(
+            "Buddi configuration error: Missing or invalid required env vars: "
+            f"{missing} — copy .env.example to .env and fill in the values.",
+            file=sys.stderr,
+        )
+        raise
 
 
 settings = _load_settings()

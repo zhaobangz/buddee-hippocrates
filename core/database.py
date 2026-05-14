@@ -11,11 +11,17 @@ therefore cannot silently bind to a world-readable Postgres instance.
 
 import os
 
+_DEFAULT_DEV_URL = "postgresql://postgres:postgres@localhost:5432/buddi"
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    if os.getenv("BUDDI_TEST_MODE") == "1":
+        DATABASE_URL = _DEFAULT_DEV_URL
+    else:
+        raise RuntimeError("DATABASE_URL is not configured. Set it in your .env file.")
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-_DEFAULT_DEV_URL = "postgresql://postgres:postgres@localhost:5432/buddi"
-DATABASE_URL = os.getenv("DATABASE_URL", _DEFAULT_DEV_URL)
 
 # SEC-04: refuse to start with the dev-default credential outside of an
 # explicit test-mode context. Alembic migrations set DATABASE_URL explicitly,

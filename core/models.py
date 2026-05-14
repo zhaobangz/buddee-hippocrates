@@ -52,6 +52,25 @@ class Tenant(Base):
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
 
+class TenantApiKey(Base):
+    """Per-tenant API credential metadata.
+
+    ``key_hash_sha256`` is deterministic and safe to index for lookup. The full
+    presented key is then verified against the salted Argon2 ``hashed_key``.
+    Canonical scopes are ``clinician``, ``ingest``, and ``admin``.
+    """
+
+    __tablename__ = "tenant_api_keys"
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    key_hash_sha256 = Column(String(64), nullable=False, unique=True, index=True)
+    hashed_key = Column(Text, nullable=False, unique=True)
+    scopes = Column(JSONB, nullable=False, default=list)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class Patient(Base):
     __tablename__ = "patients"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -75,6 +94,7 @@ class Encounter(Base):
 class ClinicalNote(Base):
     __tablename__ = "clinical_notes"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     encounter_id = Column(PG_UUID(as_uuid=True), ForeignKey("encounters.id"))
     provider_id = Column(String(255))
     note_text = Column(Text)
@@ -85,6 +105,7 @@ class ClinicalNote(Base):
 class BillingCode(Base):
     __tablename__ = "billing_codes"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     encounter_id = Column(PG_UUID(as_uuid=True), ForeignKey("encounters.id"))
     code = Column(String(50))
     code_type = Column(String(20))
@@ -96,6 +117,7 @@ class BillingCode(Base):
 class HccSuggestion(Base):
     __tablename__ = "hcc_suggestions"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     encounter_id = Column(PG_UUID(as_uuid=True), ForeignKey("encounters.id"))
     suggested_code = Column(String(50))
     justification = Column(Text)
@@ -108,6 +130,7 @@ class HccSuggestion(Base):
 class PriorAuthorizationRequest(Base):
     __tablename__ = "prior_authorization_requests"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     encounter_id = Column(PG_UUID(as_uuid=True), ForeignKey("encounters.id"))
     procedure_code = Column(String(50))
     payer_name = Column(String(255))
@@ -120,6 +143,7 @@ class PriorAuthorizationRequest(Base):
 class PriorAuthState(Base):
     __tablename__ = "prior_auth_states"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     prior_auth_id = Column(PG_UUID(as_uuid=True), ForeignKey("prior_authorization_requests.id"))
     state = Column(String(50))  # Draft, pending_approval, submitted, approved, denied
     changed_at = Column(DateTime(timezone=True), default=_utcnow)
@@ -141,6 +165,7 @@ class LlmRequest(Base):
 class LlmResponse(Base):
     __tablename__ = "llm_responses"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     llm_request_id = Column(PG_UUID(as_uuid=True), ForeignKey("llm_requests.id"))
     raw_response = Column(Text)
     parsed_json = Column(JSONB)
@@ -152,6 +177,7 @@ class LlmResponse(Base):
 class RagRetrieval(Base):
     __tablename__ = "rag_retrievals"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     llm_request_id = Column(PG_UUID(as_uuid=True), ForeignKey("llm_requests.id"))
     chunk_id = Column(PG_UUID(as_uuid=True))
     similarity_score = Column(Float)
@@ -161,6 +187,7 @@ class RagRetrieval(Base):
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     clinical_note_id = Column(PG_UUID(as_uuid=True), ForeignKey("clinical_notes.id"))
     content = Column(Text)
     embedding = Column(Vector(1536))
@@ -211,6 +238,7 @@ class RecoveryEvent(Base):
     # of the data model, enables efficient index lookups, and prevents
     # hex-formatting drift between callers.
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))
     audit_hash = Column(String, index=True)
     patient_id = Column(String)
     recovered_revenue = Column(Float)

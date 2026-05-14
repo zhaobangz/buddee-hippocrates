@@ -6,8 +6,8 @@ gate:
   1. Health check — endpoint is reachable when authenticated.
   2. FHIR ingest — accepts a valid bundle, rejects an invalid one.
   3. Auth verification — every route rejects anonymous callers with 401.
-  4. Audit persistence — audit log endpoint is protected and returns JSON.
-  5. Prior-auth generation — ``/prior-auth/generate`` produces a draft row.
+  4. Audit persistence — canonical audit log endpoint is protected and returns JSON.
+  5. Prior-auth generation — ``/api/prior-auth/generate`` produces a draft row.
 
 These tests use the FastAPI ``TestClient`` so they run in-process without
 binding a real port. They are deliberately tolerant of the DB being
@@ -126,12 +126,12 @@ def test_fhir_ingest_requires_auth(client):
 # ---------------------------------------------------------------------------
 
 def test_audit_query_requires_auth(client):
-    resp = client.get("/audit/query")
+    resp = client.get("/api/audit/query")
     assert resp.status_code == 401
 
 
 def test_audit_query_returns_json(client, auth_headers):
-    resp = client.get("/audit/query", headers=auth_headers)
+    resp = client.get("/api/audit/query", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert "events" in body
@@ -144,7 +144,7 @@ def test_audit_query_returns_json(client, auth_headers):
 
 def test_prior_auth_requires_auth(client):
     resp = client.post(
-        "/prior-auth/generate",
+        "/api/prior-auth/generate",
         params={"encounter_id": "enc-1", "procedure_code": "CPT-12345"},
     )
     assert resp.status_code == 401
@@ -156,7 +156,7 @@ def test_prior_auth_generation_creates_draft(client, auth_headers):
     # return 500. That's acceptable as a proof that the route is routed
     # and auth-gated; we accept 200 or 500 here but reject 401/403/404.
     resp = client.post(
-        "/prior-auth/generate",
+        "/api/prior-auth/generate",
         headers=auth_headers,
         params={
             "encounter_id": "00000000-0000-0000-0000-000000000000",
@@ -166,5 +166,5 @@ def test_prior_auth_generation_creates_draft(client, auth_headers):
     assert resp.status_code in (200, 500)
     if resp.status_code == 200:
         body = resp.json()
-        assert body["status"] == "drafted"
+        assert body["status"] == "draft"
         assert "auth_request_id" in body

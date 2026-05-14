@@ -1,23 +1,40 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  CheckCircle2, 
+import {
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  CheckCircle2,
   MoreHorizontal,
   Info,
-  Zap
+  Zap,
+  FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import PriorAuthModal from '../components/PriorAuthModal';
 
 const Dashboard = () => {
   const { currentPatient: patient } = useStore();
   const navigate = useNavigate();
   const loadDemoPatient = useStore((state) => state.loadDemoPatient);
   const runShadowAudit = useStore((state) => state.runShadowAudit);
+  const fetchDashboardMetrics = useStore((state) => state.fetchDashboardMetrics);
+  const shadowResult = useStore((state) => state.shadowResult);
+  const [priorAuthOpen, setPriorAuthOpen] = useState(false);
+
+  // Hydrate metrics on first mount so the hero numbers reflect the latest
+  // recovery events without the user having to navigate away and back.
+  useEffect(() => {
+    fetchDashboardMetrics();
+    const intervalId = window.setInterval(fetchDashboardMetrics, 30_000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchDashboardMetrics]);
+
+  useEffect(() => {
+    if (shadowResult) fetchDashboardMetrics();
+  }, [shadowResult, fetchDashboardMetrics]);
 
   const handleTrySamplePatient = async () => {
     const demoPatient = await loadDemoPatient();
@@ -53,11 +70,22 @@ const Dashboard = () => {
           <h1 className="text-3xl font-bold text-slate-100 tracking-tight">Executive Integrity Dashboard</h1>
           <p className="text-slate-500 mt-1">Real-time revenue recovery and audit monitoring</p>
         </div>
-        <button onClick={handleTrySamplePatient} className="btn-primary px-5 py-3 rounded-xl text-xs font-bold flex items-center">
-          <Zap className="w-4 h-4 mr-2" />
-          Try Sample Patient
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setPriorAuthOpen(true)}
+            className="btn-secondary px-4 py-3 rounded-xl text-xs font-bold flex items-center"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Generate Prior-Auth
+          </button>
+          <button onClick={handleTrySamplePatient} className="btn-primary px-5 py-3 rounded-xl text-xs font-bold flex items-center">
+            <Zap className="w-4 h-4 mr-2" />
+            Try Sample Patient
+          </button>
+        </div>
       </div>
+
+      <PriorAuthModal open={priorAuthOpen} onClose={() => setPriorAuthOpen(false)} />
 
       <AnalyticsDashboard />
 

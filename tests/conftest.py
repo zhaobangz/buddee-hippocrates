@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 # BUDDI_TEST_MODE lets core/config auto-fill the mandatory security fields
 # with test-only defaults. These are never used in production.
 os.environ.setdefault("BUDDI_TEST_MODE", "1")
+os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault(
     "SECRET_KEY",
     "test-only-secret-key-not-for-production-use-0123456789abcdef",
@@ -26,6 +27,21 @@ os.environ.setdefault(
 os.environ.setdefault("BUDDI_STORAGE_KEY", "test-only-storage-key-not-for-prod")
 os.environ.setdefault("API_KEY", "test-api-key-abcdef1234567890")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
+
+# CMS-AUD-01: keep the daily Merkle-root background task disabled during
+# unit tests. The seal pipeline is exercised explicitly in test_audit_merkle.py
+# and via /api/audit/roots/seal so we don't need a 24h asyncio loop running
+# in the TestClient lifespan, which would otherwise try to query a possibly
+# offline DB at startup.
+os.environ.setdefault("BUDDI_DISABLE_MERKLE_TASK", "1")
+# Point the signed-roots export at a per-run temp dir so tests don't write
+# into the developer's checked-in storage/audit_roots/.
+import tempfile  # noqa: E402
+os.environ.setdefault(
+    "BUDDI_AUDIT_ROOTS_DIR",
+    os.path.join(tempfile.gettempdir(), "buddi-test-audit-roots"),
+)
+
 
 # Point the app at the test Postgres spun up by the developer / CI.
 # If the test DB is unreachable, the DB-backed endpoints will return

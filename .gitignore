@@ -1,5 +1,7 @@
 # Environments
 .env
+.env.*
+!.env.example
 .venv
 venv/
 env/
@@ -26,6 +28,14 @@ prior_auth_store.json
 *.faiss
 *.pkl
 
+# Security: never commit local credential material or secret-bearing config files.
+config/credentials.json
+config/*.json
+*.pem
+*.key
+*.p12
+secrets/
+
 # Logs
 logs/
 *.log
@@ -34,3 +44,9 @@ logs/
 .DS_Store
 .input_history
 frontend.pid
+
+# CMS-AUD-01: signed daily Merkle roots are durable artifacts uploaded to
+# GCS Object Lock in production. Locally we generate them at runtime; we
+# only commit the README explaining the directory.
+storage/audit_roots/*.json
+storage/audit_roots/*.json.tmp
