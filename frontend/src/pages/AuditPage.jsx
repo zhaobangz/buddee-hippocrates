@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Info,
   CheckCircle2,
+  Download,
 } from 'lucide-react';
 import useStore from '../store/useStore';
 
@@ -32,10 +33,44 @@ const AuditPage = () => {
   const auditVerification = useStore((state) => state.auditVerification);
   const fetchAuditLogs = useStore((state) => state.fetchAuditLogs);
   const verifyAuditTrail = useStore((state) => state.verifyAuditTrail);
+  const [verifyMessage, setVerifyMessage] = useState(null);
 
   useEffect(() => {
     fetchAuditLogs();
   }, [fetchAuditLogs]);
+
+  const handleVerify = async () => {
+    const result = await verifyAuditTrail();
+    if (!result) {
+      setVerifyMessage({ tone: 'error', text: 'Verification request failed.' });
+      return;
+    }
+    if (result.verified) {
+      setVerifyMessage({
+        tone: 'ok',
+        text: `Chain verified across ${result.events_checked} event(s) (${result.status}).`,
+      });
+    } else {
+      setVerifyMessage({
+        tone: 'error',
+        text: `Verification failed: ${result.status} at event ${result.broken_at ?? 'unknown'}.`,
+      });
+    }
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(auditEvents, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `buddi-audit-trail-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-12">
@@ -49,11 +84,30 @@ const AuditPage = () => {
             Verifiable transparency for all Agentic AI actions
           </p>
         </div>
-        <button onClick={verifyAuditTrail} className="btn-secondary text-xs flex items-center">
-          <Lock className="w-3 h-3 mr-2" />
-          Verify Audit Chain
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleExport} className="btn-secondary text-xs flex items-center">
+            <Download className="w-3 h-3 mr-2" />
+            Export audit report
+          </button>
+          <button onClick={handleVerify} className="btn-secondary text-xs flex items-center">
+            <Lock className="w-3 h-3 mr-2" />
+            Verify Audit Chain
+          </button>
+        </div>
       </div>
+
+      {verifyMessage ? (
+        <div
+          role="status"
+          className={`text-xs px-4 py-3 rounded-xl border ${
+            verifyMessage.tone === 'ok'
+              ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300'
+              : 'bg-rose-500/5 border-rose-500/20 text-rose-300'
+          }`}
+        >
+          {verifyMessage.text}
+        </div>
+      ) : null}
 
       <div className="glass-panel p-5 rounded-2xl border-emerald-500/10 bg-emerald-500/5">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -161,9 +215,12 @@ const AuditPage = () => {
             </p>
           </div>
 
-          <button className="w-full glass-panel p-4 rounded-2xl text-xs font-bold text-slate-300 hover:text-white border-white/10 flex items-center justify-center">
-            <Lock className="w-3 h-3 mr-2" />
-            Export audit report (coming soon)
+          <button
+            onClick={handleExport}
+            className="w-full glass-panel p-4 rounded-2xl text-xs font-bold text-slate-300 hover:text-white border-white/10 flex items-center justify-center"
+          >
+            <Download className="w-3 h-3 mr-2" />
+            Export audit report (.json)
           </button>
 
           <div className="glass-panel p-6 rounded-3xl bg-rose-500/5 border-rose-500/10">

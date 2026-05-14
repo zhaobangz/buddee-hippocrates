@@ -16,6 +16,10 @@ import httpx
 from core.config import Config
 
 
+class RetryError(RuntimeError):
+    """Raised when a retryable LLM provider failure persists after retry."""
+
+
 class LLMManager:
     """Thin async adapter for healthcare-grade LLM endpoints."""
 
@@ -26,6 +30,26 @@ class LLMManager:
     # ------------------------------------------------------------------
     # Async primitives
     # ------------------------------------------------------------------
+    async def _post_with_retry(self, client: httpx.AsyncClient, payload: dict, headers: dict) -> httpx.Response:
+        """POST once, retrying a single 429/503 after a short backoff."""
+        last_error: httpx.HTTPStatusError | None = None
+        for attempt in range(2):
+            try:
+                response = await client.post(Config.LLM_API_URL, json=payload, headers=headers)
+                response.raise_for_status()
+                return response
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code not in {429, 503}:
+                    raise
+                last_error = e
+                if attempt == 0:
+                    await asyncio.sleep(1)
+                    continue
+                raise RetryError(
+                    f"LLM provider returned {e.response.status_code} after retry"
+                ) from e
+        raise RetryError("LLM provider retry failed") from last_error
+
     async def ask_llm_async(self, prompt: str) -> str:
         if not Config.LLM_API_KEY:
             return "Error: LLM API Key not configured."
@@ -38,8 +62,7 @@ class LLMManager:
         }
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                r = await client.post(Config.LLM_API_URL, json=payload, headers=headers)
-                r.raise_for_status()
+                r = await self._post_with_retry(client, payload, headers)
                 return r.json()["choices"][0]["message"]["content"]
         except Exception as e:
             return f"Clinical LLM Connection Error: {str(e)}"
@@ -62,8 +85,7 @@ class LLMManager:
         }
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                r = await client.post(Config.LLM_API_URL, json=payload, headers=headers)
-                r.raise_for_status()
+                r = await self._post_with_retry(client, payload, headers)
                 content = r.json()["choices"][0]["message"]["content"]
                 return schema.model_validate_json(content)
         except Exception as e:
@@ -80,17 +102,12 @@ class LLMManager:
         async methods directly).
         """
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Schedule into a fresh loop in a worker thread so we don't
-                # re-enter the running one.
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    return pool.submit(asyncio.run, coro).result()
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
         except RuntimeError:
-            pass
-        return asyncio.run(coro)
+            return asyncio.run(coro)
 
     def ask_llm(self, prompt: str) -> str:
         return self._run(self.ask_llm_async(prompt))

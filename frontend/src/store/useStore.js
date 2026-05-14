@@ -15,7 +15,23 @@ import axios from 'axios';
 const API_BASE =
   (import.meta.env && import.meta.env.VITE_API_BASE) ||
   'http://localhost:8001/api';
-const API_KEY = import.meta.env && import.meta.env.VITE_API_KEY;
+const API_KEY_ENV = import.meta.env && import.meta.env.VITE_API_KEY;
+
+// In-memory only — never persisted to localStorage. The user is prompted on
+// first 401 if VITE_API_KEY was not baked into the build.
+let runtimeApiKey = API_KEY_ENV || null;
+const apiKeyListeners = new Set();
+function setRuntimeApiKey(key) {
+  runtimeApiKey = key || null;
+  apiKeyListeners.forEach((cb) => cb(runtimeApiKey));
+}
+export function getRuntimeApiKey() {
+  return runtimeApiKey;
+}
+export function subscribeApiKey(cb) {
+  apiKeyListeners.add(cb);
+  return () => apiKeyListeners.delete(cb);
+}
 
 // Dedicated axios instance so auth headers (Track 1 / Step 3) and request IDs
 // (Track 2 Step 22) can be attached in a single place later.
@@ -25,12 +41,24 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  if (API_KEY) {
+  if (runtimeApiKey) {
     config.headers = config.headers || {};
-    config.headers['X-API-Key'] = API_KEY;
+    config.headers['X-API-Key'] = runtimeApiKey;
   }
   return config;
 });
+
+// On 401, surface a flag to the UI so it can prompt for a key once.
+api.interceptors.response.use(
+  (resp) => resp,
+  (err) => {
+    if (err?.response?.status === 401) {
+      apiKeyListeners.forEach((cb) => cb(null, { unauthorized: true }));
+    }
+    return Promise.reject(err);
+  },
+);
+
 
 const defaultShadowResult = {
   demo: true,
@@ -198,6 +226,53 @@ const useStore = create((set, get) => ({
     } catch (err) {
       console.error('Failed to verify audit trail', err);
       return null;
+    }
+  },
+
+  // Prior-auth draft (deliverable 4.5)
+  priorAuthDraft: null,
+  isPriorAuthLoading: false,
+  priorAuthError: null,
+  generatePriorAuth: async ({ procedureCode, payer, encounterId, clinicalContext, demo = false } = {}) => {
+    set({ isPriorAuthLoading: true, priorAuthError: null });
+    try {
+      const resp = await api.post(
+        '/prior-auth/generate',
+        {
+          procedure_code: procedureCode || 'CPT-99213',
+          payer: payer || 'Medicare',
+          encounter_id: encounterId,
+          clinical_context: clinicalContext,
+          demo,
+        },
+        { timeout: 60_000 },
+      );
+      set({ priorAuthDraft: resp.data, isPriorAuthLoading: false });
+      get().fetchAuditLogs();
+      return resp.data;
+    } catch (err) {
+      const message = err?.response?.data?.detail || err?.message || 'Prior-auth generation failed';
+      set({ priorAuthError: message, isPriorAuthLoading: false });
+      throw err;
+    }
+  },
+
+  // Auth ergonomics: prompt-once for an API key when VITE_API_KEY isn't baked in.
+  apiKey: runtimeApiKey,
+  setApiKey: (key) => {
+    setRuntimeApiKey(key);
+    set({ apiKey: key });
+  },
+
+  // Demo-mode bootstrap: load synthetic patient + run one shadow audit.
+  // Used by `?demo=true` and the "Try Sample Patient" CTA. Idempotent.
+  runDemoBootstrap: async () => {
+    try {
+      const patient = await get().loadDemoPatient();
+      await get().runShadowAudit({ patientId: patient?.id || 'PT-9012', demo: true });
+      await get().fetchAuditLogs();
+    } catch (err) {
+      console.error('Demo bootstrap failed', err);
     }
   },
 }));

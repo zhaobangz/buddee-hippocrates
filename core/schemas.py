@@ -19,12 +19,39 @@ class IdentifiedCode(BaseModel):
     description: str = Field(..., description="Official code description.")
     justification: str = Field(..., description="Verbatim quote from the clinical note justifying this code.")
     est_value: float = Field(..., description="Estimated dollar value recovered based on RVU/weight.")
+    confidence: float = Field(default=0.85, ge=0.0, le=1.0, description="Model confidence 0–1.")
+    review_status: str = Field(default="human_review_required")
 
 
 class ShadowModeResponse(BaseModel):
     recovered_revenue: float = Field(..., description="Sum of all est_value fields.")
     identified_codes: List[IdentifiedCode]
     summary: str = Field(..., description="Executive summary for the compliance officer.")
+    audit_hash: Optional[str] = None
+    citations: List[str] = Field(default_factory=list, description="Guideline chunk IDs or source labels used in this audit.")
+
+
+# ── Prior-authorization draft (deliverable 4.5) ──────────────────────
+
+class EvidenceSnippet(BaseModel):
+    quote: str = Field(..., description="Verbatim short quote from the clinical context that supports medical necessity.")
+    source: str = Field(default="clinical_note", description="Where this evidence came from: clinical_note, guideline, lab, etc.")
+
+
+class PriorAuthDraft(BaseModel):
+    """Structured prior-authorization draft returned by the agent.
+
+    The ``draft_letter`` is a payer-ready free-text artifact a human reviewer
+    can copy/paste; the structured fields exist so the operator UI can render
+    a checklist + evidence trail next to it without re-parsing prose.
+    """
+
+    draft_letter: str = Field(..., description="Full draft prior-auth letter ready for human review.")
+    supporting_codes: List[str] = Field(default_factory=list, description="ICD-10 / CPT codes that justify medical necessity.")
+    payer_rationale: str = Field(..., description="Plain-language summary of why this should be approved under the payer's policy.")
+    evidence_snippets: List[EvidenceSnippet] = Field(default_factory=list, description="Quotes from the clinical record supporting necessity.")
+    missing_information: List[str] = Field(default_factory=list, description="Items a clinician must add before submission.")
+
 
 
 # ── FHIR ingest (SEC-10) ─────────────────────────────────────────────

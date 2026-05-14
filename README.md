@@ -9,7 +9,7 @@ Buddi is a FastAPI-first backend for revenue integrity and compliance workflows 
 - ✅ **DB model + migrations:** PostgreSQL + Alembic + `pgvector`
 - ✅ **FHIR ingest path:** `POST /ingest/fhir` with structural validation and size guardrails
 - ✅ **Tracing:** OpenTelemetry spans exported to OTLP HTTP (`localhost:4318`) when available
-- ⚠️ **Frontend:** present and runnable, but some store calls still target legacy endpoints (see `frontend/README.md`)
+- ✅ **Frontend contract:** store API calls use the canonical `/api/*` backend routes and shared `X-API-Key` axios instance
 
 ---
 
@@ -43,6 +43,7 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
+cp frontend/.env.example frontend/.env
 ```
 
 Set at minimum:
@@ -52,6 +53,8 @@ Set at minimum:
 - `DATABASE_URL` (must **not** use `postgres:postgres` outside test mode)
 - `API_KEY` (recommended for service-to-service auth)
 - `LLM_API_KEY` / `OPENAI_API_KEY` as needed
+- `frontend/.env` values: `VITE_API_BASE=http://localhost:8001/api` and
+  `VITE_API_KEY` matching the backend `API_KEY` for local browser requests
 
 ### 4) Run DB migrations
 
@@ -72,33 +75,44 @@ Backend is available at:
 
 ---
 
+## One-line developer ergonomics
+
+If you have `make` and Docker, the canonical local sequence is:
+
+```bash
+make install      # backend pip deps + frontend npm ci
+make db           # docker-run Postgres+pgvector and CREATE EXTENSION vector
+make migrate      # alembic upgrade head
+make dev          # python start_dev.py — backend on :8001, frontend on :5173
+make test         # pytest -q + frontend Vitest smoke
+make lint         # eslint frontend
+```
+
+Open `http://localhost:5173/?demo=true` to load the synthetic patient
+**PT-9012 (Marcus Holloway)** and run a deterministic shadow-mode revenue
+audit. The dashboard, audit trail, and prior-auth modal will all populate
+from a single click — no LLM key required (the demo path falls back to a
+deterministic stub).
+
 ## Development workflow
 
-Use the dev launcher when you want auto-reload and optional frontend boot:
+Use the dev launcher when you want both services:
 
 ```bash
 python start_dev.py
 ```
 
-This starts:
+Key API routes:
 
-- backend with `--reload` on `http://127.0.0.1:8001`
-- Vite frontend on `http://localhost:5173` (if `frontend/` exists)
-
----
-
-## API surface (v4.1)
-
-All routes below require authentication.
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/api/health` | GET | Service + DB status |
+| Route | Method | Description |
+| --- | --- | --- |
+| `/api/health` | GET | Authenticated liveness check |
+| `/api/readiness` | GET | Authenticated readiness check; 503 if the agent is degraded |
 | `/ingest/fhir` | POST | Validated FHIR Bundle ingest for shadow-mode processing |
-| `/encounter/{encounter_id}/process` | POST | Queue/process marker for encounter workflow |
-| `/billing/suggest` | GET | Retrieve HCC suggestions (optional `encounter_id`) |
-| `/prior-auth/generate` | POST | Create draft prior-authorization request |
-| `/audit/query` | GET | Return recent audit events |
+| `/api/encounter/{encounter_id}/process` | POST | Queue/process marker for encounter workflow |
+| `/api/billing/suggest` | GET | Retrieve HCC suggestions (optional `encounter_id`) |
+| `/api/prior-auth/generate` | POST | Create draft prior-authorization request |
+| `/api/audit/query` | GET | Return recent audit events |
 
 Auth example:
 

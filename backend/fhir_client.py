@@ -1,6 +1,8 @@
 from typing import Dict, Any
 import base64
 
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10 MB per attachment
+
 class FHIRAdapter:
     @staticmethod
     def _decode_attachment(resource: dict) -> str:
@@ -13,9 +15,14 @@ class FHIRAdapter:
             data = attachment.get("data", "")
             if data:
                 try:
-                    text += base64.b64decode(data).decode('utf-8') + "\n"
+                    raw = base64.b64decode(data)
                 except Exception:
                     pass
+                else:
+                    # Security: reject oversized embedded documents before appending to the agent prompt.
+                    if len(raw) > MAX_ATTACHMENT_BYTES:
+                        raise ValueError(f"Attachment exceeds {MAX_ATTACHMENT_BYTES} bytes limit")
+                    text += raw.decode("utf-8") + "\n"
             # Also handle plain text string if not base64 encoded
             elif attachment.get("title"):
                 text += attachment.get("title", "") + "\n"

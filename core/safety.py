@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 from typing import Any, Dict, List, Optional
 
@@ -28,13 +28,20 @@ _storage: "SecureStorage | None" = None
 def _get_storage() -> SecureStorage:
     global _storage
     if _storage is None:
-        _storage = SecureStorage()
+        _storage = SecureStorage(allow_plaintext_fallback=False)  # Security: audit logs must not silently accept plaintext injection.
     return _storage
 
 
 # ── PII/PHI Redaction Patterns ───────────────────────────────────────
 
+# Security: these approximate PHI regexes reduce log leakage; production should use NLP de-identification (AWS Comprehend Medical, Google Healthcare DLP, or Microsoft Presidio).
 PII_PATTERNS = {
+    "MRN": r"\bMRN[:\s#-]*\d{4,12}\b",
+    "NPI": r"\bNPI[:\s#-]*\d{10}\b",
+    "DEA": r"\b[A-Z]{2}\d{7}\b",
+    "ACCOUNT": r"\b(?:acct|account)[:\s#-]*\d{4,20}\b",
+    "STREET_ADDRESS": r"\b\d{1,6}\s+[A-Za-z0-9\s]{3,40}(?:St|Ave|Rd|Blvd|Dr|Ln|Ct|Way|Pl)\b",
+    "PATIENT_NAME": r"\b(?:patient|pt|name)[:\s-]*[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b",
     "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
     "EMAIL": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
     "PHONE": r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
@@ -47,8 +54,35 @@ def redact_pii(text: str) -> str:
     """Redact Personal Identifiable Information (PII) from text."""
     redacted = text
     for label, pattern in PII_PATTERNS.items():
-        redacted = re.sub(pattern, f"[{label}_REDACTED]", redacted)
+        redacted = re.sub(pattern, f"[{label}_REDACTED]", redacted, flags=re.IGNORECASE)
     return redacted
+
+
+def redact_for_logs(value: Any, max_length: int = 500) -> Any:
+    """Sanitise an arbitrary value before it lands in a log line or error body.
+
+    Rules:
+      * ``str`` → ``redact_pii`` then truncate to ``max_length``.
+      * ``dict`` / ``list`` / ``tuple`` → recurse.
+      * Anything else → returned as-is (numbers, bools, ``None``).
+
+    The audit chain payload still contains the full clinical context (encrypted
+    at rest); the logs do not. This is what we route ``logger.info(..., extra=...)``
+    through so a stray PHI string never reaches stdout.
+    """
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        redacted = redact_pii(value)
+        if len(redacted) > max_length:
+            return redacted[: max_length - 1] + "…"
+        return redacted
+    if isinstance(value, dict):
+        return {k: redact_for_logs(v, max_length) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_for_logs(v, max_length) for v in value]
+    # Fallback: stringify then redact.
+    return redact_for_logs(str(value), max_length)
 
 
 # ── Actions that require human approval ──────────────────────────────
@@ -211,7 +245,7 @@ def log_audit_event(
             pass
 
     event: Dict[str, Any] = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),  # Security: audit timestamps must be unambiguous UTC instants.
         "event_type": event_type,
         "user_id": user_id,
         "details": safe_details,
@@ -276,3 +310,73 @@ def get_recent_audit_events(count: int = 20) -> List[Dict[str, Any]]:
         pass
 
     return events
+
+
+# ── Merkle Root Computation (CMS-AUD-01) ─────────────────────────────────
+#
+# These helpers operate on already-decrypted in-memory event lists. The
+# canonical, DB-aware implementation lives in :mod:`core.merkle` and is
+# what the API and the daily background task use. We expose the same
+# primitives here so that anything still backed by the legacy file-based
+# audit log (``audit_log.json``) can also be folded into a daily root —
+# during the transition window we want both backends to produce the same
+# root for the same set of events.
+
+def _merkle_leaf_for_file_event(event: Dict[str, Any]) -> str:
+    """Project a file-log event into the same canonical leaf shape used by
+    :func:`core.merkle.leaf_hash` for the DB-backed audit chain."""
+    # Lazy import — keeps `core.safety` importable in environments that
+    # have not installed SQLAlchemy yet (e.g. doc builds).
+    from core.merkle import leaf_hash
+
+    return leaf_hash(
+        {
+            "event_id": event.get("event_id") or event.get("current_hash"),
+            "event_type": event.get("event_type"),
+            "timestamp": event.get("timestamp"),
+            "previous_hash": event.get("previous_hash"),
+            "cryptographic_hash": event.get("current_hash"),
+            "payload": event.get("details", {}),
+        }
+    )
+
+
+def compute_daily_merkle_root_from_file(target_day_iso: Optional[str] = None) -> Dict[str, Any]:
+    """Compute a Merkle root over events in the legacy file-based audit log.
+
+    Returns ``{"day", "merkle_root", "event_count", "event_hashes"}``.
+    Used by the daily background task as a fallback when the Postgres
+    audit chain is unreachable so we still emit a signed root for the
+    day instead of skipping it.
+    """
+    from core.merkle import EMPTY_TREE_ROOT, compute_merkle_root  # lazy
+
+    target = target_day_iso or datetime.now(timezone.utc).date().isoformat()  # Security: Merkle audit dates must use explicit UTC.
+    if not os.path.exists(Config.AUDIT_LOG_FILE):
+        return {
+            "day": target,
+            "merkle_root": EMPTY_TREE_ROOT,
+            "event_count": 0,
+            "event_hashes": [],
+        }
+    try:
+        data = _get_storage().load_json(Config.AUDIT_LOG_FILE) or []
+    except Exception:
+        data = []
+    if not isinstance(data, list):
+        data = []
+
+    todays = [
+        e for e in data
+        if isinstance(e, dict)
+        and isinstance(e.get("timestamp"), str)
+        and e["timestamp"].startswith(target)
+    ]
+    leaves = [_merkle_leaf_for_file_event(e) for e in todays]
+    return {
+        "day": target,
+        "merkle_root": compute_merkle_root(leaves),
+        "event_count": len(todays),
+        "event_hashes": [e.get("current_hash") for e in todays],
+    }
+

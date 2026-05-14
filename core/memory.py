@@ -2,6 +2,10 @@
 Buddi Memory — Lean v3
 Volatile and simple context management.
 """
+# TODO(human): Memory is volatile and per-request. For multi-turn clinical
+# conversations, replace with a Redis-backed session store keyed on
+# (tenant_id, session_id). Current behaviour: every HTTP request sees an
+# empty history.
 from typing import Any, Dict, List, Optional
 import json
 import os
