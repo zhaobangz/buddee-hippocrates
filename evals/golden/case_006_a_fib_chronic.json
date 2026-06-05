@@ -1,0 +1,12 @@
+{
+    "case_id": "case_006_a_fib_chronic",
+    "clinician_id": "placeholder:awaiting-advisor-hire-1",
+    "labeled_at": "2026-05-08T00:00:00Z",
+    "specialty": "primary_care",
+    "tenant_id_hint": "synthetic",
+    "note": "76-year-old male with longstanding chronic atrial fibrillation, rate-controlled on metoprolol succinate 100mg daily, anticoagulated on apixaban 5mg BID. CHA2DS2-VASc score 4. No bleeding events. Continue current management.",
+    "billed_codes": ["I48.91"],
+    "expected_codes": ["I48.20"],
+    "must_abstain_codes": ["I50.22", "I63.9"],
+    "notes": "Refines unspecified afib (I48.91) to chronic afib (I48.20) — HCC weight differs."
+}

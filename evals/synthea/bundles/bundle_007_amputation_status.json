@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1964-01-01",
+        "gender": "male",
+        "id": "c4734364-ac2e-e8ce-2fff-cd79ed175837",
+        "name": [
+          {
+            "family": "Reeves",
+            "given": [
+              "Devon"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "2561e3b9-4f2f-3aa4-1441-9d065fad48e8",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/c4734364-ac2e-e8ce-2fff-cd79ed175837"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NjEteWVhci1vbGQgbWFsZSB3aXRoIHR5cGUgMiBkaWFiZXRlcywgcHJpb3IgcmlnaHQgYmVsb3cta25lZSBhbXB1dGF0aW9uIDIwMTkgZm9yIGRpYWJldGljIGZvb3QgdWxjZXIgd2l0aCBnYW5ncmVuZS4gVXNlcyBwcm9zdGhlc2lzLCBhbWJ1bGF0ZXMgaW5kZXBlbmRlbnRseS4=",
+              "title": "Progress note (amputation-status)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/2561e3b9-4f2f-3aa4-1441-9d065fad48e8"
+            }
+          ]
+        },
+        "id": "815bd54b-3f59-16ab-17d2-baa93836cfac",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/c4734364-ac2e-e8ce-2fff-cd79ed175837"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "E11.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/2561e3b9-4f2f-3aa4-1441-9d065fad48e8"
+        },
+        "id": "7a3dd6f2-47a2-e490-dbdf-47024ca9d0da",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/c4734364-ac2e-e8ce-2fff-cd79ed175837"
+        }
+      }
+    }
+  ],
+  "id": "37c88fb5-e45d-5d75-3606-f453e1327241",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

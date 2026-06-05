@@ -6,9 +6,7 @@ Volatile and simple context management.
 # conversations, replace with a Redis-backed session store keyed on
 # (tenant_id, session_id). Current behaviour: every HTTP request sees an
 # empty history.
-from typing import Any, Dict, List, Optional
-import json
-import os
+from typing import Any, Dict, List
 
 class Memory:
     def __init__(self, max_history: int = 10):

@@ -1,0 +1,12 @@
+{
+    "case_id": "case_007_amputation_status",
+    "clinician_id": "placeholder:awaiting-advisor-hire-1",
+    "labeled_at": "2026-05-08T00:00:00Z",
+    "specialty": "primary_care",
+    "tenant_id_hint": "synthetic",
+    "note": "61-year-old male with type 2 diabetes complicated by prior right below-knee amputation in 2019 secondary to diabetic foot ulcer and gangrene. Currently uses a prosthesis, ambulates independently. Diabetes on insulin glargine + lispro. A1C 7.8.",
+    "billed_codes": ["E11.9"],
+    "expected_codes": ["E11.51", "Z89.511"],
+    "must_abstain_codes": ["I50.22"],
+    "notes": "Status codes (Z89.511 acquired absence of right lower leg below the knee) materially affect HCC capture for amputation status."
+}

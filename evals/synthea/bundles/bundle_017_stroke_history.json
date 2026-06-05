@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1957-01-01",
+        "gender": "female",
+        "id": "64f3ec4a-9584-3140-18a6-26fb0e861d4e",
+        "name": [
+          {
+            "family": "Subramanian",
+            "given": [
+              "Priya"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "a966de84-680e-c668-785e-d5a196f2af35",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/64f3ec4a-9584-3140-18a6-26fb0e861d4e"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NjgteWVhci1vbGQgZmVtYWxlIHdpdGggaGlzdG9yeSBvZiBsZWZ0IE1DQSBpc2NoZW1pYyBzdHJva2UgMjAyMiwgcmVzaWR1YWwgcmlnaHQtYXJtIHdlYWtuZXNzIDQvNS4gT24gYXNwaXJpbiArIHN0YXRpbi4=",
+              "title": "Progress note (stroke-history)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/a966de84-680e-c668-785e-d5a196f2af35"
+            }
+          ]
+        },
+        "id": "0e755228-66f0-7c89-9692-e9c847a1009f",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/64f3ec4a-9584-3140-18a6-26fb0e861d4e"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I63.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/a966de84-680e-c668-785e-d5a196f2af35"
+        },
+        "id": "63920112-66f0-1df0-54f9-193e0e552582",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/64f3ec4a-9584-3140-18a6-26fb0e861d4e"
+        }
+      }
+    }
+  ],
+  "id": "8031d428-82d3-1892-3fb7-e3caee349e65",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

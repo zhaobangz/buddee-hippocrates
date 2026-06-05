@@ -1,0 +1,114 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1939-01-01",
+        "gender": "male",
+        "id": "f251edd2-f9ea-7a4e-a7d5-57716edffc29",
+        "name": [
+          {
+            "family": "Banerjee",
+            "given": [
+              "George"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "282e7884-f754-f8ea-26b4-0d8705866de3",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/f251edd2-f9ea-7a4e-a7d5-57716edffc29"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "ODYteWVhci1vbGQgbWFsZSB3aXRoIHN0YWdlIDNiIENLRCAoZUdGUiAzOCkgb24gYmFja2dyb3VuZCBvZiBsb25nLXN0YW5kaW5nIGh5cGVydGVuc2lvbi4gRG9jdW1lbnRlZCBoeXBlcnRlbnNpdmUgaGVhcnQgYW5kIGNocm9uaWMga2lkbmV5IGRpc2Vhc2Uu",
+              "title": "Progress note (ckd-htn-elderly)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/282e7884-f754-f8ea-26b4-0d8705866de3"
+            }
+          ]
+        },
+        "id": "ec82d59e-da78-e9da-590d-eec1e5622ec5",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/f251edd2-f9ea-7a4e-a7d5-57716edffc29"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I10",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/282e7884-f754-f8ea-26b4-0d8705866de3"
+        },
+        "id": "f6304ac0-06e2-cf2d-58ae-b8ed17e2d162",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/f251edd2-f9ea-7a4e-a7d5-57716edffc29"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "N18.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/282e7884-f754-f8ea-26b4-0d8705866de3"
+        },
+        "id": "a6bb47df-ba23-9f9a-27ee-858cb7f01526",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/f251edd2-f9ea-7a4e-a7d5-57716edffc29"
+        }
+      }
+    }
+  ],
+  "id": "b0d7a36f-7ad6-1835-d914-d749f363fe66",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

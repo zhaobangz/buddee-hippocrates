@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1956-01-01",
+        "gender": "male",
+        "id": "c388dcff-93cb-a5f5-feac-e9ba6197b490",
+        "name": [
+          {
+            "family": "Bell",
+            "given": [
+              "Aaron"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "79034c1b-a5a1-f132-e1dd-83933bf15069",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/c388dcff-93cb-a5f5-feac-e9ba6197b490"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NjkteWVhci1vbGQgbWFsZSB3aXRoIHBlcmlwaGVyYWwgYXJ0ZXJ5IGRpc2Vhc2UsIGNsYXVkaWNhdGlvbiBhdCBvbmUgYmxvY2ssIEFCSSAwLjYyIG9uIHRoZSByaWdodC4gSGlzdG9yeSBvZiBDRUEgMjAxOC4=",
+              "title": "Progress note (vascular-pad)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/79034c1b-a5a1-f132-e1dd-83933bf15069"
+            }
+          ]
+        },
+        "id": "6a9fc3a2-01a2-cbf7-dda5-5e92c94a4f2e",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/c388dcff-93cb-a5f5-feac-e9ba6197b490"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I73.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/79034c1b-a5a1-f132-e1dd-83933bf15069"
+        },
+        "id": "d0f369a6-4bdf-dc24-4469-2630c7c573bb",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/c388dcff-93cb-a5f5-feac-e9ba6197b490"
+        }
+      }
+    }
+  ],
+  "id": "c54149d9-8d4f-21e5-a4be-a6b56106ef03",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

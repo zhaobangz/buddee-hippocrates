@@ -1,0 +1,12 @@
+{
+    "case_id": "case_010_cancer_treated",
+    "clinician_id": "placeholder:awaiting-advisor-hire-1",
+    "labeled_at": "2026-05-08T00:00:00Z",
+    "specialty": "primary_care",
+    "tenant_id_hint": "synthetic",
+    "note": "55-year-old female with history of breast cancer, stage IIA, status post lumpectomy + radiation + 5 years adjuvant aromatase inhibitor (completed 2024). Currently disease-free per oncology surveillance MRI. On Z79.811 (long-term use of aromatase inhibitor — note: completed). No active malignancy.",
+    "billed_codes": ["C50.911"],
+    "expected_codes": ["Z85.3"],
+    "must_abstain_codes": ["C50.911", "C79.81"],
+    "notes": "Cancer is in remission — billing C50.911 (active malignancy) instead of Z85.3 (personal history) is an FCA-class risk. Must abstain from active-malignancy codes."
+}

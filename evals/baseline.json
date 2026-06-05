@@ -1,0 +1,5 @@
+{
+    "precision": 0.10,
+    "recall": 0.10,
+    "notes": "Initial seed baseline computed against the deterministic offline fallback (_demo_shadow_result with include_fallback=False). This is intentionally a low number: the offline path is a wiring test, not a real precision/recall measurement. Bump to LLM-on numbers (target precision >= 0.65, recall >= 0.60) once the clinician advisor (Hire #1) finalises the golden set per manual §2.2 week 3."
+}

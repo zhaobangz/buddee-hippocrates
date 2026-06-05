@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1972-01-01",
+        "gender": "female",
+        "id": "86ea0228-9742-ad58-8fa1-95a21d0e23a7",
+        "name": [
+          {
+            "family": "Hosseini",
+            "given": [
+              "Bahar"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "aab0c78e-4094-9b26-213f-2f31e28c3008",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/86ea0228-9742-ad58-8fa1-95a21d0e23a7"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NTMteWVhci1vbGQgZmVtYWxlIHdpdGggb2JzdHJ1Y3RpdmUgc2xlZXAgYXBuZWEsIEFISSAyOCAoc2V2ZXJlKS4gQ1BBUC1hZGhlcmVudCBhdCA2LjIgaG91cnMvbmlnaHQu",
+              "title": "Progress note (sleep-apnea)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/aab0c78e-4094-9b26-213f-2f31e28c3008"
+            }
+          ]
+        },
+        "id": "382f42cb-79f1-eb26-a0e6-3a74cef37f87",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/86ea0228-9742-ad58-8fa1-95a21d0e23a7"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "G47.30",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/aab0c78e-4094-9b26-213f-2f31e28c3008"
+        },
+        "id": "c249f778-a691-3300-eb06-c28591d30866",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/86ea0228-9742-ad58-8fa1-95a21d0e23a7"
+        }
+      }
+    }
+  ],
+  "id": "5ae49787-2d3a-0ac5-917c-f44220070321",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

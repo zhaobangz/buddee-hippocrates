@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1991-01-01",
+        "gender": "male",
+        "id": "51f715c6-f84c-1a7c-5dce-e28fccebeccc",
+        "name": [
+          {
+            "family": "Romero",
+            "given": [
+              "Lucas"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "eebd0102-f4ca-205d-a97d-8e3d2aca12c5",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/51f715c6-f84c-1a7c-5dce-e28fccebeccc"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "MzQteWVhci1vbGQgbWFsZSB3aXRoIHR5cGUgMSBkaWFiZXRlcyBzaW5jZSBhZ2UgMTIsIGluc3VsaW4gcHVtcCArIENHTS4gQTFDIDcuMS4gTm8gcmV0aW5vcGF0aHksIG1pY3JvYWxidW1pbnVyaWEgMjggbWcvZy4=",
+              "title": "Progress note (t1dm-pump)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/eebd0102-f4ca-205d-a97d-8e3d2aca12c5"
+            }
+          ]
+        },
+        "id": "c976b76c-beca-b1f6-8ddd-33fd5b1eeec1",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/51f715c6-f84c-1a7c-5dce-e28fccebeccc"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "E10.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/eebd0102-f4ca-205d-a97d-8e3d2aca12c5"
+        },
+        "id": "5c310e90-0ba7-2da6-bb38-d11ab9e933eb",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/51f715c6-f84c-1a7c-5dce-e28fccebeccc"
+        }
+      }
+    }
+  ],
+  "id": "42d8d473-b7b1-5e10-bcc0-845e208ef5d9",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

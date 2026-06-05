@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1976-01-01",
+        "gender": "other",
+        "id": "6138445a-5afb-4f7e-ae33-2a3260ea932a",
+        "name": [
+          {
+            "family": "Thompson",
+            "given": [
+              "Quinn"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "4139adb8-8993-9535-599e-80cd1d209219",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/6138445a-5afb-4f7e-ae33-2a3260ea932a"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NDkteWVhci1vbGQgcGF0aWVudCB3aXRoIGFsY29ob2wtcmVsYXRlZCBjaXJyaG9zaXMsIENoaWxkLVB1Z2ggQS4gRG9jdW1lbnRlZCBhc2NpdGVzIG1hbmFnZWQgd2l0aCBkaXVyZXRpY3MuIEFic3RpbmVudCBmb3IgMTQgbW9udGhzLg==",
+              "title": "Progress note (liver-cirrhosis)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/4139adb8-8993-9535-599e-80cd1d209219"
+            }
+          ]
+        },
+        "id": "02e5fccb-281b-5bfc-6865-10246f0880ce",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/6138445a-5afb-4f7e-ae33-2a3260ea932a"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "K70.30",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/4139adb8-8993-9535-599e-80cd1d209219"
+        },
+        "id": "a5dc5724-f5aa-d5b9-3e0c-de4394312fb8",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/6138445a-5afb-4f7e-ae33-2a3260ea932a"
+        }
+      }
+    }
+  ],
+  "id": "7dbc895f-534b-6ad5-c9fb-0f2e4cca9b70",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

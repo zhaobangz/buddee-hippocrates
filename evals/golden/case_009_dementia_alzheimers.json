@@ -1,0 +1,12 @@
+{
+    "case_id": "case_009_dementia_alzheimers",
+    "clinician_id": "placeholder:awaiting-advisor-hire-1",
+    "labeled_at": "2026-05-08T00:00:00Z",
+    "specialty": "primary_care",
+    "tenant_id_hint": "synthetic",
+    "note": "82-year-old female with Alzheimer's-type dementia, late onset. MoCA 14/30 at last visit. Lives with daughter, requires assistance with IADLs. Behavioral disturbance: nighttime agitation, currently on low-dose quetiapine. Continue donepezil.",
+    "billed_codes": ["F03.90"],
+    "expected_codes": ["G30.1", "F02.81"],
+    "must_abstain_codes": ["F33.41"],
+    "notes": "Refines unspecified dementia (F03.90) to Alzheimer's late onset with behavioral disturbance (G30.1 + F02.81)."
+}

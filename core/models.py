@@ -50,6 +50,13 @@ class Tenant(Base):
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+    # Manual §7.2 Risk #1 mitigation: real PHI cannot flow through
+    # /ingest/fhir for this tenant until the BAA paperwork (LLM
+    # provider + tenant) is filed and this column is flipped to True.
+    # See alembic/versions/7a3c8d9f0142_rls_baa_hnsw.py and
+    # docs/COMPLIANCE/baa_status.md.
+    baa_confirmed = Column(Boolean, nullable=False, default=False, server_default="false")
+    baa_confirmed_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class TenantApiKey(Base):

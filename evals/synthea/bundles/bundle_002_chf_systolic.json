@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1953-01-01",
+        "gender": "female",
+        "id": "3fb5dc7c-62e0-f8e4-203d-06349d46d40b",
+        "name": [
+          {
+            "family": "Park",
+            "given": [
+              "Linda"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "8e0a642b-aeb0-43de-beb2-e4226e9934dc",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/3fb5dc7c-62e0-f8e4-203d-06349d46d40b"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NzIteWVhci1vbGQgZmVtYWxlIHdpdGggY2hyb25pYyBzeXN0b2xpYyBjb25nZXN0aXZlIGhlYXJ0IGZhaWx1cmUsIEVGIDMyJSBvbiBlY2hvLiBOWUhBIENsYXNzIElJSS4gT24gR0RNVCBpbmNsdWRpbmcgY2FydmVkaWxvbCwgbGlzaW5vcHJpbCwgc3Bpcm9ub2xhY3RvbmUsIGZ1cm9zZW1pZGUu",
+              "title": "Progress note (chf-systolic)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/8e0a642b-aeb0-43de-beb2-e4226e9934dc"
+            }
+          ]
+        },
+        "id": "147c9b9a-d4f2-c0ea-9683-c7273291061b",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/3fb5dc7c-62e0-f8e4-203d-06349d46d40b"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I50.20",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/8e0a642b-aeb0-43de-beb2-e4226e9934dc"
+        },
+        "id": "f2b19a83-26a7-738f-95b8-af1019b0aaef",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/3fb5dc7c-62e0-f8e4-203d-06349d46d40b"
+        }
+      }
+    }
+  ],
+  "id": "d791ff5f-40f7-851d-3a4b-fdbc82631e28",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

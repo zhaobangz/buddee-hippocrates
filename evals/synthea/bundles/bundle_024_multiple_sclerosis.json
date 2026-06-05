@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1981-01-01",
+        "gender": "female",
+        "id": "4bf66658-2e6e-7037-7843-d1d101908b1c",
+        "name": [
+          {
+            "family": "Almeida",
+            "given": [
+              "Ines"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "756b69b9-cfb1-15f9-28f3-a094029cec90",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/4bf66658-2e6e-7037-7843-d1d101908b1c"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NDQteWVhci1vbGQgZmVtYWxlIHdpdGggcmVsYXBzaW5nLXJlbWl0dGluZyBNUywgb24gb2NyZWxpenVtYWIuIEVEU1MgMi41LiBObyBjbGluaWNhbCByZWxhcHNlcyBwYXN0IDE4IG1vbnRocy4=",
+              "title": "Progress note (multiple-sclerosis)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/756b69b9-cfb1-15f9-28f3-a094029cec90"
+            }
+          ]
+        },
+        "id": "1a073ef1-bcd2-af96-4e47-0ffe95a332ad",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/4bf66658-2e6e-7037-7843-d1d101908b1c"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "G35",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/756b69b9-cfb1-15f9-28f3-a094029cec90"
+        },
+        "id": "1b04e498-a2be-6495-3515-0b52422e891d",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/4bf66658-2e6e-7037-7843-d1d101908b1c"
+        }
+      }
+    }
+  ],
+  "id": "b098ac40-4997-544b-2634-737c16a68900",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

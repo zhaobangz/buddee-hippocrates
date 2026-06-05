@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1951-01-01",
+        "gender": "male",
+        "id": "b261dad5-c713-5f49-cc32-642520ea981a",
+        "name": [
+          {
+            "family": "Mendoza",
+            "given": [
+              "Cesar"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "733264d5-342d-5dbf-7fa8-584187bc0bd2",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/b261dad5-c713-5f49-cc32-642520ea981a"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NzQteWVhci1vbGQgbWFsZSB3aXRoIHN0YWJsZSBDQUQsIGhpc3Rvcnkgb2YgdHdvLXZlc3NlbCBzdGVudGluZyAyMDE3LiBBc3ltcHRvbWF0aWMuIE9uIGR1YWwgYW50aXBsYXRlbGV0LCBzdGF0aW4u",
+              "title": "Progress note (cad-stable)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/733264d5-342d-5dbf-7fa8-584187bc0bd2"
+            }
+          ]
+        },
+        "id": "b4c2d7f1-7bcf-7bd5-9768-7ec450d9ba71",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/b261dad5-c713-5f49-cc32-642520ea981a"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I25.10",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/733264d5-342d-5dbf-7fa8-584187bc0bd2"
+        },
+        "id": "3fb6f946-5566-ee30-c471-1f61d50a2cee",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/b261dad5-c713-5f49-cc32-642520ea981a"
+        }
+      }
+    }
+  ],
+  "id": "461d918a-ff1f-01f7-1c15-64c14e6781ac",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

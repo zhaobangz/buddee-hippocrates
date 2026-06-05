@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1989-01-01",
+        "gender": "female",
+        "id": "6fad7f06-7a46-fff9-6009-a6fd64163650",
+        "name": [
+          {
+            "family": "Brennan",
+            "given": [
+              "Olivia"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "2f7c8cb5-2ebb-c1a5-d157-2902ddb413a1",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/6fad7f06-7a46-fff9-6009-a6fd64163650"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "MzYteWVhci1vbGQgZmVtYWxlIHdpdGggbW9kZXJhdGUgcGVyc2lzdGVudCBhc3RobWEsIEFDVCBzY29yZSAxNy4gT24gbWVkaXVtLWRvc2UgSUNTL0xBQkEuIFR3byBvcmFsIHN0ZXJvaWQgYnVyc3RzIGluIHBhc3QgeWVhci4=",
+              "title": "Progress note (asthma-persistent)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/2f7c8cb5-2ebb-c1a5-d157-2902ddb413a1"
+            }
+          ]
+        },
+        "id": "8e14e447-de8e-a3f5-e011-47f8e3952253",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/6fad7f06-7a46-fff9-6009-a6fd64163650"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "J45.40",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/2f7c8cb5-2ebb-c1a5-d157-2902ddb413a1"
+        },
+        "id": "7bfe58b9-c153-5f6f-fc07-724415dbdba8",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/6fad7f06-7a46-fff9-6009-a6fd64163650"
+        }
+      }
+    }
+  ],
+  "id": "72fba644-7c69-d27b-a70d-d73278ad4e5c",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}
