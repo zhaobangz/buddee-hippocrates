@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1952-01-01",
+        "gender": "male",
+        "id": "d818ba94-29c5-e77f-fec8-2ced080d6d6f",
+        "name": [
+          {
+            "family": "Sokolova",
+            "given": [
+              "Frank"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "5f86cb00-9459-277c-0b66-46454526d5e4",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/d818ba94-29c5-e77f-fec8-2ced080d6d6f"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NzMteWVhci1vbGQgbWFsZSB3aXRoIEVTUkQgb24gaGVtb2RpYWx5c2lzIE1XRiB2aWEgQVYgZmlzdHVsYS4gVW5kZXJseWluZyBkaWFiZXRpYyBuZXBocm9wYXRoeS4gS3QvViAxLjYu",
+              "title": "Progress note (esrd-dialysis)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/5f86cb00-9459-277c-0b66-46454526d5e4"
+            }
+          ]
+        },
+        "id": "829df121-212d-704d-d06d-65bd473b82b5",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/d818ba94-29c5-e77f-fec8-2ced080d6d6f"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "N18.6",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/5f86cb00-9459-277c-0b66-46454526d5e4"
+        },
+        "id": "eab4b600-daf8-95af-c715-da562fbb4eaf",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/d818ba94-29c5-e77f-fec8-2ced080d6d6f"
+        }
+      }
+    }
+  ],
+  "id": "6e5e28c4-6364-43ed-552d-d08b91365607",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

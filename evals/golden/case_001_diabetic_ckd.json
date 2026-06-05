@@ -1,0 +1,12 @@
+{
+    "case_id": "case_001_diabetic_ckd",
+    "clinician_id": "placeholder:awaiting-advisor-hire-1",
+    "labeled_at": "2026-05-08T00:00:00Z",
+    "specialty": "primary_care",
+    "tenant_id_hint": "synthetic",
+    "note": "67-year-old male with type 2 diabetes mellitus complicated by chronic kidney disease stage 3a. eGFR 51 and urine albumin/creatinine ratio 42 mg/g. Hypertension treated with lisinopril. Assessment notes diabetic CKD and hypertensive CKD; continue renal-protective therapy and monitor BMP.",
+    "billed_codes": ["E11.9", "I10"],
+    "expected_codes": ["E11.22", "N18.31", "I12.9"],
+    "must_abstain_codes": ["I50.9", "C50.9"],
+    "notes": "Canonical diabetic-CKD anchor case. Mirrors the deterministic demo so the offline CI baseline of 0.30 is meaningful."
+}

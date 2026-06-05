@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1968-01-01",
+        "gender": "male",
+        "id": "f547834d-8f73-783e-97ed-536333785fa4",
+        "name": [
+          {
+            "family": "Diallo",
+            "given": [
+              "Yusuf"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "4fedbf04-15bf-9600-94dd-6660696c8bbe",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/f547834d-8f73-783e-97ed-536333785fa4"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NTcteWVhci1vbGQgbWFsZSB3aXRoIHNlcm9wb3NpdGl2ZSByaGV1bWF0b2lkIGFydGhyaXRpcywgb24gbWV0aG90cmV4YXRlICsgYWRhbGltdW1hYi4gQ0RBSSA2IChsb3cgZGlzZWFzZSBhY3Rpdml0eSku",
+              "title": "Progress note (rheumatoid-arthritis)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/4fedbf04-15bf-9600-94dd-6660696c8bbe"
+            }
+          ]
+        },
+        "id": "0b22fd9a-1ca7-055b-ba48-80852e13d5c2",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/f547834d-8f73-783e-97ed-536333785fa4"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "M06.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/4fedbf04-15bf-9600-94dd-6660696c8bbe"
+        },
+        "id": "d2978969-355c-287b-1588-afb3c37f36f5",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/f547834d-8f73-783e-97ed-536333785fa4"
+        }
+      }
+    }
+  ],
+  "id": "650059e3-1c59-33a5-b0cb-88ce738a5f10",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1943-01-01",
+        "gender": "female",
+        "id": "54e990a3-ce91-e770-c26c-fdb1111d122c",
+        "name": [
+          {
+            "family": "Ngozi",
+            "given": [
+              "Beatrice"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "661bfdca-6afa-9fa8-f59f-7fa8313e81b9",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/54e990a3-ce91-e770-c26c-fdb1111d122c"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "ODIteWVhci1vbGQgZmVtYWxlIHdpdGggQWx6aGVpbWVyJ3MtdHlwZSBkZW1lbnRpYSwgbGF0ZSBvbnNldC4gTW9DQSAxNC8zMC4gQmVoYXZpb3JhbCBkaXN0dXJiYW5jZSB3aXRoIG5pZ2h0dGltZSBhZ2l0YXRpb24u",
+              "title": "Progress note (dementia-alzheimers)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/661bfdca-6afa-9fa8-f59f-7fa8313e81b9"
+            }
+          ]
+        },
+        "id": "98435b33-dd1b-0a34-1b0f-7072b49c11b5",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/54e990a3-ce91-e770-c26c-fdb1111d122c"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "F03.90",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/661bfdca-6afa-9fa8-f59f-7fa8313e81b9"
+        },
+        "id": "5c47a5e2-6383-4039-7e9d-f69fd27ad793",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/54e990a3-ce91-e770-c26c-fdb1111d122c"
+        }
+      }
+    }
+  ],
+  "id": "722db0dc-d976-3161-84fe-6c6bca267119",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

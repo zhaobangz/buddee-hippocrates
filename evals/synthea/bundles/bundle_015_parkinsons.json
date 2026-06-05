@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1944-01-01",
+        "gender": "male",
+        "id": "ed9f477c-2d63-28fb-3cf9-f5fe7e1dabaa",
+        "name": [
+          {
+            "family": "Wu",
+            "given": [
+              "Sebastian"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "38f15b61-3dd5-0d33-750d-edc86250a428",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/ed9f477c-2d63-28fb-3cf9-f5fe7e1dabaa"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "ODEteWVhci1vbGQgbWFsZSB3aXRoIGlkaW9wYXRoaWMgUGFya2luc29uIGRpc2Vhc2UsIEhvZWhuICYgWWFociBzdGFnZSAzLiBPbiBjYXJiaWRvcGEvbGV2b2RvcGEgKyByYXNhZ2lsaW5lLiBGYWxscyB0d2ljZSBpbiBwYXN0IDYgbW9udGhzLg==",
+              "title": "Progress note (parkinsons)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/38f15b61-3dd5-0d33-750d-edc86250a428"
+            }
+          ]
+        },
+        "id": "5bbc8fdb-3500-9cf1-fd86-1e5ac5bce4a4",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/ed9f477c-2d63-28fb-3cf9-f5fe7e1dabaa"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "G20",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/38f15b61-3dd5-0d33-750d-edc86250a428"
+        },
+        "id": "90806d19-f1b7-b6b3-f40e-5d3dfdd122a8",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/ed9f477c-2d63-28fb-3cf9-f5fe7e1dabaa"
+        }
+      }
+    }
+  ],
+  "id": "1fad747d-eb2e-0459-f29e-4dfc44db196d",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

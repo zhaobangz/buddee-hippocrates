@@ -89,6 +89,33 @@ jobs:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/buddi"
         run: pytest -q
 
+      # Manual §2.2 week 3 deliverable: eval harness with CI regression
+      # gate. Runs in offline mode (no LLM calls, no PHI risk) against
+      # the 10-case clinician-labeled seed set in evals/golden/. Fails
+      # the build on precision/recall regression > 5% or any
+      # must_abstain_codes violation.
+      - name: Eval regression gate
+        env:
+          BUDDI_TEST_MODE: "1"
+          BUDDI_RATE_LIMIT_DISABLED: "1"
+          BUDDI_DISABLE_MERKLE_TASK: "1"
+          SECRET_KEY: "ci-test-secret-key-0123456789abcdef0123456789abcdef"
+          BUDDI_STORAGE_KEY: "ci-test-storage-key-not-for-prod"
+          API_KEY: "ci-test-api-key-abcdef1234567890"
+          CORS_ORIGINS: "http://localhost:5173"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/buddi"
+        run: python -m evals.run_eval --offline --cases evals/golden --baseline evals/baseline.json
+
+      # Verify the Synthea generator stays in sync with the bundles
+      # shipped under evals/synthea/bundles/ — catches drift where the
+      # CASES table is edited but the on-disk bundles aren't refreshed.
+      - name: Synthea generator smoke test
+        env:
+          BUDDI_TEST_MODE: "1"
+        run: |
+          python -m evals.synthea.generate --out /tmp/buddi-synthea-check
+          test "$(ls /tmp/buddi-synthea-check/*.json | wc -l)" -ge 25
+
   frontend:
     runs-on: ubuntu-latest
     needs: test

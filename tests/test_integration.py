@@ -93,17 +93,25 @@ VALID_BUNDLE = {
 
 def test_fhir_ingest_accepts_valid_bundle(client, auth_headers):
     # The agent's LLM call is mocked — we only want to verify that the
-    # HTTP layer validates the bundle and returns a 2xx response.
+    # HTTP layer validates the bundle and returns a recognised response.
+    #
+    # 200 — bundle accepted and processed (BAA confirmed, agent up).
+    # 412 — BAA precondition not met (manual §7.2 Risk #1, the default
+    #       fail-closed state in CI where the DB is unreachable).
+    # 503 — agent failed to bootstrap in this environment.
     with patch("core.agent.Agent.handle", return_value=json.dumps({"ok": True})):
         resp = client.post(
             "/ingest/fhir",
             headers=auth_headers,
             json=VALID_BUNDLE,
         )
-    # 200 on success, 503 if the agent failed to bootstrap in this env.
-    assert resp.status_code in (200, 503)
+    assert resp.status_code in (200, 412, 503)
     if resp.status_code == 200:
         assert resp.json()["status"] == "success"
+    elif resp.status_code == 412:
+        # The detail must reference the BAA precondition so a regression
+        # to a different fail-closed reason gets caught.
+        assert "BAA" in resp.json()["detail"]
 
 
 def test_fhir_ingest_rejects_invalid_bundle(client, auth_headers):

@@ -19,10 +19,15 @@ cryptography==46.0.7
 argon2-cffi==23.1.0
 
 # --- LLM / AI ---
+# Anthropic Claude is the primary clinical-reasoning provider per
+# BUILD_PLAN.md and Buddi_Strategic_Founders_Operating_Manual.pdf §2.2.
+# OpenAI is retained as the embeddings provider (RAG only) and as a
+# fallback for deployments without an Anthropic key.
+anthropic==0.40.0
 openai==1.61.0
-# langchain-openai 0.2.14 requires openai>=1.58,<2.0.
-langchain-openai==0.2.14
 tiktoken==0.12.0
+# LangChain has been removed from the prompt path (manual §2.2 week 2).
+# Direct provider SDKs are used in core/llm_manager.py and core/rag_engine.py.
 
 # --- ML / Embeddings ---
 torch==2.5.1

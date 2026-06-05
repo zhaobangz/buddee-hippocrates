@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1949-01-01",
+        "gender": "male",
+        "id": "0eadf550-fa0c-ad49-4cb4-e9d2be263088",
+        "name": [
+          {
+            "family": "Tanaka",
+            "given": [
+              "Hiroshi"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "50857c5f-fb48-eb07-6146-eac785f31106",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/0eadf550-fa0c-ad49-4cb4-e9d2be263088"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NzYteWVhci1vbGQgbWFsZSB3aXRoIGxvbmdzdGFuZGluZyBjaHJvbmljIGF0cmlhbCBmaWJyaWxsYXRpb24sIHJhdGUtY29udHJvbGxlZCBvbiBtZXRvcHJvbG9sLCBhbnRpY29hZ3VsYXRlZCBvbiBhcGl4YWJhbi4gQ0hBMkRTMi1WQVNjIDQu",
+              "title": "Progress note (afib-chronic)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/50857c5f-fb48-eb07-6146-eac785f31106"
+            }
+          ]
+        },
+        "id": "84af652c-7575-2bb1-f6f7-24167f8ecd95",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/0eadf550-fa0c-ad49-4cb4-e9d2be263088"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I48.91",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/50857c5f-fb48-eb07-6146-eac785f31106"
+        },
+        "id": "46c09f8d-309d-4796-3fc8-66d413fac320",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/0eadf550-fa0c-ad49-4cb4-e9d2be263088"
+        }
+      }
+    }
+  ],
+  "id": "ee31ec1a-1495-61c0-8bc6-b697bef557b2",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

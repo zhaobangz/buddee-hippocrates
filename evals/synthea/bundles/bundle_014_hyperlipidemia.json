@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1979-01-01",
+        "gender": "female",
+        "id": "575776af-35ea-6d68-0f9f-537c92a402a7",
+        "name": [
+          {
+            "family": "Christensen",
+            "given": [
+              "Eve"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "70face46-8e28-31ad-dc0f-5ef872d656d2",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/575776af-35ea-6d68-0f9f-537c92a402a7"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NDYteWVhci1vbGQgZmVtYWxlIHdpdGggbWl4ZWQgaHlwZXJsaXBpZGVtaWEsIExETCAxNjggb24gcm9zdXZhc3RhdGluIDIwbWcuIFN0cm9uZyBmYW1pbHkgaGlzdG9yeSBvZiBwcmVtYXR1cmUgQ0FELg==",
+              "title": "Progress note (hyperlipidemia)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/70face46-8e28-31ad-dc0f-5ef872d656d2"
+            }
+          ]
+        },
+        "id": "dc17353e-25bb-8edc-f29e-812410585e3b",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/575776af-35ea-6d68-0f9f-537c92a402a7"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "E78.5",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/70face46-8e28-31ad-dc0f-5ef872d656d2"
+        },
+        "id": "b0b52aee-1e05-07f5-b25c-8dbc0ac1b093",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/575776af-35ea-6d68-0f9f-537c92a402a7"
+        }
+      }
+    }
+  ],
+  "id": "b50018b9-059d-4c74-d0f0-b893680caa21",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

@@ -58,10 +58,16 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
 
     # --- LLM ---
-    LLM_PROVIDER: str = "openai"
+    # Manual §2.2 week 2: Anthropic is the primary provider; OpenAI is the
+    # embeddings-only fallback. core/llm_manager.py reads these.
+    LLM_PROVIDER: str = "anthropic"
     LLM_API_URL: str = "https://api.openai.com/v1/chat/completions"
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "gpt-4-turbo"
+    LLM_MODEL: str = "claude-opus-4-5"
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-opus-4-5"
+    OPENAI_API_KEY: str = ""
+    OPENAI_EMBED_MODEL: str = "text-embedding-3-large"
 
     # --- Storage / Memory ---
     MEMORY_ENABLED: bool = True

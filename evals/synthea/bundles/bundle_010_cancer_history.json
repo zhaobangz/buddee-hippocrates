@@ -1,0 +1,94 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1970-01-01",
+        "gender": "female",
+        "id": "46429e16-7fc9-ff57-4d33-a2df455f9497",
+        "name": [
+          {
+            "family": "Goldberg",
+            "given": [
+              "Renee"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "fc957834-4154-9b92-8f7f-ee793461d4b6",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/46429e16-7fc9-ff57-4d33-a2df455f9497"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NTUteWVhci1vbGQgZmVtYWxlIHdpdGggaGlzdG9yeSBvZiBicmVhc3QgY2FuY2VyLCBzdGFnZSBJSUEsIHN0YXR1cyBwb3N0IGx1bXBlY3RvbXkgKyByYWRpYXRpb24gKyA1IHllYXJzIGFyb21hdGFzZSBpbmhpYml0b3IgKGNvbXBsZXRlZCkuIEN1cnJlbnRseSBkaXNlYXNlLWZyZWUu",
+              "title": "Progress note (cancer-history)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/fc957834-4154-9b92-8f7f-ee793461d4b6"
+            }
+          ]
+        },
+        "id": "73ec3f29-cfff-2c41-2a59-88924290b91a",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/46429e16-7fc9-ff57-4d33-a2df455f9497"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "C50.911",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/fc957834-4154-9b92-8f7f-ee793461d4b6"
+        },
+        "id": "9483cd44-ea4e-76d5-c62a-11a27b6f5976",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/46429e16-7fc9-ff57-4d33-a2df455f9497"
+        }
+      }
+    }
+  ],
+  "id": "a5d0ec57-0d97-6153-f803-e4e758e76a33",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

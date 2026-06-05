@@ -11,6 +11,20 @@ Fixes applied:
     ``core.safety.sanitize_response`` before being returned to callers.
   * CQ-03 — the bare ``except:`` at JSON parsing is replaced with
     ``except Exception as e`` and the error is logged.
+
+Manual §7.2 Risk #2 mitigations added in the Weeks 1–4 Compliance Sprint:
+
+  * **Confidence floor (CONFIDENCE_FLOOR, default 0.70)** — suggestions
+    below the floor are filtered out and recorded in an ``abstained_codes``
+    list rather than surfaced. The 70% number is a placeholder; the eval
+    harness in ``evals/`` is what tunes it on a clinician-labeled set.
+  * **Mandatory evidence quote** — any suggestion that arrives without a
+    non-empty ``justification`` is abstained, on the same theory: an
+    unsupported code is a hallucination risk we will not surface to a
+    coder until we can show the chart text that justifies it.
+  * **Abstain reason recorded** — every abstain decision lands in the
+    audit chain as ``hcc_suggestion_abstained`` so we can compute the
+    abstain rate per tenant (manual §6.2 Quality signal).
 """
 
 from __future__ import annotations
@@ -18,8 +32,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.llm_manager import LLMManager
 from core.memory import Memory
@@ -29,6 +44,18 @@ from core.rag_engine import get_rag_engine
 from core.schemas import PriorAuthDraft, ShadowModeResponse
 from core.safety import sanitize_response, validate_action, log_audit_event
 from tools import clinical_workflows
+
+
+# Default confidence floor — overridable via env so the eval harness can
+# tune it without redeploying. 0.70 is the safe starting value the
+# manual recommends; raise to 0.80+ once the clinician-labeled golden
+# set in ``evals/`` is stable.
+def _confidence_floor() -> float:
+    try:
+        return float(os.getenv("BUDDI_HCC_CONFIDENCE_FLOOR", "0.70"))
+    except ValueError:
+        return 0.70
+
 
 logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
@@ -175,16 +202,59 @@ Perform a Shadow-Mode audit of the clinical note against previously billed codes
 
             try:
                 response_obj = self.llm.ask_llm_structured(prompt, ShadowModeResponse)
+
+                # ---- §7.2 Risk #2: confidence floor + mandatory-evidence
+                # filtering. Anything that fails either gate is dropped
+                # from ``identified_codes`` and recorded in the audit
+                # chain as an abstain decision so we can compute the
+                # abstain rate per tenant (manual §6.2).
+                floor = _confidence_floor()
+                surfaced, abstained = _apply_safety_floor(
+                    response_obj.identified_codes, floor=floor
+                )
+                response_obj.identified_codes = surfaced
+                response_obj.recovered_revenue = float(
+                    sum(item.est_value for item in surfaced)
+                )
+                span.set_attribute("agent_confidence_floor", floor)
+                span.set_attribute("agent_codes_surfaced", len(surfaced))
+                span.set_attribute("agent_codes_abstained", len(abstained))
+                if abstained:
+                    log_audit_event(
+                        "hcc_suggestion_abstained",
+                        {
+                            "abstained_count": len(abstained),
+                            "confidence_floor": floor,
+                            "reasons": [
+                                {
+                                    "code": item.get("code"),
+                                    "confidence": item.get("confidence"),
+                                    "reason": item.get("_abstain_reason"),
+                                }
+                                for item in abstained
+                            ],
+                        },
+                    )
+
                 audit_hash = log_audit_event(
                     "shadow_mode_rcm_completed",
                     {
                         "recovered_revenue": response_obj.recovered_revenue,
                         "code_count": len(response_obj.identified_codes),
+                        "abstained_count": len(abstained),
+                        "confidence_floor": floor,
                     },
                 )
                 response_obj.audit_hash = audit_hash
                 response_obj.citations = [d["chunk_id"] for d in docs]
-                return response_obj.model_dump_json()
+                # Attach abstain telemetry to the JSON envelope so the
+                # operator UI can show "N suggestions abstained" without
+                # us widening the pydantic schema (which would ripple
+                # through every existing caller).
+                payload_out = json.loads(response_obj.model_dump_json())
+                payload_out["abstained_codes"] = abstained
+                payload_out["confidence_floor"] = floor
+                return json.dumps(payload_out)
             except Exception as e:
                 span.record_exception(e)
                 return json.dumps(
@@ -315,3 +385,54 @@ for procedure code {procedure_code} for an encounter ({encounter_id}). Payer:
             except Exception as e:
                 span.record_exception(e)
                 return json.dumps({"error": str(e)})
+
+
+# ----------------------------------------------------------------------
+# Safety floor (manual §7.2 Risk #2)
+# ----------------------------------------------------------------------
+
+
+def _apply_safety_floor(
+    codes: List[Any], *, floor: float
+) -> Tuple[List[Any], List[Dict[str, Any]]]:
+    """Split LLM-proposed codes into ``(surfaced, abstained)``.
+
+    A code is *surfaced* only if it clears both gates:
+
+      1. ``confidence >= floor``
+      2. ``justification`` is a non-empty quote from the clinical note
+
+    Anything else is *abstained* — we drop it from the visible response
+    and add a record to the audit chain. This is the cheapest possible
+    mitigation against the §7.2 hallucination-class risk: a hurried
+    coder cannot approve a 0.68-confidence suggestion they never saw.
+    """
+
+    surfaced: List[Any] = []
+    abstained: List[Dict[str, Any]] = []
+    for item in codes:
+        # ``item`` is a pydantic ``IdentifiedCode``; access fields safely.
+        confidence = getattr(item, "confidence", 0.0) or 0.0
+        justification = (getattr(item, "justification", "") or "").strip()
+        code = getattr(item, "code", "UNKNOWN")
+
+        if confidence < floor:
+            abstained.append(
+                {
+                    "code": code,
+                    "confidence": confidence,
+                    "_abstain_reason": "below_confidence_floor",
+                }
+            )
+            continue
+        if not justification:
+            abstained.append(
+                {
+                    "code": code,
+                    "confidence": confidence,
+                    "_abstain_reason": "missing_evidence_quote",
+                }
+            )
+            continue
+        surfaced.append(item)
+    return surfaced, abstained
