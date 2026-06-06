@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -34,21 +34,17 @@ const PriorAuthModal = ({ open, onClose }) => {
 
   const [procedureCode, setProcedureCode] = useState('CPT-99213');
   const [payer, setPayer] = useState('Medicare');
-  const [clinicalContext, setClinicalContext] = useState(
-    currentPatient?.clinical_note || '',
-  );
+  const [clinicalContextOverride, setClinicalContextOverride] = useState(null);
   const [demo, setDemo] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (open && currentPatient?.clinical_note && !clinicalContext) {
-      setClinicalContext(currentPatient.clinical_note);
-    }
-  }, [open, currentPatient, clinicalContext]);
+  const clinicalContext =
+    clinicalContextOverride ?? currentPatient?.clinical_note ?? '';
 
-  useEffect(() => {
-    if (!open) setCopied(false);
-  }, [open]);
+  const handleClose = () => {
+    setCopied(false);
+    onClose?.();
+  };
 
   const handleGenerate = async (e) => {
     e?.preventDefault?.();
@@ -60,7 +56,7 @@ const PriorAuthModal = ({ open, onClose }) => {
         clinicalContext,
         demo,
       });
-    } catch (err) {
+    } catch {
       // Error surfaces via the priorAuthError selector below.
     }
   };
@@ -86,7 +82,7 @@ const PriorAuthModal = ({ open, onClose }) => {
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) onClose?.();
+            if (e.target === e.currentTarget) handleClose();
           }}
         >
           <motion.div
@@ -116,7 +112,7 @@ const PriorAuthModal = ({ open, onClose }) => {
                 </div>
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors"
                 aria-label="Close"
               >
@@ -157,7 +153,7 @@ const PriorAuthModal = ({ open, onClose }) => {
                   </label>
                   <textarea
                     value={clinicalContext}
-                    onChange={(e) => setClinicalContext(e.target.value)}
+                    onChange={(e) => setClinicalContextOverride(e.target.value)}
                     rows={4}
                     className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                     placeholder="Paste the encounter note here..."
@@ -329,7 +325,7 @@ const PriorAuthModal = ({ open, onClose }) => {
                 Shadow-mode product · No automated submission
               </span>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="btn-secondary px-4 py-2 rounded-lg text-xs font-bold"
               >
                 Close

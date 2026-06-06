@@ -29,7 +29,6 @@ class ErrorBoundary extends React.Component {
     // Intentionally `console.error` only — do NOT forward the stack to a
     // third-party sink from here, the stack frame could include PHI-adjacent
     // state. Observability hooks live server-side (core/tracing.py).
-    // eslint-disable-next-line no-console
     console.error('[Buddi] render error caught by ErrorBoundary:', error, errorInfo);
   }
 

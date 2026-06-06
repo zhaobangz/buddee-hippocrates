@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Zap,
@@ -27,15 +27,12 @@ const ShadowPage = () => {
   const isShadowLoading = useStore((state) => state.isShadowLoading);
   const shadowError = useStore((state) => state.shadowError);
 
-  const [note, setNote] = useState(currentPatient.clinical_note || '');
-  const [billedCodes, setBilledCodes] = useState(
-    (currentPatient.billed_codes || []).join(', ')
-  );
+  const [noteOverride, setNoteOverride] = useState(null);
+  const [billedCodesOverride, setBilledCodesOverride] = useState(null);
 
-  useEffect(() => {
-    setNote(currentPatient.clinical_note || '');
-    setBilledCodes((currentPatient.billed_codes || []).join(', '));
-  }, [currentPatient]);
+  const note = noteOverride ?? currentPatient.clinical_note ?? '';
+  const billedCodes =
+    billedCodesOverride ?? (currentPatient.billed_codes || []).join(', ');
 
   const parsedCodes = useMemo(
     () =>
@@ -48,6 +45,8 @@ const ShadowPage = () => {
 
   const handleTrySamplePatient = async () => {
     const patient = await loadDemoPatient();
+    setNoteOverride(patient.clinical_note || '');
+    setBilledCodesOverride((patient.billed_codes || []).join(', '));
     await runShadowAudit({
       note: patient.clinical_note,
       billedCodes: patient.billed_codes,
@@ -107,7 +106,7 @@ const ShadowPage = () => {
             </span>
             <textarea
               value={note}
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => setNoteOverride(event.target.value)}
               rows={12}
               className="mt-2 w-full rounded-2xl bg-slate-950/80 border border-white/10 text-sm text-slate-200 p-4 focus:outline-none focus:ring-2 focus:ring-medical-500/50"
               placeholder="Paste encounter note..."
@@ -120,7 +119,7 @@ const ShadowPage = () => {
             </span>
             <input
               value={billedCodes}
-              onChange={(event) => setBilledCodes(event.target.value)}
+              onChange={(event) => setBilledCodesOverride(event.target.value)}
               className="mt-2 w-full rounded-2xl bg-slate-950/80 border border-white/10 text-sm text-slate-200 p-4 focus:outline-none focus:ring-2 focus:ring-medical-500/50"
               placeholder="E11.9, I10"
             />
