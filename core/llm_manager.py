@@ -1,13 +1,24 @@
-"""Buddi LLM Manager — Anthropic-primary, OpenAI-fallback, no LangChain.
+"""Buddi LLM Manager — Anthropic SDK primary, OpenAI-fallback.
 
 Implements the strategic-manual directive (§2.2 week 1–2 and BUILD_PLAN.md
 strategic bet #1):
 
-    Anthropic-first LLM stack with OpenAI as fallback. Claude Opus 4.6 for
-    clinical reasoning and safety arbitration; Claude Sonnet 4.6 for
-    high-volume coding suggestions; OpenAI text-embedding-3-large for
-    embeddings only (no PHI in the prompt path on OpenAI until you have a
-    current BAA on file).
+    Anthropic-first LLM stack with OpenAI as fallback. Claude Opus 4.7 for
+    clinical reasoning and safety arbitration; OpenAI text-embedding-3-large
+    for embeddings only (no PHI in the prompt path on OpenAI until you have
+    a current BAA on file).
+
+    Modernization over the previous raw-httpx implementation:
+      * Uses the official ``anthropic`` Python SDK (v0.109+)
+      * Default model upgraded to ``claude-opus-4-7``
+      * ``temperature`` removed — returns 400 on Opus 4.7
+      * Adaptive thinking enabled for structured calls (improves clinical
+        reasoning accuracy with no additional code complexity)
+      * ``output_config.effort = "high"`` tunes thinking depth for the
+        clinical-coding workload (balanced quality / cost)
+      * System-prompt prompt caching via ``cache_control`` (up to ~90%
+        savings on repeated clinical-context requests)
+      * Streaming for free-text calls prevents HTTP timeouts on long outputs
 
 Public surface (stable — ``core/agent.py`` depends on these):
 
@@ -17,10 +28,9 @@ Public surface (stable — ``core/agent.py`` depends on these):
     * ``LLMManager.ask_llm_structured_async(...)`` → S (pydantic model)
 
 Provider selection is driven by ``Config.LLM_PROVIDER`` (``"anthropic"``
-recommended for production, ``"openai"`` retained for legacy
-deployments). When ``anthropic`` is selected but the SDK / API key is
-missing we fall back to OpenAI with a logged warning rather than
-silently producing wrong output.
+recommended for production, ``"openai"`` retained for legacy deployments).
+When ``anthropic`` is selected but the API key is missing we fall back to
+OpenAI with a logged warning rather than silently producing wrong output.
 
 BAA tripwire (manual §7.2 Risk #1 mitigation):
 
@@ -33,9 +43,7 @@ BAA tripwire (manual §7.2 Risk #1 mitigation):
         delimiters (the canonical wrappers from ``core/agent.py``).
 
     This is a *fail-closed* guard: better to break the demo than to
-    leak ePHI to a provider whose BAA paperwork has not landed yet. The
-    operator UI is expected to surface the resulting error so the
-    on-call human can resolve the BAA gap.
+    leak ePHI to a provider whose BAA paperwork has not landed yet.
 """
 
 from __future__ import annotations
@@ -44,8 +52,9 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
+import anthropic as anthropic_sdk
 import httpx
 
 from core.config import Config
@@ -71,7 +80,7 @@ class BAAGuardError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# Provider abstraction
+# BAA guard (unchanged)
 # ---------------------------------------------------------------------------
 
 
@@ -79,16 +88,7 @@ _CLINICAL_NOTE_DELIMITERS = ("<clinical_note>", "<clinical_context>")
 
 
 def _baa_guard(prompt: str) -> None:
-    """Refuse the call if real-PHI heuristics fire and the BAA is unconfirmed.
-
-    Configuration:
-      * ``BUDDI_BAA_CONFIRMED=1`` — disable the guard. Set this only
-        after both the LLM provider BAA *and* the tenant's BAA are filed.
-      * ``BUDDI_BAA_MAX_PROMPT_BYTES`` — max prompt size (bytes) allowed
-        through when the guard is active. Defaults to 200, which is large
-        enough for intent-detection scaffolding and demo strings but too
-        small for a real clinical note.
-    """
+    """Refuse the call if real-PHI heuristics fire and the BAA is unconfirmed."""
 
     if os.getenv("BUDDI_BAA_CONFIRMED", "").strip() == "1":
         return
@@ -113,6 +113,11 @@ def _baa_guard(prompt: str) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Provider resolution
+# ---------------------------------------------------------------------------
+
+
 def _resolve_provider() -> str:
     """Resolve the configured provider, normalised to ``anthropic`` / ``openai``."""
 
@@ -131,7 +136,7 @@ def _resolve_model_for_provider(provider: str) -> str:
     if explicit and provider == "openai" and (explicit.startswith("gpt") or explicit.startswith("o")):
         return explicit
     if provider == "anthropic":
-        return os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5")
+        return os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7")
     return explicit or "gpt-4-turbo"
 
 
@@ -153,36 +158,24 @@ def _openai_api_key() -> str:
 
 
 # ---------------------------------------------------------------------------
-# JSON extraction (replaces LangChain's structured-output coupling)
+# JSON extraction (unchanged)
 # ---------------------------------------------------------------------------
 
 
 def _extract_json_object(raw: str) -> str:
-    """Extract the first JSON object substring from a free-text response.
-
-    Anthropic Claude does not have OpenAI's ``response_format=json_object``
-    forcing mode, so we ask the model for JSON and then defensively pull
-    the first balanced-brace span. This is intentionally simple — if the
-    extracted string fails ``pydantic`` validation, the caller treats it
-    as an error and either retries or falls back.
-    """
+    """Extract the first JSON object substring from a free-text response."""
 
     raw = raw.strip()
     if not raw:
         raise ValueError("Empty LLM response")
-    # Strip a leading ``` fenced block if present.
     if raw.startswith("```"):
         raw = raw.strip("`")
-        # Drop a leading language hint like ``json``.
         nl = raw.find("\n")
         if nl != -1:
-            raw = raw[nl + 1 :]
-    # Find the first balanced JSON object. Pure regex can't do recursive
-    # balancing in Python's stdlib, so we do a manual scan that's correct
-    # for the JSON our prompts return.
+            raw = raw[nl + 1:]
     start = raw.find("{")
     if start == -1:
-        return raw  # Let pydantic surface the parse error.
+        return raw
     depth = 0
     in_string = False
     escape = False
@@ -204,60 +197,84 @@ def _extract_json_object(raw: str) -> str:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return raw[start : i + 1]
+                return raw[start: i + 1]
     return raw[start:]
 
 
 # ---------------------------------------------------------------------------
-# Provider transports
+# Anthropic transport — official SDK
 # ---------------------------------------------------------------------------
 
 
-async def _anthropic_chat(
-    client: httpx.AsyncClient,
+async def _anthropic_chat_sdk(
     *,
     api_key: str,
     model: str,
     prompt: str,
     structured: bool,
+    timeout: float,
 ) -> str:
-    """Single call to the Anthropic Messages API.
+    """Call the Anthropic Messages API via the official Python SDK.
 
-    Uses the public REST surface directly — keeps the dependency graph
-    small and gives us full control over the headers / version pinning,
-    which BUILD_PLAN.md flagged as preferable to LangChain wrappers.
+    Structured calls enable adaptive thinking (``thinking: {type: "adaptive"}``)
+    and ``output_config.effort = "high"`` so the model reasons carefully about
+    clinical-coding suggestions.  Free-text calls stream to avoid HTTP timeouts
+    on long retrospective-QA outputs.
+
+    The static system prompt is marked with ``cache_control`` so it is cached
+    after the first request (saves ~90% on repeated calls once the prefix
+    exceeds the minimum cacheable size).
     """
 
-    url = "https://api.anthropic.com/v1/messages"
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-    system_msg = (
+    system_text = (
         "You are a clinical revenue integrity assistant. Reply in valid JSON only."
         if structured
         else "You are a clinical revenue integrity assistant."
     )
-    payload = {
-        "model": model,
-        "max_tokens": 1500,
-        "temperature": 0.1 if structured else 0.2,
-        "system": system_msg,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    response = await client.post(url, json=payload, headers=headers)
-    response.raise_for_status()
-    body = response.json()
-    # Anthropic returns content as a list of blocks; concatenate the
-    # ``text`` blocks. Tool-use blocks are not used here.
-    content_blocks = body.get("content") or []
-    text_parts = [
-        block.get("text", "")
-        for block in content_blocks
-        if isinstance(block, dict) and block.get("type") == "text"
-    ]
-    return "".join(text_parts).strip()
+
+    create_kwargs: dict = dict(
+        model=model,
+        # 8 K for structured JSON; 16 K headroom for free-text narratives.
+        max_tokens=8192 if structured else 16000,
+        system=[
+            {
+                "type": "text",
+                "text": system_text,
+                # Cache the static system prompt across repeated clinical requests.
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    if structured:
+        # Adaptive thinking improves accuracy on multi-step clinical reasoning.
+        # "high" effort balances quality and token cost for production workloads.
+        # Note: temperature/top_p are not set — they return 400 on Opus 4.7.
+        create_kwargs["thinking"] = {"type": "adaptive"}
+        create_kwargs["output_config"] = {"effort": "high"}
+
+    # The SDK handles 429/503 retries automatically (default max_retries=2).
+    client = anthropic_sdk.AsyncAnthropic(api_key=api_key, timeout=timeout)
+
+    if structured:
+        response = await client.messages.create(**create_kwargs)
+        # Filter out thinking blocks; return only the text blocks.
+        return "".join(
+            block.text for block in response.content if block.type == "text"
+        ).strip()
+    else:
+        # Stream free-text to prevent HTTP timeouts on long outputs.
+        async with client.messages.stream(**create_kwargs) as stream:
+            response = await stream.get_final_message()
+        return "".join(
+            block.text for block in response.content if block.type == "text"
+        ).strip()
+
+
+# ---------------------------------------------------------------------------
+# OpenAI fallback transport — raw httpx (unchanged)
+# ---------------------------------------------------------------------------
 
 
 async def _openai_chat(
@@ -277,14 +294,12 @@ async def _openai_chat(
 
     url = getattr(Config, "LLM_API_URL", "") or "https://api.openai.com/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "content-type": "application/json"}
-    payload: Dict[str, Any] = {
+    payload: dict = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.1 if structured else 0.2,
     }
     if structured:
-        # OpenAI supports a JSON-object response mode for the gpt-4-turbo /
-        # gpt-4o families. Older models ignore the field harmlessly.
         payload["response_format"] = {"type": "json_object"}
     response = await client.post(url, json=payload, headers=headers)
     response.raise_for_status()
@@ -300,9 +315,8 @@ async def _openai_chat(
 class LLMManager:
     """Thin async adapter for healthcare-grade LLM endpoints.
 
-    Single instance per ``Agent``. Holds no per-request state so it's
-    safe to share across concurrent requests; each call opens its own
-    ``httpx.AsyncClient`` so a slow provider can't poison a shared pool.
+    Single instance per ``Agent``. Holds no per-request state so it is
+    safe to share across concurrent requests.
     """
 
     def __init__(self, memory=None, timeout: float = 30.0):
@@ -312,11 +326,11 @@ class LLMManager:
         self._model = _resolve_model_for_provider(self._provider)
 
     # ------------------------------------------------------------------
-    # Internal: retry-aware dispatch
+    # Internal: provider dispatch
     # ------------------------------------------------------------------
 
     async def _call_provider(self, prompt: str, *, structured: bool) -> str:
-        """Dispatch to the configured provider with one-shot 429/503 retry."""
+        """Dispatch to the configured provider."""
 
         provider = self._provider
         if provider == "anthropic" and not _anthropic_api_key():
@@ -333,18 +347,31 @@ class LLMManager:
                 "OPENAI_API_KEY/LLM_API_KEY is set."
             )
 
+        if provider == "anthropic":
+            try:
+                return await _anthropic_chat_sdk(
+                    api_key=_anthropic_api_key(),
+                    model=self._model,
+                    prompt=prompt,
+                    structured=structured,
+                    timeout=self._timeout,
+                )
+            except anthropic_sdk.RateLimitError as e:
+                raise RetryError(
+                    "Anthropic rate limit persisted after SDK retries"
+                ) from e
+            except anthropic_sdk.InternalServerError as e:
+                raise RetryError(
+                    "Anthropic server error persisted after SDK retries"
+                ) from e
+            # Other anthropic errors (BadRequest, AuthenticationError, etc.)
+            # are intentionally re-raised so callers can distinguish them.
+
+        # --- OpenAI fallback with manual 429/503 retry ---
         last_error: Optional[Exception] = None
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             for attempt in range(2):
                 try:
-                    if provider == "anthropic":
-                        return await _anthropic_chat(
-                            client,
-                            api_key=_anthropic_api_key(),
-                            model=self._model,
-                            prompt=prompt,
-                            structured=structured,
-                        )
                     return await _openai_chat(
                         client,
                         api_key=_openai_api_key(),
@@ -360,9 +387,9 @@ class LLMManager:
                         await asyncio.sleep(1.0)
                         continue
                     raise RetryError(
-                        f"{provider} provider returned {e.response.status_code} after retry"
+                        f"OpenAI provider returned {e.response.status_code} after retry"
                     ) from e
-        raise RetryError("LLM provider retry exhausted") from last_error
+        raise RetryError("OpenAI provider retry exhausted") from last_error
 
     # ------------------------------------------------------------------
     # Public async surface
@@ -384,13 +411,12 @@ class LLMManager:
             logger.warning("LLM provider call failed: %s", e)
             return f"Clinical LLM Connection Error: {str(e)}"
 
-    async def ask_llm_structured_async(self, prompt: str, schema) -> Any:
+    async def ask_llm_structured_async(self, prompt: str, schema: Any) -> Any:
         """Structured output. Returns a parsed ``schema`` instance.
 
         Adds the schema to the prompt so the model knows the target shape,
         then defensively extracts the first JSON object from the response
-        before validating with pydantic. Mirrors the previous LangChain-
-        coupled behaviour without the dependency.
+        before validating with pydantic.
         """
 
         _baa_guard(prompt)
@@ -417,7 +443,7 @@ class LLMManager:
     def _run(self, coro):
         """Run an async coroutine from a sync context.
 
-        Uses a dedicated worker thread when there's already a running
+        Uses a dedicated worker thread when there is already a running
         event loop (FastAPI handlers) so we don't crash with
         ``RuntimeError: cannot run loop while another is running``.
         """
@@ -434,7 +460,7 @@ class LLMManager:
     def ask_llm(self, prompt: str) -> str:
         return self._run(self.ask_llm_async(prompt))
 
-    def ask_llm_structured(self, prompt: str, schema) -> Any:
+    def ask_llm_structured(self, prompt: str, schema: Any) -> Any:
         return self._run(self.ask_llm_structured_async(prompt, schema))
 
     # ------------------------------------------------------------------

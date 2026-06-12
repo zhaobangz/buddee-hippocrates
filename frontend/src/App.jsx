@@ -41,10 +41,10 @@ function ApiKeyPrompt() {
   return (
     <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center">
       <div className="glass-panel rounded-2xl p-6 max-w-md w-full mx-4">
-        <h3 className="text-sm font-bold text-slate-100 mb-2">Buddi API key required</h3>
+        <h3 className="text-sm font-bold text-slate-100 mb-2">Connect to Buddi</h3>
         <p className="text-xs text-slate-500 mb-4">
-          The backend requires an <code className="font-mono">X-API-Key</code>. Paste it here to continue.
-          The value stays in browser memory only — it is never written to localStorage.
+          Enter your Buddi API key to get started. Your key stays in browser memory only —
+          it's never saved to disk or localStorage.
         </p>
         <input
           type="password"
@@ -63,7 +63,7 @@ function ApiKeyPrompt() {
           }}
           className="btn-primary w-full py-2 rounded-xl text-xs font-bold"
         >
-          Save key
+          Connect
         </button>
       </div>
     </div>
@@ -108,7 +108,7 @@ function PatientBootstrap() {
 }
 
 /**
- * Buddi shell.
+ * Buddee Health shell.
  *
  * FE-06 (April-21 re-audit): each top-level route is wrapped in its own
  * `<ErrorBoundary>` so that a thrown exception inside one page cannot

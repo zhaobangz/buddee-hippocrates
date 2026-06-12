@@ -143,7 +143,7 @@ const useStore = create((set, get) => ({
         : err?.message || 'network error';
       addMessage({
         role: 'assistant',
-        content: `Error: Could not reach Buddi backend at ${API_BASE} (${reason}). Ensure the canonical API (backend.api:app) is running.`,
+        content: `Error: Could not reach Buddee Health backend at ${API_BASE} (${reason}). Ensure the canonical API (backend.api:app) is running.`,
         isError: true,
       });
     }

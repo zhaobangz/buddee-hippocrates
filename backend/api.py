@@ -1645,6 +1645,16 @@ async def verify_audit_logs(
     A degraded DB still returns 200 with ``status="demo_verified"`` so
     the operator UI is never blank — production monitoring should alert
     on ``status != "verified"``.
+
+    Performance note (manual §4.2 Bottleneck #4): ``audit_events`` is
+    partitioned monthly by ``timestamp``. At scale, prefer the signed
+    daily Merkle roots as the *primary* verification path — walking
+    the roots is O(days) and partition-prunes by definition, whereas
+    re-walking the raw chain via ``_verify_audit_chain`` fans out
+    across every monthly partition. The chain re-walk is retained for
+    the demo path and for low-volume tenants; pilot-scale operators
+    should add a ``timestamp >= ...`` filter or drive verification
+    entirely off ``verify_signed_roots_against_db``.
     """
     tenant_id = _require_tenant_id(request)
     try:

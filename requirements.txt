@@ -23,7 +23,7 @@ argon2-cffi==23.1.0
 # BUILD_PLAN.md and Buddi_Strategic_Founders_Operating_Manual.pdf §2.2.
 # OpenAI is retained as the embeddings provider (RAG only) and as a
 # fallback for deployments without an Anthropic key.
-anthropic==0.40.0
+anthropic==0.109.1
 openai==1.61.0
 tiktoken==0.12.0
 # LangChain has been removed from the prompt path (manual §2.2 week 2).
@@ -50,7 +50,18 @@ alembic==1.18.4
 psycopg2-binary==2.9.12
 pgvector==0.4.2
 
+# --- Rate limiting ---
+# Redis-backed rate limiter (manual §4.2 Bottleneck #1). slowapi wraps the
+# `limits` package; we use its Limiter as a thin handle around the shared
+# Redis storage so per-tenant buckets survive horizontal scale-out. The
+# redis-py client is pulled in explicitly so test code can monkey-patch it.
+slowapi==0.1.9
+redis==5.2.1
+
 # --- Testing ---
 # pytest-asyncio 0.23.8 requires pytest<9.
 pytest==8.3.5
 pytest-asyncio==0.23.8
+# fakeredis lets the rate-limit tests run without a live Redis server.
+# The [lua] extra pulls in lupa so EVALSHA (used by `limits`) works.
+fakeredis[lua]==2.26.1

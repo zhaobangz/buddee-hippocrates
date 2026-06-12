@@ -65,7 +65,7 @@ const AuditPage = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `buddi-audit-trail-${Date.now()}.json`;
+    a.download = `buddee-health-audit-trail-${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -207,7 +207,7 @@ const AuditPage = () => {
               Compliance Posture
             </h3>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Buddi is currently pre-certification. HIPAA, FedRAMP, and SOC 2
+              Buddee Health is currently pre-certification. HIPAA, FedRAMP, and SOC 2
               Type II attestations are in scope for the launch roadmap but
               are not yet in effect. No compliance badges will be shown here
               until the corresponding audits have been completed and signed

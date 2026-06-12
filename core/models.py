@@ -227,6 +227,19 @@ class ComplianceFlag(Base):
 
 
 class AuditEvent(Base):
+    # ``audit_events`` is RANGE-partitioned by ``timestamp`` (monthly) with
+    # HASH sub-partitions on ``tenant_id`` — see migration
+    # ``c4f1e2d3a5b6_partition_audit_events.py``. Postgres requires the
+    # partition key to be part of the PRIMARY KEY, so the physical PK is
+    # ``(event_id, timestamp)``. The ORM still treats ``event_id`` as the
+    # logical row identifier — ``BIGSERIAL`` keeps it globally unique — and
+    # SQLAlchemy is happy to load/save rows through this single-column
+    # mapping without composite-PK ceremony.
+    #
+    # Query caveat: range queries that **omit** ``timestamp`` cannot be
+    # partition-pruned and will fan out across every monthly partition.
+    # Hot paths (verify-chain walks, recent-event reads) should always
+    # include a ``timestamp >= ...`` filter so the planner can prune.
     __tablename__ = "audit_events"
     event_id = Column(BigInteger, primary_key=True, autoincrement=True)
     tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"))

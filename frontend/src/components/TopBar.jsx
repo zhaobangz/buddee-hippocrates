@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Bell, Users, ShieldCheck, Zap } from 'lucide-react';
+import { Search, Bell, Users, ShieldCheck } from 'lucide-react';
 import useStore from '../store/useStore';
 
 const TopBar = () => {
@@ -10,9 +10,9 @@ const TopBar = () => {
       <div className="flex items-center flex-1 max-w-xl">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input 
-            type="text" 
-            placeholder="Search clinical records, codes, or medications... (⌘K)"
+          <input
+            type="text"
+            placeholder="Search patients, codes, encounters… (⌘K)"
             className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-medical-500/50 transition-all"
           />
         </div>
@@ -23,12 +23,12 @@ const TopBar = () => {
         <div className="flex items-center space-x-4 px-4 py-1.5 rounded-full bg-white/5 border border-white/5">
           <div className="flex items-center space-x-2">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">LLM-01 Core Active</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">AI Active</span>
           </div>
           <div className="w-[1px] h-3 bg-white/10" />
           <div className="flex items-center space-x-2">
-            <Zap className="w-3 h-3 text-amber-400" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80">Latency 180ms</span>
+            <ShieldCheck className="w-3 h-3 text-teal-400" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-teal-400/80">Shadow Mode On</span>
           </div>
         </div>
 
@@ -42,7 +42,7 @@ const TopBar = () => {
           
           <div className="flex items-center space-x-3">
              <div className="flex flex-col items-end">
-               <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Current Patient</span>
+               <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Reviewing</span>
                <span className="text-sm font-semibold text-medical-400">{currentPatient.name}</span>
              </div>
              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-white/10">

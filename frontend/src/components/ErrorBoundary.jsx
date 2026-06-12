@@ -5,7 +5,7 @@ import { AlertTriangle, RefreshCcw } from 'lucide-react';
  * Top-level React Error Boundary (FE-06).
  *
  * A thrown exception inside any page component used to crash the entire
- * Buddi shell (blank white screen). In a HIPAA-scope clinical UI that is a
+ * Buddee Health shell (blank white screen). In a HIPAA-scope clinical UI that is a
  * usability *and* safety concern — the clinician loses context without a
  * clear signal. This boundary catches render-time exceptions, logs them to
  * the console for developer diagnostics, and renders a minimal fallback
@@ -29,7 +29,7 @@ class ErrorBoundary extends React.Component {
     // Intentionally `console.error` only — do NOT forward the stack to a
     // third-party sink from here, the stack frame could include PHI-adjacent
     // state. Observability hooks live server-side (core/tracing.py).
-    console.error('[Buddi] render error caught by ErrorBoundary:', error, errorInfo);
+    console.error('[Buddee Health] render error caught by ErrorBoundary:', error, errorInfo);
   }
 
   handleReload = () => {

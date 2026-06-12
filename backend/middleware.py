@@ -7,17 +7,25 @@ construction:
     request, exposes it on ``request.state.request_id`` and as an
     ``X-Request-ID`` response header. Used by structured logging, audit
     persistence, and operator-UI error reporting.
-  * ``RateLimitMiddleware`` — per-client-IP token bucket. The current
-    implementation is **in-memory** which is correct for a single Cloud
-    Run revision (min=1). The strategic manual (§4.2 Bottleneck #1)
-    flags this as the first thing that will break at horizontal scale
-    and prescribes a Redis-backed ``slowapi`` swap; that contract is
-    captured below as ``# TODO(human): swap to Redis-backed slowapi``
-    so the seam is obvious in code review.
+  * ``RateLimitMiddleware`` — per-client token bucket backed by Redis
+    via the ``slowapi`` library. The bucket is keyed by tenant UUID when
+    the request is authenticated, falling back to a trusted-XFF or
+    socket-peer IP. Because the counters live in Redis they are shared
+    across every Cloud Run revision, which closes the
+    ``effective_limit = N × configured_limit`` hole called out in the
+    strategic manual (§4.2 Bottleneck #1).
 
-CI / unit tests disable the limiter via ``BUDDI_RATE_LIMIT_DISABLED=1``
-(see ``.github/workflows/main.yml``). Production deployments leave it
-on with the defaults in :class:`RateLimitConfig`.
+Configuration:
+
+  * ``REDIS_URL`` — connection string for the limiter backend. Defaults
+    to ``redis://localhost:6379/0`` for local dev. Production MUST point
+    at GCP Memorystore inside our private VPC (manual §4.2: "Run
+    Memorystore (GCP-managed Redis) in private VPC, not a self-hosted
+    Redis").
+  * ``BUDDI_RATE_LIMIT_DISABLED=1`` — short-circuits the limiter for
+    CI / unit tests (see ``.github/workflows/main.yml``).
+  * ``TRUSTED_PROXY_CIDRS`` — comma-separated networks whose
+    ``X-Forwarded-For`` header we trust as the client identity.
 """
 
 from __future__ import annotations
@@ -27,11 +35,12 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass, field
-from threading import Lock
-from typing import Awaitable, Callable, Dict, Optional, Tuple
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Optional, Tuple
 
 from fastapi.responses import JSONResponse
+from limits import parse as parse_rate_limit
+from slowapi import Limiter as SlowAPILimiter
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -74,8 +83,13 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 # ---------------------------------------------------------------------------
-# Rate limiter (in-memory token bucket)
+# Rate limiter (Redis-backed, via slowapi)
 # ---------------------------------------------------------------------------
+
+# Production must point this at GCP Memorystore inside our private VPC.
+# A self-hosted Redis on a public IP is explicitly out of scope per the
+# strategic manual (§4.2 Bottleneck #1).
+DEFAULT_REDIS_URL = "redis://localhost:6379/0"
 
 
 @dataclass
@@ -83,19 +97,13 @@ class RateLimitConfig:
     """Tunable defaults for the rate limiter.
 
     The numbers are deliberately conservative — see
-    ``Buddi_Strategic_Founders_Operating_Manual.pdf §4.2`` for why a real
-    customer's nightly batch will saturate this at scale and what the
-    Redis-backed replacement looks like.
+    ``Buddi_Strategic_Founders_Operating_Manual.pdf §4.2`` for the
+    capacity-planning notes behind the Redis-backed implementation.
     """
 
     #: Requests permitted in ``window_seconds`` per client identity.
     requests_per_window: int = 30
     window_seconds: float = 60.0
-
-    #: Maximum number of unique buckets to track before we start LRU-evicting.
-    #: 50k is plenty for a single revision and bounds the memory leak in the
-    #: pathological case (one bucket per attacker IP).
-    max_buckets: int = 50_000
 
     #: Paths that are exempt from rate limiting (health probes, signed-
     #: roots listing for ops, etc.).
@@ -107,85 +115,10 @@ class RateLimitConfig:
         "/openapi.json",
     )
 
-
-@dataclass
-class _Bucket:
-    """Single-IP token-bucket state."""
-
-    tokens: float
-    last_refill: float
-    last_seen: float = field(default_factory=time.monotonic)
-
-
-class _TokenBucketLimiter:
-    """Pure-Python token bucket. Thread-safe via a single coarse lock.
-
-    Refill semantics: at every check we top up ``tokens`` by the elapsed
-    time times the configured refill rate, capped at the bucket size.
-    Each accepted request decrements one token; if the bucket would go
-    negative we reject with 429.
-    """
-
-    def __init__(self, config: RateLimitConfig):
-        self._config = config
-        self._buckets: Dict[str, _Bucket] = {}
-        self._lock = Lock()
-        # Refill rate in tokens/second.
-        self._rate = config.requests_per_window / max(config.window_seconds, 1e-6)
-
-    def check(self, key: str) -> Tuple[bool, float]:
-        """Try to consume one token. Returns ``(allowed, retry_after_seconds)``."""
-
-        now = time.monotonic()
-        with self._lock:
-            bucket = self._buckets.get(key)
-            if bucket is None:
-                bucket = _Bucket(
-                    tokens=self._config.requests_per_window - 1,
-                    last_refill=now,
-                    last_seen=now,
-                )
-                self._buckets[key] = bucket
-                self._maybe_evict(now)
-                return True, 0.0
-
-            elapsed = max(0.0, now - bucket.last_refill)
-            bucket.tokens = min(
-                float(self._config.requests_per_window),
-                bucket.tokens + elapsed * self._rate,
-            )
-            bucket.last_refill = now
-            bucket.last_seen = now
-
-            if bucket.tokens >= 1.0:
-                bucket.tokens -= 1.0
-                return True, 0.0
-
-            deficit = 1.0 - bucket.tokens
-            retry_after = deficit / max(self._rate, 1e-6)
-            return False, retry_after
-
-    def _maybe_evict(self, now: float) -> None:
-        """Lazy LRU-ish eviction so a flood of unique IPs can't OOM us."""
-
-        if len(self._buckets) <= self._config.max_buckets:
-            return
-        # Evict the 10% oldest buckets. Sorted scan is O(n log n) but
-        # only triggers when we cross the cap, so amortised cost is fine.
-        target_remaining = int(self._config.max_buckets * 0.9)
-        ordered = sorted(self._buckets.items(), key=lambda kv: kv[1].last_seen)
-        for key, _ in ordered[: max(0, len(ordered) - target_remaining)]:
-            self._buckets.pop(key, None)
-
-    # Test helpers ----------------------------------------------------------
-
-    def reset(self) -> None:
-        with self._lock:
-            self._buckets.clear()
-
-    def state_for(self, key: str) -> Optional[_Bucket]:  # pragma: no cover (debug)
-        with self._lock:
-            return self._buckets.get(key)
+    #: Redis storage URI. ``None`` means resolve from ``REDIS_URL`` env at
+    #: middleware construction (the normal production path); tests pass an
+    #: explicit value to point at a fakeredis instance.
+    storage_uri: Optional[str] = None
 
 
 def _trusted_proxy_cidrs() -> Tuple[ipaddress.IPv4Network, ...]:
@@ -247,28 +180,33 @@ def _client_identity(request: Request, trusted: Tuple[ipaddress.IPv4Network, ...
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Per-client token-bucket rate limiter.
+    """Per-client rate limiter backed by Redis (via slowapi).
 
     Disabled when ``BUDDI_RATE_LIMIT_DISABLED=1`` (CI / unit tests).
     Production deployments leave it on; the limits in
-    :class:`RateLimitConfig` are tuned to a conservative single-revision
-    Cloud Run posture.
-
-    # TODO(human): swap to Redis-backed slowapi.
-    # This in-memory bucket only works on a single Cloud Run revision.
-    # The moment we scale to N instances the effective per-client limit
-    # becomes ``N × requests_per_window`` because each instance carries
-    # its own bucket. See
-    # ``Buddi_Strategic_Founders_Operating_Manual.pdf §4.2 Bottleneck #1``
-    # and ``BUILD_PLAN.md`` for the Memorystore (managed Redis) plan.
+    :class:`RateLimitConfig` are tuned to the conservative per-tenant
+    posture described in the strategic manual.
     """
 
     def __init__(self, app, config: Optional[RateLimitConfig] = None):
         super().__init__(app)
         self._config = config or RateLimitConfig()
-        self._limiter = _TokenBucketLimiter(self._config)
         self._trusted = _trusted_proxy_cidrs()
         self._enabled = os.getenv("BUDDI_RATE_LIMIT_DISABLED", "").strip() not in {"1", "true", "yes"}
+
+        storage_uri = self._config.storage_uri or os.getenv("REDIS_URL", DEFAULT_REDIS_URL)
+        # slowapi's Limiter owns the connection pool and the moving-window
+        # strategy. We never use its decorator API — we call into its
+        # underlying ``limits`` strategy from dispatch() so we can keep
+        # this codebase's bespoke 429 response shape and headers.
+        self._rate_item = parse_rate_limit(
+            f"{self._config.requests_per_window}/{int(self._config.window_seconds)} seconds"
+        )
+        self._slow = SlowAPILimiter(
+            key_func=lambda _request: "unused",
+            storage_uri=storage_uri,
+            default_limits=[str(self._rate_item)],
+        )
 
     async def dispatch(
         self,
@@ -289,7 +227,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         key = _client_identity(request, self._trusted)
-        allowed, retry_after = self._limiter.check(key)
+        allowed, retry_after = self._check(key)
         if not allowed:
             request_id = getattr(request.state, "request_id", None)
             logger.info(
@@ -316,13 +254,44 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
         return await call_next(request)
 
+    def _check(self, key: str) -> Tuple[bool, float]:
+        """Consume one token for ``key``. Returns ``(allowed, retry_after)``.
+
+        Fails open on Redis errors: a Redis outage must not take the API
+        offline. We log loudly so the on-call dashboard can alarm on it.
+        """
+
+        strategy = self._slow.limiter
+        try:
+            allowed = strategy.hit(self._rate_item, key, cost=1)
+        except Exception:
+            logger.exception("Rate-limit storage error — failing open for key=%s", key)
+            return True, 0.0
+
+        if allowed:
+            return True, 0.0
+
+        try:
+            stats = strategy.get_window_stats(self._rate_item, key)
+            retry_after = max(0.0, float(stats.reset_time) - time.time())
+        except Exception:
+            logger.exception("Rate-limit window-stats error for key=%s", key)
+            retry_after = float(self._config.window_seconds)
+        return False, retry_after
+
     # Test helpers ----------------------------------------------------------
 
     def reset(self) -> None:
-        self._limiter.reset()
+        """Clear all counters. Only supported by storages that implement it."""
+
+        try:
+            self._slow.reset()
+        except Exception:
+            logger.warning("Rate-limit storage does not support reset()", exc_info=True)
 
 
 __all__ = [
+    "DEFAULT_REDIS_URL",
     "REQUEST_ID_HEADER",
     "RateLimitConfig",
     "RateLimitMiddleware",

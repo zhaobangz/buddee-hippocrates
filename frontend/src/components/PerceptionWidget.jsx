@@ -72,7 +72,7 @@ const PerceptionWidget = () => {
             
             <div className="mt-4 pt-4 border-t border-white/5 flex flex-col items-center">
               {isProcessing ? (
-                <p className="text-xs text-medical-400 animate-pulse font-medium italic">Buddi is processing environment...</p>
+                <p className="text-xs text-medical-400 animate-pulse font-medium italic">Buddee Health is processing environment...</p>
               ) : (
                 <p className="text-xs text-slate-500">Awaiting clinical input...</p>
               )}

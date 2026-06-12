@@ -106,8 +106,8 @@ const PriorAuthModal = ({ open, onClose }) => {
                     Generate Prior-Authorization Draft
                   </h2>
                   <p className="text-xs text-slate-500 mt-1 max-w-md">
-                    Buddi drafts a payer-ready letter from the clinical note.
-                    The clinician reviews and submits — Buddi never auto-files.
+                    Buddee Health drafts a payer-ready letter from the clinical note.
+                    The clinician reviews and submits — Buddee Health never auto-files.
                   </p>
                 </div>
               </div>

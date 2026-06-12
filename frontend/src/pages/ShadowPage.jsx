@@ -73,7 +73,7 @@ const ShadowPage = () => {
             Shadow-Mode Revenue Audit
           </h1>
           <p className="text-slate-500 mt-1 max-w-2xl">
-            Paste a clinical note and billed codes. Buddi finds missed reimbursable documentation opportunities and writes the review to a tamper-evident audit trail.
+            Paste a clinical note and billed codes. Buddee Health finds missed reimbursable documentation opportunities and writes the review to a tamper-evident audit trail.
           </p>
         </div>
         <button

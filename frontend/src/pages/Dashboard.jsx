@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   TrendingUp,
   TrendingDown,
@@ -9,6 +9,7 @@ import {
   Info,
   Zap,
   FileText,
+  Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
@@ -56,6 +57,22 @@ const Dashboard = () => {
     }
   };
 
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  })();
+
+  const isFirstLoadPatient = !patient.id || patient.name === 'Marcus Holloway';
+
+  const askBuddiPrompts = [
+    'Which HCC codes are at risk for this patient?',
+    'Draft a prior-auth for the Ophthalmology referral',
+    'Summarize audit exposure for this encounter',
+    'What documentation supports the A1c gap?',
+  ];
+
   const riskFactors = [
     { label: 'Hyperkalemia Risk', value: 'High', color: 'rose', trend: 'up', info: 'K+ level 5.4 in last draw' },
     { label: 'Adherence', value: '98%', color: 'emerald', trend: 'down', info: 'Last fill 14 days ago' },
@@ -67,30 +84,70 @@ const Dashboard = () => {
     <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100 tracking-tight">Executive Integrity Dashboard</h1>
-          <p className="text-slate-500 mt-1">Real-time revenue recovery and audit monitoring</p>
+          <h1 className="text-3xl font-bold tracking-tight medical-gradient-text">
+            {greeting} — let's find the revenue you've already earned.
+          </h1>
+          <p className="text-slate-500 mt-1">Buddi is watching in the background. Every suggestion is yours to approve.</p>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setPriorAuthOpen(true)}
-            className="btn-secondary px-4 py-3 rounded-xl text-xs font-bold flex items-center"
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            Generate Prior-Auth
-          </button>
-          <button onClick={handleTrySamplePatient} className="btn-primary px-5 py-3 rounded-xl text-xs font-bold flex items-center">
-            <Zap className="w-4 h-4 mr-2" />
-            Try Sample Patient
-          </button>
+        <div className="flex flex-col items-end">
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPriorAuthOpen(true)}
+              className="btn-secondary px-4 py-3 rounded-xl text-xs font-bold flex items-center"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Generate Prior-Auth
+            </button>
+            <button onClick={handleTrySamplePatient} className="btn-primary px-5 py-3 rounded-xl text-xs font-bold flex items-center">
+              <Zap className="w-4 h-4 mr-2" />
+              Run a Live Demo
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-500 text-right mt-1">No patient data is submitted. Demo only.</p>
         </div>
       </div>
 
       <PriorAuthModal open={priorAuthOpen} onClose={() => setPriorAuthOpen(false)} />
 
+      <AnimatePresence>
+        {isFirstLoadPatient && (
+          <motion.div
+            key="welcome-banner"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+            className="glass-panel rounded-2xl p-5 border-l-4 border-teal-500/50 flex items-start gap-4"
+          >
+            <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/20">
+              <Sparkles className="w-5 h-5 text-teal-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-slate-100">Welcome to Buddi</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                You're in shadow mode — Buddi audits every encounter and surfaces missed HCC codes and prior-auth opportunities.
+                Nothing is submitted without your approval.
+              </p>
+              <button
+                onClick={handleTrySamplePatient}
+                className="text-xs font-bold text-teal-400 hover:text-teal-300 mt-3 transition-colors"
+              >
+                Run a Live Demo →
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnalyticsDashboard />
 
       <div className="pt-8 border-t border-white/5">
-        <h2 className="text-xl font-bold text-slate-100 mb-6 tracking-tight">Clinical Focus: {patient.name}</h2>
+        <h2 className="text-xl font-bold text-slate-100 mb-6 tracking-tight flex items-center gap-3">
+          <span>Active Patient — {patient.name}</span>
+          <span className="bg-teal-500/15 text-teal-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-500/20">
+            Shadow Mode On
+          </span>
+        </h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -132,9 +189,12 @@ const Dashboard = () => {
             <ActivityIcon className="w-48 h-48" />
           </div>
           
-          <h3 className="text-lg font-bold text-slate-100 mb-6 flex items-center">
-            <CheckCircle2 className="w-5 h-5 mr-3 text-indigo-400" />
-            AI Care Coordination Plan
+          <h3 className="text-lg font-bold text-slate-100 mb-6 flex items-center flex-wrap">
+            <Sparkles className="w-5 h-5 mr-3 text-indigo-400" />
+            Buddi's Suggestions
+            <span className="text-[10px] text-slate-500 ml-2 font-normal normal-case tracking-normal">
+              Review and approve before any action is taken
+            </span>
           </h3>
 
           <div className="space-y-4">
@@ -171,15 +231,14 @@ const Dashboard = () => {
         </div>
 
         <div className="glass-panel rounded-3xl p-6 bg-indigo-500/5 border-indigo-500/10">
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Suggested Questions</h3>
+          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Ask Buddi</h3>
           <div className="space-y-3">
-            {[
-              "Review Marcus's weight trend over 12 months",
-              "Generate a Patient Visit Summary (PVS)",
-              "Look up ACC guidelines for Hypertension",
-              "Draft a follow-up email about Lab results"
-            ].map((q, i) => (
-              <button key={i} className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all flex items-center group">
+            {askBuddiPrompts.map((q) => (
+              <button
+                key={q}
+                onClick={() => navigate('/chat')}
+                className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all flex items-center group"
+              >
                 <span className="text-xs text-slate-400 group-hover:text-slate-200 flex-1">{q}</span>
                 <MoreHorizontal className="w-4 h-4 text-slate-600" />
               </button>
