@@ -227,10 +227,9 @@ class ComplianceFlag(Base):
 
 
 class AuditEvent(Base):
-    # ``audit_events`` is RANGE-partitioned by ``timestamp`` (monthly) with
-    # HASH sub-partitions on ``tenant_id`` — see migration
-    # ``c4f1e2d3a5b6_partition_audit_events.py``. Postgres requires the
-    # partition key to be part of the PRIMARY KEY, so the physical PK is
+    # ``audit_events`` is RANGE-partitioned by ``timestamp`` (monthly) — see
+    # migration ``c4f1e2d3a5b6_partition_audit_events.py``. Postgres requires
+    # the partition key to be part of the PRIMARY KEY, so the physical PK is
     # ``(event_id, timestamp)``. The ORM still treats ``event_id`` as the
     # logical row identifier — ``BIGSERIAL`` keeps it globally unique — and
     # SQLAlchemy is happy to load/save rows through this single-column

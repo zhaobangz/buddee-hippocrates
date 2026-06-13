@@ -32,6 +32,7 @@ tables.
 
 from __future__ import annotations
 
+import logging
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -40,9 +41,16 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "7a3c8d9f0142"
-down_revision: Union[str, Sequence[str], None] = "58485b98e836"
+# Re-pointed to b1f2c3d4e5a6: that additive migration creates
+# ``tenant_api_keys`` and the nine missing ``tenant_id`` columns this
+# migration's RLS policies depend on. Before the re-point, a fresh
+# ``alembic upgrade head`` crashed here (relation/column does not exist).
+down_revision: Union[str, Sequence[str], None] = "b1f2c3d4e5a6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+
+logger = logging.getLogger("alembic.rls_baa_hnsw")
 
 
 # Tables that carry a ``tenant_id`` column and therefore need RLS.
@@ -81,6 +89,26 @@ def _policy_name(table: str) -> str:
     return f"{table}_tenant_isolation"
 
 
+def _table_is_rls_ready(bind, table: str) -> bool:
+    """True iff ``table`` exists and has a ``tenant_id`` column.
+
+    Defense in depth for a fresh database: ``b1f2c3d4e5a6`` runs first and
+    guarantees both, but if a table is ever missing (manual drift, partial
+    restore) we skip it with a loud warning instead of crashing the whole
+    migration. A skipped table simply gets no RLS policy — visible in the
+    log — rather than leaving the database un-migratable.
+    """
+
+    insp = sa.inspect(bind)
+    if not insp.has_table(table):
+        logger.warning("RLS skip: table %s does not exist", table)
+        return False
+    if not any(col["name"] == "tenant_id" for col in insp.get_columns(table)):
+        logger.warning("RLS skip: table %s has no tenant_id column", table)
+        return False
+    return True
+
+
 def upgrade() -> None:
     """Apply the BAA flag, RLS policies, and HNSW index."""
 
@@ -114,9 +142,18 @@ def upgrade() -> None:
     # RLS is a no-op until ``ENABLE ROW LEVEL SECURITY`` is run per table.
     # FORCE RLS makes the policy apply even to the table owner — without
     # FORCE, a superuser-owned table silently bypasses the policy.
-    for table in _TENANT_SCOPED_TABLES:
+    #
+    # Only operate on tables that actually exist and carry ``tenant_id``.
+    # On the canonical chain that is all of ``_TENANT_SCOPED_TABLES``
+    # (``b1f2c3d4e5a6`` guarantees it); the filter is a safety net against
+    # drift, not the expected path.
+    rls_tables = [t for t in _TENANT_SCOPED_TABLES if _table_is_rls_ready(bind, t)]
+    for table in rls_tables:
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
         op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+        # DROP IF EXISTS keeps the migration re-runnable after a partial
+        # failure without colliding on the policy name.
+        op.execute(f"DROP POLICY IF EXISTS {_policy_name(table)} ON {table}")
         op.execute(
             f"""
             CREATE POLICY {_policy_name(table)}
@@ -132,7 +169,7 @@ def upgrade() -> None:
     # ``BUDDI_DB_ROLE`` env var before running ``alembic upgrade``.
     role = _resolve_runtime_role(bind)
     if role:
-        for table in _TENANT_SCOPED_TABLES:
+        for table in rls_tables:
             op.execute(
                 f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO {role}"
             )
@@ -172,7 +209,13 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS audit_events_tenant_timestamp_idx")
     op.execute("DROP INDEX IF EXISTS document_chunks_embedding_hnsw_idx")
 
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
     for table in _TENANT_SCOPED_TABLES:
+        # Guard against a table that was never created (drift / partial
+        # restore): DROP POLICY ... ON <missing table> would itself error.
+        if not insp.has_table(table):
+            continue
         op.execute(f"DROP POLICY IF EXISTS {_policy_name(table)} ON {table}")
         op.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
         op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")

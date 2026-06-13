@@ -1,4 +1,4 @@
-"""partition_audit_events: RANGE(timestamp) + HASH(tenant_id) sub-partitions
+"""partition_audit_events: monthly RANGE(timestamp) partitioning
 
 Revision ID: c4f1e2d3a5b6
 Revises: 7a3c8d9f0142
@@ -19,16 +19,29 @@ the table reaches ~5M rows/week. Without partitioning, ``GET
 Partition layout
 ----------------
 * Parent: ``audit_events`` (partitioned by RANGE on ``timestamp``).
-* Per-month partition: ``audit_events_yYYYY_mMM``, sub-partitioned by
-  HASH on ``tenant_id`` with modulus 4. The modulus is fixed at
-  migration time because Postgres requires every monthly partition to
-  share it; 4 buckets gives ~12 tenants/bucket at 50 tenants — enough
-  parallelism without partition explosion.
-* Per-(month, hash) leaf: ``audit_events_yYYYY_mMM_hN`` (N in 0..3).
+* Per-month partition: ``audit_events_yYYYY_mMM`` — a leaf table that
+  directly stores that month's rows.
 * ``audit_events_default``: catch-all. The
   ``scripts/create_next_partition.py`` cron is responsible for creating
   next month's partition before the 1st — anything landing in
   ``_default`` is an *alert* signal that the cron failed.
+
+Why no HASH(tenant_id) sub-partitioning
+---------------------------------------
+An earlier draft of this migration sub-partitioned each month by
+``HASH (tenant_id)``. That is impossible given the rest of the schema:
+Postgres requires every partition-key column — at *every* level — to be
+part of the table's PRIMARY KEY, and PK columns are implicitly NOT NULL.
+But ``audit_events.tenant_id`` is **nullable** (system / cross-tenant
+events such as Merkle-root seals are written with ``tenant_id = NULL`` —
+see ``backend/api.py::_log_audit_event``). Forcing ``tenant_id`` NOT NULL
+to satisfy HASH partitioning would break those writes. Monthly RANGE
+partitioning already bounds partition size and enables timestamp pruning
+(the dominant access pattern: verify-chain walks and recent-event reads
+both filter by ``timestamp``); the ``(tenant_id, timestamp DESC)`` index
+serves per-tenant reads. HASH sub-partitioning bought marginal
+parallelism at the cost of a permanent, un-changeable modulus, so it was
+dropped.
 
 Why ``timestamp`` and not ``created_at``
 ----------------------------------------
@@ -78,11 +91,6 @@ depends_on: Union[str, Sequence[str], None] = None
 logger = logging.getLogger("alembic.partition_audit_events")
 
 
-# Tunable knobs. HASH_MODULUS is **immutable** after this migration runs —
-# every monthly partition declares the same modulus, and changing it later
-# requires rewriting every partition.
-HASH_MODULUS = 4
-
 # How many future months to pre-create. The cron creates one more each
 # month; this buffer protects us if the cron is broken for a week.
 FUTURE_MONTHS_BUFFER = 3
@@ -108,10 +116,9 @@ def upgrade() -> None:
     end_anchor = max_ts if max_ts else _now_utc()
     last_month_inclusive = _add_months(_floor_to_month(end_anchor), FUTURE_MONTHS_BUFFER)
     logger.info(
-        "audit_events partition range: %s -> %s (HASH modulus=%d)",
+        "audit_events monthly RANGE partitions: %s -> %s",
         start_month.isoformat(),
         last_month_inclusive.isoformat(),
-        HASH_MODULUS,
     )
 
     # 2. Drop the things that hang off the existing table. RLS policy
@@ -349,12 +356,12 @@ def _partition_name(month_start: datetime) -> str:
 
 
 def _create_monthly_partition(month_start: datetime, month_end: datetime) -> None:
-    """Create one RANGE partition for ``month_start`` plus its HASH leaves.
+    """Create one monthly RANGE partition (a leaf table) for ``month_start``.
 
-    Idempotent: ``IF NOT EXISTS`` is used everywhere so a crashed
-    migration can be re-run safely. Sub-partitions all share
-    ``HASH_MODULUS`` — this constant cannot change without rewriting
-    every existing partition.
+    Idempotent: ``CREATE TABLE IF NOT EXISTS`` so a crashed migration can
+    be re-run safely. The partition is a plain leaf — it is not further
+    sub-partitioned (see the module docstring for why HASH(tenant_id) was
+    dropped).
     """
 
     name = _partition_name(month_start)
@@ -363,18 +370,9 @@ def _create_monthly_partition(month_start: datetime, month_end: datetime) -> Non
         CREATE TABLE IF NOT EXISTS {name}
             PARTITION OF audit_events
             FOR VALUES FROM ('{month_start.isoformat()}')
-                       TO   ('{month_end.isoformat()}')
-            PARTITION BY HASH (tenant_id);
+                       TO   ('{month_end.isoformat()}');
         """
     )
-    for remainder in range(HASH_MODULUS):
-        op.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {name}_h{remainder}
-                PARTITION OF {name}
-                FOR VALUES WITH (modulus {HASH_MODULUS}, remainder {remainder});
-            """
-        )
 
 
 def _resolve_runtime_role(bind) -> str | None:

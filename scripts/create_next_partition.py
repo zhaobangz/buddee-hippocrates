@@ -38,11 +38,6 @@ from core.database import engine
 
 logger = logging.getLogger("create_next_partition")
 
-# MUST match HASH_MODULUS in c4f1e2d3a5b6_partition_audit_events.py.
-# Changing this requires rewriting every existing partition; treat as a
-# breaking-change migration if it ever needs to move.
-HASH_MODULUS = 4
-
 
 def _floor_to_month(dt: datetime) -> datetime:
     if dt.tzinfo is None:
@@ -66,22 +61,18 @@ def _partition_name(month_start: datetime) -> str:
 def _ddl_for(month_start: datetime) -> list[str]:
     month_end = _add_months(month_start, 1)
     name = _partition_name(month_start)
-    statements = [
+    # One monthly RANGE leaf. Matches migration
+    # ``c4f1e2d3a5b6_partition_audit_events.py`` — no HASH(tenant_id)
+    # sub-partitioning (``audit_events.tenant_id`` is nullable, which is
+    # incompatible with HASH partitioning; see that migration's docstring).
+    return [
         (
             f"CREATE TABLE IF NOT EXISTS {name} "
             f"PARTITION OF audit_events "
             f"FOR VALUES FROM ('{month_start.isoformat()}') "
-            f"TO ('{month_end.isoformat()}') "
-            f"PARTITION BY HASH (tenant_id)"
+            f"TO ('{month_end.isoformat()}')"
         )
     ]
-    for remainder in range(HASH_MODULUS):
-        statements.append(
-            f"CREATE TABLE IF NOT EXISTS {name}_h{remainder} "
-            f"PARTITION OF {name} "
-            f"FOR VALUES WITH (modulus {HASH_MODULUS}, remainder {remainder})"
-        )
-    return statements
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -150,9 +141,8 @@ def main(argv: list[str] | None = None) -> int:
 
     for month in months:
         logger.warning(
-            "audit_events partition ensured: %s (HASH modulus=%d)",
+            "audit_events partition ensured: %s",
             _partition_name(month),
-            HASH_MODULUS,
         )
     return 0
 

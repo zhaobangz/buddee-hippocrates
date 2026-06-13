@@ -7,17 +7,27 @@ seal job sub-second at that scale, the table is partitioned.
 
 ## Layout
 
-Created by migration `c4f1e2d3a5b6_partition_audit_events.py`.
+Created by migration `c4f1e2d3a5b6_partition_audit_events.py` (which runs
+after `b1f2c3d4e5a6` and `7a3c8d9f0142` in the chain — see
+[migration order](#migration-order)).
 
 * **Parent:** `audit_events` — RANGE-partitioned on `timestamp`.
-* **Monthly partitions:** `audit_events_yYYYY_mMM`, themselves
-  HASH-sub-partitioned on `tenant_id` with `modulus 4`.
-* **Hash leaves:** `audit_events_yYYYY_mMM_hN` for `N` in `0..3`. These
-  are the actual heap files that hold rows.
+* **Monthly partitions:** `audit_events_yYYYY_mMM` — leaf heap tables that
+  hold that month's rows directly.
 * **Default partition:** `audit_events_default`. Catches rows whose
   `timestamp` falls outside every declared monthly range. Should be
   **empty** in steady state — non-zero row count here means the cron
   fell behind.
+
+> **No HASH(tenant_id) sub-partitioning.** An earlier draft sub-partitioned
+> each month by `HASH (tenant_id)`. That is incompatible with the schema:
+> Postgres requires every partition-key column — at every level — to be in
+> the PRIMARY KEY, and PK columns are `NOT NULL`, but `audit_events.tenant_id`
+> is **nullable** (system / cross-tenant events such as Merkle-root seals are
+> written with `tenant_id = NULL`). Monthly RANGE partitioning already bounds
+> partition size and enables `timestamp` pruning; the
+> `(tenant_id, timestamp DESC)` index serves per-tenant reads. See the
+> migration docstring for the full rationale.
 
 The PK is `(event_id, timestamp)` because Postgres requires the
 partition key to be part of the primary key. The ORM (`core/models.py`
@@ -106,11 +116,25 @@ backward compatibility with `frontend/src/pages/AuditPage.jsx`, but
 production dashboards should drive their pass/fail off the `roots`
 block.
 
-## Changing the HASH modulus
+## Migration order
 
-**Don't.** Postgres requires every sub-partition of `audit_events_*`
-to share the same `(modulus, remainder)` declaration. Changing the
-modulus means rewriting every existing partition — a multi-hour
-maintenance window at production volumes. If 4 buckets becomes
-insufficient, treat the change as a v2 schema migration with a
-parallel-table cutover.
+The audit-partitioning migration is the head of a four-revision chain.
+A fresh `alembic upgrade head` applies them in this order:
+
+1. `58485b98e836` — initial schema.
+2. `b1f2c3d4e5a6` — creates `tenant_api_keys` and the nine missing
+   `tenant_id` columns/FKs (closes the ORM/migration drift that used to
+   crash the RLS migration on a fresh DB).
+3. `7a3c8d9f0142` — RLS policies, `tenants.baa_confirmed`, pgvector HNSW.
+4. `c4f1e2d3a5b6` — this migration (monthly RANGE partitioning).
+
+`scripts/migrate_smoke.py` (and `tests/test_migrations.py`) run this whole
+chain against a throwaway database to guard the order against regressions.
+
+## If monthly partitions become too large
+
+Monthly RANGE partitions bound each partition to one month of rows. If a
+single month becomes unwieldy at much higher tenant counts, the options
+are weekly RANGE partitioning or a v2 schema migration with a
+parallel-table cutover — *not* HASH sub-partitioning by `tenant_id`, which
+is incompatible with the nullable `tenant_id` column (see Layout above).
