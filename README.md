@@ -95,13 +95,21 @@ Backend is available at:
 If you have `make` and Docker, the canonical local sequence is:
 
 ```bash
-make install      # backend pip deps + frontend npm ci
-make db           # docker-run Postgres+pgvector and CREATE EXTENSION vector
+make install      # backend venv + pip deps, frontend npm install
+make db           # docker Postgres+pgvector on :5433, CREATE EXTENSION vector
 make migrate      # alembic upgrade head
 make dev          # python start_dev.py — backend on :8001, frontend on :5173
-make test         # pytest -q + frontend Vitest smoke
-make lint         # eslint frontend
+make test         # pytest -q + frontend Vitest (--passWithNoTests for now)
+make lint         # ruff (backend) + eslint (frontend)
+make help         # list all targets
 ```
+
+> The `make` flow runs a throwaway Postgres on **port 5433** with
+> `postgres:postgres`, matching `tests/conftest.py` so `make test` and a bare
+> `pytest` share one database. `migrate`/`dev` set `BUDDI_TEST_MODE=1` only to
+> satisfy the SEC-04 `postgres:postgres` guard locally. This is distinct from
+> the production-style `DATABASE_URL` (dedicated credential, port 5432) in the
+> Quick start above — use that one for any real data.
 
 Open `http://localhost:5173/?demo=true` to load the synthetic patient
 **PT-9012 (Marcus Holloway)** and run a deterministic shadow-mode revenue
