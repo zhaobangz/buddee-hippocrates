@@ -1,0 +1,27 @@
+# Buddi development / CI-only dependencies.
+#
+# Installed on top of requirements.txt for the test + lint pipeline. Kept
+# separate so the production image (Dockerfile) never ships test tooling.
+#
+# Usage:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest -q && ruff check backend/ core/ tools/ scripts/ evals/ tests/
+
+-r requirements.txt
+
+# --- Lint / test runners ---
+ruff==0.14.4
+# Single source of truth for the pytest pin (previously duplicated in
+# requirements.txt as 8.3.5 vs 8.3.4 here — a real version conflict).
+# pytest-asyncio 0.23.8 requires pytest<9, so stay on the 8.3.x line.
+pytest==8.3.5
+pytest-asyncio==0.23.8
+
+# --- Redis rate-limiter tests (backend/middleware.py) ---
+# tests/test_rate_limit.py runs the production token-bucket Lua script against
+# an in-process fake Redis so the distributed limiter is covered without a live
+# Redis server. ``lupa`` gives fakeredis the EVAL/EVALSHA scripting support the
+# token bucket relies on. Kept here (not requirements.txt) so the production
+# image never ships them.
+fakeredis==2.26.1
+lupa==2.5

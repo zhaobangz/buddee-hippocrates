@@ -33,11 +33,26 @@ Buddi is a FastAPI-first backend for revenue integrity and compliance workflows 
 
 ### 2) Install dependencies
 
+`requirements.txt` is **runtime-only** (what the production image ships).
+Test/CI tooling (pytest, pytest-asyncio, fakeredis, lupa, ruff) lives in
+`requirements-dev.txt` and layers on top via `-r requirements.txt`.
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+python -m pip install --upgrade pip
+
+# Production runtime only:
 pip install -r requirements.txt
+
+# Local dev / CI (adds test + lint tooling):
+pip install -r requirements.txt -r requirements-dev.txt
 ```
+
+> Always run tooling via `python -m <tool>` (e.g. `python -m pytest`,
+> `python -m alembic`) or after `source venv/bin/activate`. If you ever see a
+> `bad interpreter` error from `venv/bin/<tool>`, the venv was created under a
+> different absolute path — recreate it with the commands above.
 
 ### 3) Configure environment
 
@@ -125,9 +140,30 @@ curl -H "Authorization: Bearer $API_KEY" http://localhost:8001/api/health
 ## Verification commands
 
 ```bash
+# Unit/integration tests. DB-backed tests connect to the test Postgres on
+# port 5433 (see tests/conftest.py); without one reachable they skip the DB
+# assertions and exercise only the HTTP layer, so `pytest -q` is always green.
 pytest -q
+
+# Migration smoke test — runs the full `alembic upgrade head` (+ a
+# downgrade/upgrade round-trip) against a throwaway database. Skips cleanly
+# if no Postgres is reachable.
+MIGRATION_SMOKE_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/postgres \
+  python scripts/migrate_smoke.py --roundtrip
+
+# Lint (matches CI):
+python -m ruff check backend/ core/ tools/ scripts/ evals/ tests/
+
 python scripts/verify_system.py
 BUDDI_TEST_MODE=1 python scripts/verify_reaudit_fixes.py
+```
+
+A local test Postgres+pgvector on port 5433 (matching `tests/conftest.py`):
+
+```bash
+docker run -d --name buddi-pg-test \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=buddi \
+  -p 5433:5432 pgvector/pgvector:pg16
 ```
 
 ---

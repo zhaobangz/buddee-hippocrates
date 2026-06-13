@@ -59,9 +59,6 @@ slowapi==0.1.9
 redis==5.2.1
 
 # --- Testing ---
-# pytest-asyncio 0.23.8 requires pytest<9.
-pytest==8.3.5
-pytest-asyncio==0.23.8
-# fakeredis lets the rate-limit tests run without a live Redis server.
-# The [lua] extra pulls in lupa so EVALSHA (used by `limits`) works.
-fakeredis[lua]==2.26.1
+# Test/CI-only tooling (pytest, pytest-asyncio, fakeredis, lupa, ruff) lives
+# in requirements-dev.txt so the production image never ships it. Install both
+# for local dev / CI:  pip install -r requirements.txt -r requirements-dev.txt
