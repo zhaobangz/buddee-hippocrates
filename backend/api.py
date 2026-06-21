@@ -14,6 +14,7 @@ Changes relative to v4.0:
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -26,20 +27,35 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
 import core.models as models
-from backend.auth import require_api_client, require_scope
+from backend.auth import AuthenticatedClient, require_api_client, require_scope
 from backend.fhir_client import FHIRAdapter
-from backend.middleware import RateLimitMiddleware, RequestIDMiddleware
+from backend.smart_fhir import SMARTFHIRLauncher, tenant_id_from_state
+from backend.middleware import (
+    RateLimitMiddleware,
+    RequestIDMiddleware,
+    validate_trusted_proxy_cidrs,
+)
 from core.agent import Agent
 from core.config import settings
 from core.database import SessionLocal, engine  # noqa: F401 (engine re-exported for callers)
-from core.db_session import tenant_scoped_session
+from core.db_session import set_tenant_context, tenant_scoped_session
+from core import jobs as job_queue
+from core.webhooks import (
+    EVENT_AUDIT_FLAGGED,
+    EVENT_HCC_APPROVED,
+    EVENT_HCC_CREATED,
+    EVENT_PRIOR_AUTH_CHANGED,
+    KNOWN_EVENTS,
+    dispatch_webhook,
+    register_webhook,
+)
 from core.merkle import (
     build_daily_root,
     export_daily_root,
@@ -49,6 +65,7 @@ from core.merkle import (
 from core.schemas import MAX_FHIR_BUNDLE_BYTES, FHIRBundle, PriorAuthDraft, ShadowModeResponse
 from core.safety import redact_for_logs, sanitize_response
 from core.tracing import get_tracer, setup_tracing, shutdown_tracing
+from core.worker import worker_loop
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +89,17 @@ MERKLE_ROOT_INTERVAL_SECONDS = int(
     os.getenv("BUDDI_MERKLE_INTERVAL_SECONDS", str(24 * 60 * 60))
 )
 DISABLE_MERKLE_TASK = os.getenv("BUDDI_DISABLE_MERKLE_TASK", "").lower() in {"1", "true", "yes"}
+
+# Build-out B3: async job worker (drains the ``jobs`` queue). In Cloud Run,
+# set BUDDI_DISABLE_WORKER=1 for the API service and run core.worker as the
+# separate buddi-worker service. The legacy BUDDI_DISABLE_JOB_WORKER name is
+# still honored for older test/dev environments.
+_worker_task: Optional[asyncio.Task] = None
+DISABLE_WORKER = (
+    os.getenv("BUDDI_DISABLE_WORKER", os.getenv("BUDDI_DISABLE_JOB_WORKER", ""))
+    .lower()
+    in {"1", "true", "yes"}
+)
 
 
 def _seal_merkle_root_for_yesterday(target_day: Optional[date] = None) -> Dict[str, Any]:
@@ -98,7 +126,9 @@ def _seal_merkle_root_for_yesterday(target_day: Optional[date] = None) -> Dict[s
                 "merkle_root": daily.merkle_root,
                 "key_id": daily.signature.get("key_id"),
                 "algorithm": daily.signature.get("algorithm"),
+                "kms_provider": daily.signature.get("kms_provider"),
                 "export_path": str(path),
+                "object_lock_uri": daily.object_lock_uri,
                 "risk": "low",
             },
             actor_id="system:merkle-task",
@@ -108,7 +138,9 @@ def _seal_merkle_root_for_yesterday(target_day: Optional[date] = None) -> Dict[s
             "event_count": daily.event_count,
             "merkle_root": daily.merkle_root,
             "export_path": str(path),
+            "object_lock_uri": daily.object_lock_uri,
             "key_id": daily.signature.get("key_id"),
+            "algorithm": daily.signature.get("algorithm"),
         }
     finally:
         db.close()
@@ -148,9 +180,16 @@ async def _merkle_root_loop(interval_seconds: int):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global agent, _merkle_root_task
+    global agent, _merkle_root_task, _worker_task
     with tracer.start_as_current_span("system_startup"):
         logger.info("Initializing RCM Agent System...")
+        # Build-out A1.4: surface provider config at startup. Anthropic is the
+        # primary clinical-reasoning provider; OpenAI is embeddings-only.
+        logger.info("LLM provider: %s | Embed provider: OpenAI", settings.LLM_PROVIDER)
+        # Issue 8: fail closed at startup on a misconfigured TRUSTED_PROXY_CIDRS.
+        # Logs the resolved set and raises in non-development environments when
+        # it parses to zero networks, rather than silently disabling XFF trust.
+        validate_trusted_proxy_cidrs()
         try:
             agent = Agent()
         except Exception as e:
@@ -174,16 +213,29 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("Merkle root background task disabled via BUDDI_DISABLE_MERKLE_TASK")
 
+        # Build-out B3: kick off the async job worker. Disable in Cloud Run's
+        # API service when a separate buddi-worker service drains the queue.
+        if not DISABLE_WORKER and agent is not None:
+            try:
+                _worker_task = asyncio.create_task(worker_loop(agent))
+            except Exception as e:
+                logger.warning("Failed to schedule job worker: %s", e)
+                _worker_task = None
+        else:
+            logger.info("Job worker disabled via BUDDI_DISABLE_WORKER or missing agent")
+
         yield
 
         logger.info("System optimized shutdown.")
-        if _merkle_root_task is not None:
-            _merkle_root_task.cancel()
-            try:
-                await _merkle_root_task
-            except (asyncio.CancelledError, Exception):
-                pass
-            _merkle_root_task = None
+        for _task in (_merkle_root_task, _worker_task):
+            if _task is not None:
+                _task.cancel()
+                try:
+                    await _task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        _merkle_root_task = None
+        _worker_task = None
         try:
             shutdown_tracing()
         except Exception:
@@ -214,11 +266,57 @@ def _cors_origins() -> list[str]:
 
 
 app = FastAPI(
-    title="Buddi RCM & Compliance API",
-    description="PostgreSQL-centric Backend for Shadow Mode RCM, Prior Auth, and Traceability",
+    title="Buddee Clinical AI API",
+    description="""
+Shadow-mode revenue integrity and prior authorization for U.S. healthcare.
+
+**Key properties:**
+- Every HCC/ICD-10 suggestion requires human approval before use. Nothing auto-submits.
+- Every analysis is recorded in a SHA-256 hash-chained audit log, verified daily by KMS-signed Merkle root.
+- PHI never leaves your tenant boundary unencrypted. Clinical notes are transmitted to the LLM provider only under a signed Business Associate Agreement.
+
+**Authentication:** Pass your API key as `X-API-Key: <key>` or `Authorization: Bearer <key>`.
+
+**Quick start:** See `GET /api/demo/synthea` for synthetic test bundles, then `POST /api/shadow/audit` to analyze one.
+    """,
     version="4.1.0",
+    contact={"name": "Buddee Support", "email": "support@buddi.health"},
+    license_info={"name": "Proprietary — Buddee Health Inc."},
+    servers=[
+        {"url": "https://api.buddi.health", "description": "Production"},
+        {"url": "https://staging-api.buddi.health", "description": "Staging"},
+        {"url": "http://localhost:8001", "description": "Local dev"},
+    ],
+    openapi_tags=[
+        {"name": "health", "description": "Liveness and readiness probes."},
+        {"name": "shadow-audit", "description": "Shadow-mode HCC/ICD-10 coding review."},
+        {"name": "prior-auth", "description": "Prior authorization draft generation."},
+        {"name": "audit-chain", "description": "Tamper-evident audit log query and verification."},
+        {"name": "fhir-ingest", "description": "FHIR R4 bundle ingestion."},
+        {"name": "demo", "description": "Synthetic patient demo endpoints (no PHI)."},
+        {"name": "jobs", "description": "Async job polling for long-running LLM tasks."},
+        {"name": "billing", "description": "Stripe subscription management."},
+        {"name": "webhooks", "description": "Webhook endpoint registration."},
+        {"name": "metrics", "description": "PHI-safe SLO and operational metrics."},
+    ],
     lifespan=lifespan,
 )
+
+
+class ErrorResponse(BaseModel):
+    """Canonical error body returned by every route on failure."""
+
+    detail: str
+
+
+# Reusable OpenAPI ``responses=`` block documenting the common error codes.
+_COMMON_ERRORS = {
+    400: {"model": ErrorResponse, "description": "Bad request"},
+    401: {"model": ErrorResponse, "description": "Missing or invalid API key"},
+    403: {"model": ErrorResponse, "description": "Insufficient scope"},
+    429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+    500: {"model": ErrorResponse, "description": "Internal server error"},
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -226,7 +324,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
-    expose_headers=["X-Request-ID"],
+    expose_headers=["X-Request-ID", "X-Response-Source"],
 )
 # Order matters in Starlette: middleware added later runs OUTERMOST. We want
 # the request-ID assigned BEFORE the rate limiter logs / responds, so add it
@@ -258,6 +356,8 @@ class ShadowAuditRequest(BaseModel):
     note: str = Field(..., min_length=1, max_length=10_000)
     billed_codes: List[str] = Field(default_factory=list)
     patient_id: Optional[str] = None
+    encounter_id: Optional[str] = None
+    note_hash: Optional[str] = None
     demo: bool = False
 
 
@@ -271,12 +371,21 @@ class PriorAuthGenerateRequest(BaseModel):
 
     encounter_id: Optional[str] = None
     procedure_code: Optional[str] = None
+    note_hash: Optional[str] = None
     payer: Optional[str] = "Medicare"
     clinical_context: Optional[str] = Field(
         default=None, max_length=50_000,
         description="Free-text clinical context the agent will summarise into the draft.",
     )
     demo: bool = False
+
+
+class WebhookCreateRequest(BaseModel):
+    """JSON body for ``POST /api/webhooks`` (build-out B2)."""
+
+    url: str = Field(..., min_length=1, max_length=2048)
+    events: List[str] = Field(..., min_length=1)
+    secret: str = Field(..., min_length=16, max_length=256)
 
 
 # --- Audit helpers -------------------------------------------------------
@@ -339,12 +448,67 @@ DEMO_PATIENT: Dict[str, Any] = {
 }
 
 
+# Build-out A3.4: the demo fallback sources its clinical note from the
+# committed Safe-Harbor fixture bundles (evals/synthea/fixtures/) keyed by a
+# patient-named slug, rather than a single hard-coded vignette. The default
+# "marcus_holloway" preserves the original diabetic-CKD demo.
+DEMO_FIXTURE_DIR = os.getenv("BUDDI_DEMO_FIXTURES_DIR") or "evals/synthea/fixtures"
+
+
+def _demo_fixture_path(bundle_name: str) -> str | None:
+    """Resolve a fixture slug to a path inside DEMO_FIXTURE_DIR.
+
+    Returns None for missing slugs or any attempt to escape the directory.
+    """
+
+    if not bundle_name:
+        return None
+    name = bundle_name if bundle_name.endswith(".json") else f"{bundle_name}.json"
+    if any(ch in name for ch in ("/", "\\", "..")):
+        return None
+    candidate = os.path.join(DEMO_FIXTURE_DIR, name)
+    if not os.path.abspath(candidate).startswith(os.path.abspath(DEMO_FIXTURE_DIR)):
+        return None
+    return candidate if os.path.exists(candidate) else None
+
+
+def _fixture_note(bundle_name: str) -> str:
+    """Extract the de-identified clinical note from a demo fixture bundle.
+
+    Returns "" when the fixture is missing/unreadable so callers fall back to
+    their own ``note`` argument (backward compat). Build-out A3.4.
+    """
+
+    path = _demo_fixture_path(bundle_name)
+    if path is None:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            bundle = json.load(f)
+    except Exception:
+        return ""
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") != "DocumentReference":
+            continue
+        for content in resource.get("content", []):
+            data = content.get("attachment", {}).get("data")
+            if not data:
+                continue
+            try:
+                return base64.b64decode(data).decode("utf-8")
+            except Exception:
+                return ""
+    return ""
+
+
 def _demo_shadow_result(
     patient_id: str,
     note: str,
     billed_codes: List[str] | None = None,
     source: str = "demo_fallback",
     include_fallback: bool = True,
+    bundle_name: str = "marcus_holloway",
 ) -> Dict[str, Any]:
     """Deterministic launch-demo shadow-mode output.
 
@@ -359,7 +523,14 @@ def _demo_shadow_result(
     so unmatched cases register as "no codes surfaced" rather than a
     misleading E11.22 placeholder — that would otherwise trip the
     ``must_abstain_codes`` check for unrelated specialties (CHF, COPD, etc.).
+
+    ``bundle_name`` (default "marcus_holloway") selects which committed fixture
+    bundle supplies the clinical note **when the caller does not pass one**.
+    Explicit ``note`` arguments always win, so existing callers (the eval
+    harness, the live route) are unaffected. Build-out A3.4.
     """
+    # Fall back to the fixture's note only when no note was supplied.
+    note = note or _fixture_note(bundle_name)
     billed = {code.upper() for code in (billed_codes or [])}
 
     lowered_note = note.lower()
@@ -424,6 +595,7 @@ def _demo_shadow_result(
         "patient_id": patient_id,
         "demo": True,
         "source": source,
+        "bundle_name": bundle_name,
         "recovered_revenue": recovered_revenue,
         "identified_codes": opportunities,
         "summary": (
@@ -528,10 +700,23 @@ def _audit_event_to_dict(event: models.AuditEvent, verification_status: str = "u
     }
 
 
-def _verify_audit_chain(db: Session, tenant_id: uuid.UUID | None = None) -> Dict[str, Any]:
+def _verify_audit_chain(
+    db: Session,
+    tenant_id: uuid.UUID | None = None,
+    day: date | None = None,
+) -> Dict[str, Any]:
     query = db.query(models.AuditEvent)
     if tenant_id is not None:
         query = query.filter(models.AuditEvent.tenant_id == tenant_id)
+    if day is not None:
+        # Build-out B7.2: scope the re-walk to a single day so Postgres can
+        # partition-prune the monthly audit_events partitions instead of
+        # fanning out across all of them.
+        start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+        query = query.filter(
+            models.AuditEvent.timestamp >= start,
+            models.AuditEvent.timestamp < start + timedelta(days=1),
+        )
     events = query.order_by(models.AuditEvent.event_id.asc()).all()
     previous_hash = None
     event_statuses: Dict[int, str] = {}
@@ -624,6 +809,14 @@ def log_audit_event_postgres(
         db.add(new_event)
         db.commit()
         db.refresh(new_event)
+        # Build-out B2: a high-risk audit event fans out an audit_event.flagged
+        # webhook (best-effort, on its own background session).
+        _maybe_schedule_audit_flagged(
+            tenant_id,
+            event_type,
+            current_hash,
+            payload_data.get("risk", "low") if isinstance(payload_data, dict) else "low",
+        )
         return current_hash
     except Exception as e:
         logger.error("Audit log failed (DB likely offline): %s", e)
@@ -670,19 +863,27 @@ async def unauthenticated_health():
     return {"status": "ok", "version": settings.VERSION}
 
 
-@app.get("/api/health")
-async def health(client: str = AUTH, db: Session = Depends(tenant_scoped_session)):
+@app.get("/api/health", tags=["health"])
+async def health(
+    request: Request,
+    client: str = AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
     db_status = "offline"
     try:
         db.execute(text("SELECT 1"))
         db_status = "online"
     except Exception:
         pass
+    # Build-out B6.2: surface the tenant UUID so the operator UI can show a
+    # tenant-scoping indicator (last 8 chars). Not PHI; never the API key.
+    tenant_id = getattr(request.state, "tenant_id", None)
     payload = {
         "status": "active",
         "db": db_status,
         "mode": "RCM_Audit_Postgres",
         "client": client,
+        "tenant_id": str(tenant_id) if tenant_id else None,
         "agent_status": "ready" if agent is not None else "degraded",
     }
     if agent is None:
@@ -763,7 +964,9 @@ async def get_patient(
 async def chat_with_agent(
     body: ChatRequest,
     request: Request,
-    client: str = AUTH,
+    # Security: this route drives the agent / LLM pipeline, so it requires the
+    # clinician scope, not bare authentication (Issue 7).
+    client: str = CLINICIAN_AUTH,
     db: Session = Depends(tenant_scoped_session),
 ):
     """Chat compatibility route used by the React app.
@@ -870,99 +1073,319 @@ async def chat_with_agent(
         raise HTTPException(status_code=500, detail="Chat pipeline failed") from e
 
 
-@app.post("/api/shadow/audit")
+async def _process_shadow_audit(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    patient_id: str,
+    note: str,
+    billed_codes: List[str],
+    demo: bool,
+    actor: str | None,
+    request_id: str | None,
+) -> Dict[str, Any]:
+    """Run + persist a shadow-mode audit. Shared by the sync route and worker.
+
+    Returns the ``ShadowModeResponse`` payload. Persistence failures are
+    swallowed (the audit result is still returned) exactly as the original
+    synchronous route behaved.
+    """
+
+    _t0 = time.monotonic()
+    result = _run_shadow_agent(patient_id, note, billed_codes, tenant_id=tenant_id)
+    parsed_result = ShadowModeResponse.model_validate(result)
+    result_payload = parsed_result.model_dump()
+    # Build-out C2: stamp the end-to-end duration into the audit payload so
+    # GET /api/metrics/slo can compute PHI-safe p50/p95/p99 latency.
+    duration_ms = int((time.monotonic() - _t0) * 1000)
+
+    audit_hash = log_audit_event_postgres(
+        db,
+        "shadow_mode_rcm_demo" if result.get("demo") else "shadow_mode_rcm",
+        {
+            "patient_id": patient_id,
+            "note_len": len(note),
+            "billed_codes": billed_codes,
+            "recovered_revenue": parsed_result.recovered_revenue,
+            "identified_code_count": len(parsed_result.identified_codes),
+            "duration_ms": duration_ms,
+            "risk": "low",
+        },
+        actor_id=actor,
+        tenant_id=str(tenant_id),
+        request_id=request_id,
+    )
+    result_payload["audit_hash"] = audit_hash or parsed_result.audit_hash
+    result_payload["patient_id"] = patient_id
+    result_payload["demo"] = bool(result.get("demo", demo))
+    result_payload["source"] = result.get("source", "agent")
+    result_payload["intent_detected"] = "shadow_mode_rcm"
+
+    try:
+        llm_request = models.LlmRequest(
+            tenant_id=tenant_id,
+            encounter_id=None,
+            prompt_template_version="shadow_mode_rcm:v1",
+            model=settings.LLM_MODEL,
+            full_prompt=redact_for_logs(note, max_length=4000),
+        )
+        db.add(llm_request)
+        db.flush()
+        db.add(
+            models.LlmResponse(
+                tenant_id=tenant_id,
+                llm_request_id=llm_request.id,
+                raw_response=json.dumps(result_payload, default=str),
+                parsed_json=redact_for_logs(result_payload, max_length=4000),
+            )
+        )
+        for code_item in parsed_result.identified_codes:
+            db.add(
+                models.HccSuggestion(
+                    tenant_id=tenant_id,
+                    encounter_id=None,
+                    suggested_code=code_item.code,
+                    justification=code_item.justification,
+                    confidence_score=code_item.confidence,
+                    status="pending",
+                    llm_request_id=llm_request.id,
+                )
+            )
+        db.add(
+            models.RecoveryEvent(
+                tenant_id=tenant_id,
+                audit_hash=result_payload["audit_hash"],
+                patient_id=patient_id or "unknown",
+                recovered_revenue=parsed_result.recovered_revenue,
+            )
+        )
+        db.commit()
+        # Build-out B2: notify subscribers that HCC suggestions were created.
+        created_codes = [c.code for c in parsed_result.identified_codes]
+        if created_codes:
+            await _fire_webhook(
+                db,
+                tenant_id,
+                EVENT_HCC_CREATED,
+                {
+                    "patient_id": patient_id,
+                    "codes": created_codes,
+                    "count": len(created_codes),
+                },
+            )
+    except Exception as e:
+        logger.warning(
+            "Shadow audit persistence failed (returning audit result anyway): %s",
+            redact_for_logs(str(e)),
+            extra={"request_id": request_id},
+        )
+        db.rollback()
+    return result_payload
+
+
+async def _enqueue_job_response(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    job_type: str,
+    input_payload: Dict[str, Any],
+    idempotency_key: str,
+) -> JSONResponse:
+    """Enqueue an LLM-bound job and return the async HTTP envelope (build-out B3).
+
+    Returns ``202 Accepted`` with ``{job_id, status, poll_url}`` for a freshly
+    queued job, or — on an idempotency hit against an already-``completed`` job
+    — ``200 OK`` with the cached ``result_payload`` so a retried request never
+    re-runs the model. The job worker (``core/worker.py``) drains the queue and
+    persists ``result_payload``; nothing here submits to a payer.
+    """
+
+    job = await job_queue.enqueue(
+        db,
+        tenant_id=tenant_id,
+        job_type=job_type,
+        input_payload=input_payload,
+        idempotency_key=idempotency_key,
+    )
+    # Snapshot before commit — expire_on_commit would otherwise force a reload
+    # on each attribute access below.
+    job_id = str(job.id)
+    status = job.status
+    cached_result = job.result_payload if status == "completed" else None
+    db.commit()
+
+    if cached_result:
+        return JSONResponse(status_code=200, content=cached_result)
+    return JSONResponse(
+        status_code=202,
+        content={"job_id": job_id, "status": status, "poll_url": f"/api/jobs/{job_id}"},
+    )
+
+
+def _sse(data: Dict[str, Any]) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
+
+@app.post(
+    "/api/shadow/audit",
+    tags=["shadow-audit"],
+    summary="Run a shadow-mode HCC/ICD-10 coding review",
+    responses=_COMMON_ERRORS,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "patient_id": "MH-SYNTHETIC-001",
+                        "note": (
+                            "65-year-old male with longstanding Type 2 diabetes mellitus "
+                            "with peripheral neuropathy, CKD stage 3b, and hypertension. "
+                            "A1c 8.4%. Current medications: metformin, lisinopril, gabapentin."
+                        ),
+                        "encounter_date": "2026-06-01",
+                        "existing_codes": ["E11.9", "I10"],
+                    }
+                }
+            }
+        }
+    },
+)
 async def run_shadow_audit(
     body: ShadowAuditRequest,
+    request: Request,
+    sync: bool = False,
+    client: str = CLINICIAN_AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Queue a shadow-mode HCC/revenue audit (HTTP 202), or run it inline.
+
+    Build-out B3: the default path enqueues a job and returns 202 + job_id so
+    the request never blocks on the LLM call (§4.2 Bottleneck #3). A prior
+    completed job for the same (tenant, note_hash) short-circuits to the cached
+    result. ``?sync=true`` runs the legacy synchronous path (kept for tests and
+    low-latency callers).
+    """
+
+    tenant_id = _require_tenant_id(request)
+    patient_id = body.patient_id or DEMO_PATIENT["id"]
+    note = DEMO_PATIENT["clinical_note"] if body.demo and patient_id == DEMO_PATIENT["id"] else body.note
+    billed_codes = (
+        DEMO_PATIENT["billed_codes"]
+        if body.demo and patient_id == DEMO_PATIENT["id"]
+        else body.billed_codes
+    )
+
+    if sync:
+        with tracer.start_as_current_span("api_shadow_audit") as span:
+            span.set_attribute("note_size_bytes", len(note.encode("utf-8")))
+            span.set_attribute("billed_code_count", len(billed_codes))
+            return await _process_shadow_audit(
+                db,
+                tenant_id=tenant_id,
+                patient_id=patient_id,
+                note=note,
+                billed_codes=billed_codes,
+                demo=body.demo,
+                actor=client,
+                request_id=_request_id(request),
+            )
+
+    # Build-out B3: enqueue and return 202 so the request never blocks on the
+    # ~12s LLM round-trip (§4.2 Bottleneck #3). An explicit body.note_hash is
+    # honored for idempotency; otherwise we derive a PHI-free content hash so
+    # distinct notes still map to distinct jobs.
+    note_hash = body.note_hash or job_queue.compute_payload_hash(
+        {"note": note, "billed_codes": billed_codes}, "note", "billed_codes"
+    )
+    idempotency_key = job_queue.compute_idempotency_key(
+        tenant_id, body.encounter_id, note_hash, "shadow_audit"
+    )
+    return await _enqueue_job_response(
+        db,
+        tenant_id=tenant_id,
+        job_type="shadow_audit",
+        input_payload={
+            "patient_id": patient_id,
+            "note": note,
+            "billed_codes": billed_codes,
+            "demo": body.demo,
+            "tenant_id": str(tenant_id),
+            "actor": str(client),
+            "request_id": _request_id(request),
+        },
+        idempotency_key=idempotency_key,
+    )
+
+
+@app.get("/api/jobs/{job_id}", tags=["jobs"], responses=_COMMON_ERRORS)
+async def get_job_status(
+    job_id: str,
     request: Request,
     client: str = CLINICIAN_AUTH,
     db: Session = Depends(tenant_scoped_session),
 ):
-    """Run the shadow-mode HCC/revenue recovery workflow and persist results."""
-    with tracer.start_as_current_span("api_shadow_audit") as span:
-        tenant_id = _require_tenant_id(request)
-        patient_id = body.patient_id or DEMO_PATIENT["id"]
-        note = DEMO_PATIENT["clinical_note"] if body.demo and patient_id == DEMO_PATIENT["id"] else body.note
-        billed_codes = DEMO_PATIENT["billed_codes"] if body.demo and patient_id == DEMO_PATIENT["id"] else body.billed_codes
-        span.set_attribute("note_size_bytes", len(note.encode("utf-8")))
-        span.set_attribute("billed_code_count", len(billed_codes))
+    """Return a job's status and, when completed, the full ShadowModeResponse."""
 
-        result = _run_shadow_agent(patient_id, note, billed_codes, tenant_id=tenant_id)
-        parsed_result = ShadowModeResponse.model_validate(result)
-        result_payload = parsed_result.model_dump()
+    tenant_id = _require_tenant_id(request)
+    jid = _uuid_or_none(job_id)
+    if jid is None:
+        raise HTTPException(status_code=400, detail="Invalid job id")
+    job = job_queue.get_job(db, jid, tenant_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    resp: Dict[str, Any] = {"job_id": str(job.id), "status": job.status}
+    if job.status == "completed":
+        resp["result"] = job.result_payload
+    elif job.status == "failed":
+        resp["error"] = job.error_message
+    return resp
 
-        audit_hash = log_audit_event_postgres(
-            db,
-            "shadow_mode_rcm_demo" if result.get("demo") else "shadow_mode_rcm",
-            {
-                "patient_id": patient_id,
-                "note_len": len(note),
-                "billed_codes": billed_codes,
-                "recovered_revenue": parsed_result.recovered_revenue,
-                "identified_code_count": len(parsed_result.identified_codes),
-                "risk": "low",
-            },
-            actor_id=client,
-            tenant_id=str(tenant_id),
-            request_id=_request_id(request),
-        )
-        result_payload["audit_hash"] = audit_hash or parsed_result.audit_hash
-        result_payload["patient_id"] = patient_id
-        result_payload["demo"] = bool(result.get("demo", body.demo))
-        result_payload["source"] = result.get("source", "agent")
-        result_payload["intent_detected"] = "shadow_mode_rcm"
 
-        try:
-            llm_request = models.LlmRequest(
-                tenant_id=tenant_id,
-                encounter_id=None,
-                prompt_template_version="shadow_mode_rcm:v1",
-                model=settings.LLM_MODEL,
-                full_prompt=redact_for_logs(note, max_length=4000),
-            )
-            db.add(llm_request)
-            db.flush()
-            db.add(
-                models.LlmResponse(
-                    tenant_id=tenant_id,
-                    llm_request_id=llm_request.id,
-                    raw_response=json.dumps(result_payload, default=str),
-                    parsed_json=redact_for_logs(result_payload, max_length=4000),
-                )
-            )
-            for code_item in parsed_result.identified_codes:
-                db.add(
-                    models.HccSuggestion(
-                        tenant_id=tenant_id,
-                        encounter_id=None,
-                        suggested_code=code_item.code,
-                        justification=code_item.justification,
-                        confidence_score=code_item.confidence,
-                        status="pending",
-                        llm_request_id=llm_request.id,
-                    )
-                )
-            db.add(
-                models.RecoveryEvent(
-                    tenant_id=tenant_id,
-                    audit_hash=result_payload["audit_hash"],
-                    patient_id=patient_id or "unknown",
-                    recovered_revenue=parsed_result.recovered_revenue,
-                )
-            )
-            db.commit()
-        except Exception as e:
-            logger.warning(
-                "Shadow audit persistence failed (returning audit result anyway): %s",
-                redact_for_logs(str(e)),
-                extra={"request_id": _request_id(request)},
-            )
-            db.rollback()
-        return result_payload
+@app.get("/api/jobs/{job_id}/stream")
+async def stream_job(
+    job_id: str,
+    request: Request,
+    client: str = CLINICIAN_AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Server-Sent Events stream of a job's progress (build-out B3.6)."""
+
+    tenant_id = _require_tenant_id(request)
+    jid = _uuid_or_none(job_id)
+    if jid is None:
+        raise HTTPException(status_code=400, detail="Invalid job id")
+
+    async def _events():
+        last_status = None
+        for _ in range(240):  # ~120s ceiling at 0.5s/poll
+            db.expire_all()
+            job = job_queue.get_job(db, jid, tenant_id)
+            if job is None:
+                yield _sse({"status": "not_found"})
+                return
+            if job.status != last_status:
+                last_status = job.status
+                if job.status == "completed":
+                    yield _sse({"status": "completed", "result": job.result_payload})
+                    return
+                if job.status == "failed":
+                    yield _sse({"status": "failed", "error": job.error_message})
+                    return
+                if job.status == "processing":
+                    yield _sse({"status": "processing", "step": "rag_retrieval"})
+                else:
+                    yield _sse({"status": "pending"})
+            await asyncio.sleep(0.5)
+        yield _sse({"status": last_status or "pending", "timeout": True})
+
+    return StreamingResponse(_events(), media_type="text/event-stream")
 
 
 @app.get("/api/demo/sample-patient")
 async def get_demo_patient(client: str = AUTH):
-    return DEMO_PATIENT
+    # Build-out B6.4: flag canned/demo data so the UI can show a "Demo mode"
+    # banner. X-Response-Source is CORS-exposed (see expose_headers).
+    return JSONResponse(content=DEMO_PATIENT, headers={"X-Response-Source": "canned"})
 
 
 # ---------------------------------------------------------------------
@@ -996,7 +1419,7 @@ def _synthea_bundle_path(name: str) -> str | None:
     return candidate if os.path.exists(candidate) else None
 
 
-@app.get("/api/demo/synthea")
+@app.get("/api/demo/synthea", tags=["demo"])
 async def list_synthea_bundles(client: str = AUTH):
     """List every synthetic bundle hosted for the demo sandbox."""
 
@@ -1091,6 +1514,542 @@ async def ingest_synthea_bundle(
         "audit_hash": audit_hash,
     }
 
+
+# ---------------------------------------------------------------------
+# Hosted demo fixtures (build-out A3.3)
+# ---------------------------------------------------------------------
+# The canonical demo set for ``demo.buddi.health``: the committed,
+# Safe-Harbor 5-bundle fixture library under evals/synthea/fixtures/ (one
+# per strategy-doc condition — diabetes-with-complications, CHF, COPD, CKD,
+# sepsis). Unlike /api/demo/synthea (the broader 25-bundle drift corpus),
+# these are clinician-scoped and stable across releases. They carry no PHI,
+# so they do not require the Anthropic key or the BAA tripwire to serve.
+
+
+@app.get("/api/demo/bundles")
+async def list_demo_bundles(client: str = CLINICIAN_AUTH):
+    """List the committed demo fixture bundles available at demo.buddi.health."""
+
+    if not os.path.isdir(DEMO_FIXTURE_DIR):
+        return {"bundles": [], "count": 0, "synthetic": True}
+    names = sorted(f for f in os.listdir(DEMO_FIXTURE_DIR) if f.endswith(".json"))
+    return {
+        "bundles": [
+            {"name": name, "fetch_url": f"/api/demo/bundles/{name}"}
+            for name in names
+        ],
+        "count": len(names),
+        "synthetic": True,
+        "source": (
+            "Committed Safe-Harbor fixtures (evals/synthea/fixtures/) — "
+            "no real PHI."
+        ),
+    }
+
+
+@app.get("/api/demo/bundles/{name}")
+async def fetch_demo_bundle(name: str, client: str = CLINICIAN_AUTH):
+    """Return the raw FHIR Bundle JSON for a single committed demo fixture."""
+
+    path = _demo_fixture_path(name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Demo fixture not found")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error("Failed to load demo fixture %s: %s", name, e)
+        raise HTTPException(status_code=500, detail="Fixture read failure") from e
+
+
+# ---------------------------------------------------------------------
+# SMART-on-FHIR EHR connector (build-out B1)
+# ---------------------------------------------------------------------
+# The standalone-launch half of the SMART App Launch Framework. /launch is
+# admin-scoped (configuring an EHR connection is an admin action); /callback
+# is the unauthenticated OAuth redirect target — it re-establishes tenant
+# context from the tenant-prefixed ``state`` and validates the unguessable
+# random suffix, so it does not (and cannot) carry an API key.
+
+
+@app.get("/api/ehr/launch")
+async def ehr_launch(
+    request: Request,
+    client: str = ADMIN_AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Initiate a SMART standalone launch; returns the authorization URL."""
+
+    tenant_id = _require_tenant_id(request)
+    try:
+        auth_url = await SMARTFHIRLauncher().begin_launch(db, tenant_id=tenant_id)
+    except Exception as e:
+        logger.error("SMART launch initiation failed: %s", redact_for_logs(str(e)))
+        raise HTTPException(status_code=502, detail="SMART launch initiation failed") from e
+    return {"authorization_url": auth_url}
+
+
+@app.get("/api/ehr/callback")
+async def ehr_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
+    """Handle the SMART OAuth redirect, store tokens, redirect to the dashboard."""
+
+    dashboard_url = os.getenv("SMART_DASHBOARD_REDIRECT", "/dashboard")
+    if error:
+        return RedirectResponse(url=f"{dashboard_url}?ehr=error", status_code=302)
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing code or state")
+    tenant_id = tenant_id_from_state(state)
+    if tenant_id is None:
+        raise HTTPException(status_code=400, detail="Invalid state")
+
+    db = SessionLocal()
+    try:
+        # Re-establish RLS tenant context from the state prefix so the pending
+        # row lookup is tenant-scoped at the DB layer.
+        set_tenant_context(db, tenant_id)
+        await SMARTFHIRLauncher().complete_callback(db, code=code, state=state)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("SMART callback failed: %s", redact_for_logs(str(e)))
+        raise HTTPException(status_code=502, detail="SMART token exchange failed") from e
+    finally:
+        set_tenant_context(db, None)
+        db.close()
+    return RedirectResponse(url=f"{dashboard_url}?ehr=connected", status_code=302)
+
+
+# ---------------------------------------------------------------------
+# Webhooks (build-out B2)
+# ---------------------------------------------------------------------
+# HMAC-signed event delivery to customer endpoints. All delivery attempts are
+# recorded to audit_events (the single analytics source — no third-party
+# trackers). Dispatch is best-effort and never breaks the request path.
+
+
+async def _fire_webhook(
+    db: Session, tenant_id: uuid.UUID, event_type: str, payload: Dict[str, Any]
+) -> None:
+    """Best-effort webhook dispatch from a request handler. Never raises."""
+
+    try:
+        await dispatch_webhook(
+            db, tenant_id, event_type, payload, audit_logger=log_audit_event_postgres
+        )
+    except Exception as e:  # noqa: BLE001 - delivery must never fail the request
+        logger.warning("Webhook dispatch (%s) failed: %s", event_type, redact_for_logs(str(e)))
+
+
+async def _dispatch_audit_flagged(tenant_id_str: str, payload: Dict[str, Any]) -> None:
+    """Fire audit_event.flagged on its own short-lived session (background task)."""
+
+    tid = _uuid_or_none(tenant_id_str)
+    if tid is None:
+        return
+    db = SessionLocal()
+    try:
+        set_tenant_context(db, tid)
+        await dispatch_webhook(
+            db, tid, EVENT_AUDIT_FLAGGED, payload, audit_logger=log_audit_event_postgres
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("audit_event.flagged dispatch failed: %s", redact_for_logs(str(e)))
+    finally:
+        set_tenant_context(db, None)
+        db.close()
+
+
+def _maybe_schedule_audit_flagged(
+    tenant_id_str: str | None, event_type: str, audit_hash: str | None, risk: str
+) -> None:
+    """Schedule the audit_event.flagged webhook when a high-risk event is logged.
+
+    Runs as a background task on its own session so it works regardless of which
+    handler logged the event, and never blocks or breaks the logging path.
+    """
+
+    if risk != "high" or not tenant_id_str:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return  # no event loop (sync context, e.g. CLI) — skip best-effort delivery
+    loop.create_task(
+        _dispatch_audit_flagged(
+            tenant_id_str,
+            {"event_type": event_type, "audit_hash": audit_hash, "risk": risk},
+        )
+    )
+
+
+@app.post("/api/webhooks", status_code=201)
+async def create_webhook(
+    body: WebhookCreateRequest,
+    request: Request,
+    client: str = ADMIN_AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Register a customer webhook endpoint (admin-only)."""
+
+    tenant_id = _require_tenant_id(request)
+    unknown = sorted(set(body.events) - set(KNOWN_EVENTS))
+    if unknown:
+        raise HTTPException(
+            status_code=422, detail=f"Unknown webhook event(s): {', '.join(unknown)}"
+        )
+    try:
+        ep = register_webhook(db, tenant_id, body.url, body.events, body.secret)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return {"id": str(ep.id), "url": ep.url, "events": list(ep.events), "active": ep.active}
+
+
+@app.get("/api/webhooks")
+async def list_webhooks(
+    request: Request,
+    client: str = ADMIN_AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
+    """List the tenant's webhook registrations (secrets never returned)."""
+
+    tenant_id = _require_tenant_id(request)
+    rows = (
+        db.query(models.WebhookEndpoint)
+        .filter(models.WebhookEndpoint.tenant_id == tenant_id)
+        .all()
+    )
+    return {
+        "webhooks": [
+            {
+                "id": str(r.id),
+                "url": r.url,
+                "events": list(r.events or []),
+                "active": r.active,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.delete("/api/webhooks/{webhook_id}")
+async def delete_webhook(
+    webhook_id: str,
+    request: Request,
+    client: str = ADMIN_AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Delete a webhook registration (admin-only)."""
+
+    tenant_id = _require_tenant_id(request)
+    wid = _uuid_or_none(webhook_id)
+    if wid is None:
+        raise HTTPException(status_code=400, detail="Invalid webhook id")
+    deleted = (
+        db.query(models.WebhookEndpoint)
+        .filter(
+            models.WebhookEndpoint.id == wid,
+            models.WebhookEndpoint.tenant_id == tenant_id,
+        )
+        .delete()
+    )
+    db.commit()
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return {"deleted": True, "id": webhook_id}
+
+
+@app.post("/api/suggestions/{suggestion_id}/approve")
+async def approve_suggestion(
+    suggestion_id: str,
+    request: Request,
+    client: str = CLINICIAN_AUTH,
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Approve an HCC suggestion for the coder's workflow.
+
+    Compliance: approval marks the suggestion ``approved`` for human review/
+    submission only — it NEVER auto-submits to a payer or EHR. Submission stays
+    a manual, out-of-band coder action.
+    """
+
+    tenant_id = _require_tenant_id(request)
+    sid = _uuid_or_none(suggestion_id)
+    if sid is None:
+        raise HTTPException(status_code=400, detail="Invalid suggestion id")
+    sugg = (
+        db.query(models.HccSuggestion)
+        .filter(
+            models.HccSuggestion.id == sid,
+            models.HccSuggestion.tenant_id == tenant_id,
+        )
+        .first()
+    )
+    if sugg is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    sugg.status = "approved"
+    db.commit()
+    log_audit_event_postgres(
+        db,
+        "hcc_suggestion_approved",
+        {"suggestion_id": str(sugg.id), "code": sugg.suggested_code, "risk": "low"},
+        actor_id=client,
+        tenant_id=str(tenant_id),
+        request_id=_request_id(request),
+    )
+    await _fire_webhook(
+        db,
+        tenant_id,
+        EVENT_HCC_APPROVED,
+        {"suggestion_id": str(sugg.id), "code": sugg.suggested_code, "status": "approved"},
+    )
+    return {"id": str(sugg.id), "status": "approved", "code": sugg.suggested_code}
+
+
+# ---------------------------------------------------------------------
+# Stripe billing (PROMPT_04)
+# ---------------------------------------------------------------------
+# subscribe / portal / status are admin-scoped. The webhook is exempt from
+# require_api_client (Stripe authenticates via its own HMAC signature) but
+# remains subject to the global rate limiter (it is NOT in the middleware
+# exempt list) and runs on a raw, non-tenant-scoped session.
+
+
+def get_db_session():
+    """Raw (non-tenant-scoped) DB session dependency.
+
+    Used by endpoints that are not scoped by request auth — notably the Stripe
+    webhook, whose events identify the tenant by subscription_id, not by an API
+    key. ``tenants`` carries no ``tenant_id`` column, so RLS does not apply.
+    """
+
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@app.post("/api/billing/subscribe")
+async def billing_subscribe(
+    request: Request,
+    client: AuthenticatedClient = Depends(require_scope("admin")),
+    db: Session = Depends(tenant_scoped_session),
+):
+    """
+    Creates a Stripe Checkout session and returns the URL.
+    The operator UI redirects the user's browser there.
+    Body (optional): {"physician_count": int, "success_url": str, "cancel_url": str}
+    """
+    from backend.billing import create_checkout_session
+
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    tenant = db.query(models.Tenant).filter_by(id=client.tenant_id).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    if body.get("physician_count"):
+        tenant.physician_count = int(body["physician_count"])
+        db.commit()
+    success_url = body.get("success_url", "https://app.buddi.health/billing/success")
+    cancel_url = body.get("cancel_url", "https://app.buddi.health/billing/cancel")
+    url = create_checkout_session(db, tenant, success_url, cancel_url)
+    log_audit_event_postgres(
+        db, "billing_checkout_created", {"tenant_id": str(tenant.id)}, actor_id=str(client)
+    )
+    return {"checkout_url": url}
+
+
+@app.post("/api/billing/portal")
+async def billing_portal(
+    request: Request,
+    client: AuthenticatedClient = Depends(require_scope("admin")),
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Returns the Stripe billing portal URL for the current tenant."""
+    from backend.billing import create_portal_session
+
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    tenant = db.query(models.Tenant).filter_by(id=client.tenant_id).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    if not tenant.stripe_customer_id:
+        raise HTTPException(400, "No Stripe customer exists for this tenant. Call /api/billing/subscribe first.")
+    return_url = body.get("return_url", "https://app.buddi.health/settings/billing")
+    url = create_portal_session(db, tenant, return_url)
+    return {"portal_url": url}
+
+
+@app.get("/api/billing/status")
+async def billing_status(
+    client: AuthenticatedClient = Depends(require_scope("admin")),
+    db: Session = Depends(tenant_scoped_session),
+):
+    """Returns current subscription status for the tenant. PHI-safe."""
+    tenant = db.query(models.Tenant).filter_by(id=client.tenant_id).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    return {
+        "subscription_status": tenant.subscription_status or "none",
+        "physician_count": tenant.physician_count or 1,
+        "current_period_end": tenant.subscription_current_period_end.isoformat()
+        if tenant.subscription_current_period_end
+        else None,
+        "has_payment_method": bool(tenant.stripe_customer_id),
+    }
+
+
+@app.post("/api/billing/webhook", include_in_schema=False)
+async def stripe_webhook(request: Request, db: Session = Depends(get_db_session)):
+    """
+    Stripe webhook receiver. Exempt from require_api_client.
+    Validates HMAC signature before processing any event.
+    Rate limiting still applies.
+    """
+    from backend.billing import handle_webhook_event
+    import stripe
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    try:
+        result = handle_webhook_event(db, payload, sig_header)
+        return result
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature")
+
+
+# ---------------------------------------------------------------------
+# SLO metrics (PROMPT_07) — powers the operator dashboard's SLO panel
+# ---------------------------------------------------------------------
+
+
+@app.get(
+    "/api/metrics/slo",
+    tags=["metrics"],
+    summary="PHI-safe SLO and operational metrics",
+    description="""
+Returns operational health metrics for the last 24h and 7d windows.
+All values are PHI-safe: durations, counts, booleans, and enums only.
+No patient identifiers appear in the response.
+    """,
+    responses=_COMMON_ERRORS,
+)
+async def get_slo_metrics(
+    client: AuthenticatedClient = Depends(require_scope("admin")),
+    db: Session = Depends(tenant_scoped_session),
+):
+    """
+    Computes:
+    - shadow_audit_p95_ms: p95 latency of completed shadow_audit jobs in the last 24h
+    - prior_auth_p95_ms: p95 latency of completed prior_auth jobs in the last 24h
+    - audit_chain_verify_ok: whether the last verify call succeeded
+    - audit_chain_last_verified_at: ISO8601 timestamp of the last verify
+    - suggestions_approved_7d / rejected / abstained: hcc_suggestion status counts (7d)
+    - suggestion_approval_rate_7d: approved / (approved + rejected), or null if no data
+    - encounters_processed_24h: count of completed shadow_audit jobs in 24h
+    All values are PHI-safe (durations, counts, booleans, a salted tenant fingerprint).
+    """
+
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    week_ago = now - timedelta(days=7)
+    tenant_id = client.tenant_id
+
+    def p95(values):
+        if not values:
+            return None
+        sorted_vals = sorted(v[0] for v in values if v[0] is not None)
+        if not sorted_vals:
+            return None
+        idx = int(len(sorted_vals) * 0.95)
+        return int(sorted_vals[min(idx, len(sorted_vals) - 1)])
+
+    # p95 latency for shadow_audit jobs (last 24h, completed only).
+    shadow_jobs = db.execute(
+        text(
+            """
+            SELECT EXTRACT(EPOCH FROM (completed_at - created_at)) * 1000 AS duration_ms
+            FROM jobs
+            WHERE tenant_id = :tid
+              AND job_type = 'shadow_audit'
+              AND status = 'completed'
+              AND created_at >= :since
+            ORDER BY duration_ms
+            """
+        ),
+        {"tid": str(tenant_id), "since": day_ago},
+    ).fetchall()
+    shadow_p95 = p95(shadow_jobs)
+
+    prior_auth_jobs = db.execute(
+        text(
+            """
+            SELECT EXTRACT(EPOCH FROM (completed_at - created_at)) * 1000 AS duration_ms
+            FROM jobs
+            WHERE tenant_id = :tid
+              AND job_type = 'prior_auth'
+              AND status = 'completed'
+              AND created_at >= :since
+            ORDER BY duration_ms
+            """
+        ),
+        {"tid": str(tenant_id), "since": day_ago},
+    ).fetchall()
+    prior_auth_p95 = p95(prior_auth_jobs)
+
+    # Last audit-chain verification (recorded as an audit_chain_verified event).
+    last_verify = db.execute(
+        text(
+            """
+            SELECT timestamp AS verified_at, payload->>'all_verified' AS all_verified
+            FROM audit_events
+            WHERE tenant_id = :tid
+              AND event_type = 'audit_chain_verified'
+            ORDER BY timestamp DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": str(tenant_id)},
+    ).fetchone()
+
+    suggestion_stats = db.execute(
+        text(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'approved') AS approved,
+                COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
+                COUNT(*) FILTER (WHERE status = 'abstained') AS abstained
+            FROM hcc_suggestions
+            WHERE tenant_id = :tid
+              AND created_at >= :since
+            """
+        ),
+        {"tid": str(tenant_id), "since": week_ago},
+    ).fetchone()
+
+    approved = (suggestion_stats.approved if suggestion_stats else 0) or 0
+    rejected = (suggestion_stats.rejected if suggestion_stats else 0) or 0
+    abstained = (suggestion_stats.abstained if suggestion_stats else 0) or 0
+    total_decided = approved + rejected
+    approval_rate = round(approved / total_decided, 3) if total_decided > 0 else None
+
+    return {
+        "shadow_audit_p95_ms": shadow_p95,
+        "prior_auth_p95_ms": prior_auth_p95,
+        "audit_chain_verify_ok": (last_verify.all_verified == "true") if last_verify else None,
+        "audit_chain_last_verified_at": last_verify.verified_at.isoformat() if last_verify else None,
+        "suggestions_approved_7d": approved,
+        "suggestions_rejected_7d": rejected,
+        "suggestions_abstained_7d": abstained,
+        "suggestion_approval_rate_7d": approval_rate,
+        "encounters_processed_24h": len(shadow_jobs),
+        "generated_at": now.isoformat(),
+        # PHI-safe salted-ish fingerprint so dashboards can group without exposing the tenant UUID.
+        "tenant_id_hash": hashlib.sha256(str(tenant_id).encode()).hexdigest()[:16],
+    }
 
 
 def _demo_dashboard_metrics() -> Dict[str, Any]:
@@ -1246,7 +2205,49 @@ def _enforce_baa_precondition(db: Session, tenant_id: uuid.UUID) -> None:
         )
 
 
-@app.post("/ingest/fhir")
+@app.post(
+    "/ingest/fhir",
+    tags=["fhir-ingest"],
+    summary="Ingest a FHIR R4 bundle",
+    responses=_COMMON_ERRORS,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "resourceType": "Bundle",
+                        "type": "collection",
+                        "entry": [
+                            {"resource": {
+                                "resourceType": "Patient",
+                                "id": "mh-synthetic-001",
+                                "name": [{"family": "Holloway", "given": ["Marcus"]}],
+                                "gender": "male",
+                                "birthDate": "1958-01-01",
+                            }},
+                            {"resource": {
+                                "resourceType": "Encounter",
+                                "id": "enc-001",
+                                "status": "finished",
+                                "subject": {"reference": "Patient/mh-synthetic-001"},
+                            }},
+                            {"resource": {
+                                "resourceType": "Condition",
+                                "id": "cond-001",
+                                "subject": {"reference": "Patient/mh-synthetic-001"},
+                                "code": {"coding": [{
+                                    "system": "http://hl7.org/fhir/sid/icd-10-cm",
+                                    "code": "E11.9",
+                                    "display": "Type 2 diabetes mellitus without complications",
+                                }]},
+                            }},
+                        ],
+                    }
+                }
+            }
+        }
+    },
+)
 async def process_fhir_bundle(
     request: Request,
     client: str = INGEST_AUTH,
@@ -1333,7 +2334,9 @@ async def process_api_fhir_ingest_alias(
 async def process_encounter(
     encounter_id: str,
     request: Request,
-    client: str = AUTH,
+    # Security: queues PHI processing and writes an audit event, so it requires
+    # the clinician scope, not bare authentication (Issue 7).
+    client: str = CLINICIAN_AUTH,
     db: Session = Depends(tenant_scoped_session),
 ):
     tenant_id = _require_tenant_id(request)
@@ -1420,16 +2423,24 @@ def _resolve_prior_auth_args(
 
 
 @app.post("/prior-auth/generate", include_in_schema=False)
-@app.post("/api/prior-auth/generate")
+@app.post("/api/prior-auth/generate", tags=["prior-auth"], responses=_COMMON_ERRORS)
 async def generate_prior_auth(
     request: Request,
     body: PriorAuthGenerateRequest = PriorAuthGenerateRequest(),
     encounter_id: Optional[str] = None,
     procedure_code: Optional[str] = None,
+    sync: bool = False,
     client: str = CLINICIAN_AUTH,
     db: Session = Depends(tenant_scoped_session),
 ):
     """Generate a real prior-authorization draft via the agent.
+
+    Build-out B3: the default path enqueues a ``prior_auth`` job and returns
+    HTTP 202 + ``job_id`` so the request never blocks on the LLM round-trip
+    (§4.2 Bottleneck #3). ``?sync=true`` runs the legacy inline path below,
+    which drafts and persists the ``PriorAuthorizationRequest`` row in-request.
+    Either way the artifact is a ``status="draft"`` recommendation that is never
+    auto-submitted to a payer.
 
     Backward compatibility:
       * Legacy callers can still pass ``?encounter_id=…&procedure_code=…``.
@@ -1442,11 +2453,45 @@ async def generate_prior_auth(
     ``auth_request_id`` and ``audit_hash``.
     """
     with tracer.start_as_current_span("api_prior_auth_generate"):
+        _pa_t0 = time.monotonic()
         tenant_id = _require_tenant_id(request)
         args = _resolve_prior_auth_args(body, encounter_id, procedure_code)
         proc = args["procedure_code"]
         if not proc:
             raise HTTPException(status_code=422, detail="procedure_code is required")
+
+        if not sync:
+            # Build-out B3: enqueue the LLM-bound draft (worker dispatches to
+            # agent.run_prior_auth, which always stamps status="draft").
+            note_hash = body.note_hash or job_queue.compute_payload_hash(
+                {
+                    "clinical_context": args["clinical_context"],
+                    "procedure_code": proc,
+                    "payer": args["payer"],
+                },
+                "clinical_context",
+                "procedure_code",
+                "payer",
+            )
+            idempotency_key = job_queue.compute_idempotency_key(
+                tenant_id, args["encounter_id"], note_hash, "prior_auth"
+            )
+            return await _enqueue_job_response(
+                db,
+                tenant_id=tenant_id,
+                job_type="prior_auth",
+                input_payload={
+                    "encounter_id": args["encounter_id"],
+                    "procedure_code": proc,
+                    "payer": args["payer"],
+                    "clinical_context": args["clinical_context"],
+                    "demo": args["demo"],
+                    "tenant_id": str(tenant_id),
+                    "actor": str(client),
+                    "request_id": _request_id(request),
+                },
+                idempotency_key=idempotency_key,
+            )
 
         fallback_context = (
             DEMO_PATIENT["clinical_note"]
@@ -1514,6 +2559,18 @@ async def generate_prior_auth(
                 )
             )
             db.commit()
+            # Build-out B2: notify subscribers of the prior-auth state transition.
+            await _fire_webhook(
+                db,
+                tenant_id,
+                EVENT_PRIOR_AUTH_CHANGED,
+                {
+                    "prior_auth_id": auth_request_id,
+                    "state": "draft",
+                    "procedure": proc,
+                    "payer": args["payer"],
+                },
+            )
         except Exception as e:
             logger.warning(
                 "Prior-auth DB persistence failed (returning artifact anyway): %s",
@@ -1532,6 +2589,7 @@ async def generate_prior_auth(
                 "encounter_id": args["encounter_id"],
                 "demo": used_demo,
                 "supporting_code_count": len(draft_payload.get("supporting_codes", [])),
+                "duration_ms": int((time.monotonic() - _pa_t0) * 1000),
                 "risk": "low",
             },
             actor_id=client,
@@ -1626,10 +2684,33 @@ async def get_api_audit_logs_trailing_slash_redirect(client: str = AUTH):
     return RedirectResponse(url="/api/audit/query", status_code=301)
 
 
-@app.get("/api/audit/verify")
+@app.get(
+    "/api/audit/verify",
+    tags=["audit-chain"],
+    summary="Verify the tamper-evident audit chain",
+    responses={
+        200: {
+            "description": "Verification result",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "all_verified": True,
+                        "event_count": 42,
+                        "chain_root": "sha256:9f2c…",
+                    }
+                }
+            },
+        },
+        **_COMMON_ERRORS,
+    },
+)
 async def verify_audit_logs(
     request: Request,
-    client: str = AUTH,
+    day: str | None = None,
+    deep: bool = False,
+    # Security: audit-chain / signed-root verification is an admin-only
+    # operational surface (Issue 7).
+    client: str = ADMIN_AUTH,
     db: Session = Depends(tenant_scoped_session),
 ):
     """Verify the DB audit chain *and* every signed daily Merkle root.
@@ -1657,18 +2738,9 @@ async def verify_audit_logs(
     entirely off ``verify_signed_roots_against_db``.
     """
     tenant_id = _require_tenant_id(request)
-    try:
-        chain = _verify_audit_chain(db, tenant_id=tenant_id)
-        chain_summary = {k: v for k, v in chain.items() if k != "event_statuses"}
-    except Exception as e:
-        logger.error("Audit chain verification failure: %s", e)
-        chain_summary = {
-            "verified": True,
-            "status": "demo_verified",
-            "events_checked": 1,
-            "broken_at": None,
-        }
 
+    # B7.2: walk the signed daily Merkle roots FIRST — O(days), partition-pruned
+    # by definition, and the artifact CMS auditors actually verify.
     try:
         roots_summary = verify_signed_roots_against_db(db)
     except Exception as e:
@@ -1680,6 +2752,42 @@ async def verify_audit_logs(
             "days": [],
             "error": str(e),
         }
+
+    # Parse an optional day-of-interest; only re-verify that day's events.
+    target_day: date | None = None
+    if day:
+        try:
+            target_day = date.fromisoformat(day)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail="day must be YYYY-MM-DD") from e
+
+    # The full chain re-walk fans out across every monthly partition, so we only
+    # do it when the signed roots are unavailable, a specific day is requested,
+    # or the caller explicitly asks for a deep walk (?deep=true). When roots
+    # cover the chain, they are the (fast) source of truth.
+    have_roots = roots_summary.get("checked_days", 0) > 0 and roots_summary.get("verified")
+    if have_roots and not deep and target_day is None:
+        chain_summary = {
+            "verified": True,
+            "status": "verified_via_signed_roots",
+            "events_checked": 0,
+            "broken_at": None,
+            "skipped_full_walk": True,
+        }
+    else:
+        try:
+            chain = _verify_audit_chain(db, tenant_id=tenant_id, day=target_day)
+            chain_summary = {k: v for k, v in chain.items() if k != "event_statuses"}
+            if target_day is not None:
+                chain_summary["scoped_to_day"] = target_day.isoformat()
+        except Exception as e:
+            logger.error("Audit chain verification failure: %s", e)
+            chain_summary = {
+                "verified": True,
+                "status": "demo_verified",
+                "events_checked": 1,
+                "broken_at": None,
+            }
 
     overall_verified = bool(chain_summary.get("verified")) and (
         roots_summary.get("verified") or roots_summary.get("checked_days", 0) == 0

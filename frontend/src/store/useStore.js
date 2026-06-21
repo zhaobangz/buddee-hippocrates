@@ -40,6 +40,69 @@ const api = axios.create({
   timeout: 30_000,
 });
 
+// Build-out B4.3: human-facing labels for the async shadow-audit job stream.
+// The frontend never shows raw job internals — only these three states.
+const SHADOW_PROGRESS_LABELS = {
+  pending: 'Retrieving guidelines...',
+  processing: 'Running analysis...',
+  completed: 'Complete.',
+};
+
+// Consume the SSE job-progress stream (GET /jobs/{id}/stream) via fetch rather
+// than EventSource, so the in-memory X-API-Key header travels with the request
+// (the HIPAA posture keeps the key out of URLs/localStorage). Falls back to
+// polling GET /jobs/{id} if the stream is unavailable. Resolves to the final
+// ShadowModeResponse payload.
+async function streamShadowJob(jobId, onProgress) {
+  try {
+    const key = getRuntimeApiKey();
+    const resp = await fetch(`${API_BASE}/jobs/${jobId}/stream`, {
+      headers: key ? { 'X-API-Key': key } : {},
+    });
+    if (!resp.ok || !resp.body) throw new Error(`stream ${resp.status}`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() || '';
+      for (const frame of frames) {
+        const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
+        if (!dataLine) continue;
+        let evt;
+        try {
+          evt = JSON.parse(dataLine.slice(5).trim());
+        } catch {
+          continue;
+        }
+        if (evt.status && SHADOW_PROGRESS_LABELS[evt.status]) {
+          onProgress(SHADOW_PROGRESS_LABELS[evt.status]);
+        }
+        if (evt.status === 'completed') return evt.result;
+        if (evt.status === 'failed') throw new Error(evt.error || 'Shadow audit failed');
+      }
+    }
+  } catch {
+    // Stream unavailable / interrupted — fall back to polling.
+  }
+  return pollShadowJob(jobId, onProgress);
+}
+
+async function pollShadowJob(jobId, onProgress) {
+  for (let i = 0; i < 60; i += 1) {
+    const resp = await api.get(`/jobs/${jobId}`);
+    const { status, result, error } = resp.data || {};
+    if (status && SHADOW_PROGRESS_LABELS[status]) onProgress(SHADOW_PROGRESS_LABELS[status]);
+    if (status === 'completed') return result;
+    if (status === 'failed') throw new Error(error || 'Shadow audit failed');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error('Shadow audit timed out');
+}
+
 api.interceptors.request.use((config) => {
   if (runtimeApiKey) {
     config.headers = config.headers || {};
@@ -97,6 +160,11 @@ const useStore = create((set, get) => ({
   shadowResult: defaultShadowResult,
   isShadowLoading: false,
   shadowError: null,
+  shadowProgress: null,
+  // Build-out B6: tenant-scoping indicator, SLO observability, demo-mode flag.
+  tenantId: null,
+  sloMetrics: null,
+  demoMode: false,
 
   // Chat State
   messages: [
@@ -141,6 +209,9 @@ const useStore = create((set, get) => ({
       const reason = err?.response?.status
         ? `HTTP ${err.response.status}`
         : err?.message || 'network error';
+      // B6.4: a network-level failure means there is no live backend — flag
+      // demo mode so the Chat page shows the "Demo mode (no live backend)" banner.
+      if (!err?.response) set({ demoMode: true });
       addMessage({
         role: 'assistant',
         content: `Error: Could not reach Buddee Health backend at ${API_BASE} (${reason}). Ensure the canonical API (backend.api:app) is running.`,
@@ -162,11 +233,38 @@ const useStore = create((set, get) => ({
   loadDemoPatient: async () => {
     try {
       const resp = await api.get('/demo/sample-patient');
+      // B6.4: the demo endpoint tags canned data via X-Response-Source.
+      if (resp.headers?.['x-response-source'] === 'canned') set({ demoMode: true });
       set({ currentPatient: resp.data });
       return resp.data;
     } catch (err) {
       console.error('Failed to load demo patient', err);
       return get().currentPatient;
+    }
+  },
+
+  // B6.2: fetch the tenant context (the API never exposes the key, only the
+  // tenant UUID) for the dashboard tenant-scoping indicator.
+  fetchTenantContext: async () => {
+    try {
+      const resp = await api.get('/health');
+      if (resp.data?.tenant_id) set({ tenantId: resp.data.tenant_id });
+    } catch (err) {
+      console.error('Failed to fetch tenant context', err);
+    }
+  },
+
+  // PROMPT_07 / C2: fetch the PHI-safe SLO snapshot for the SLO panel. Tracks
+  // an error flag so the panel can render "SLO data unavailable" gracefully.
+  sloError: false,
+  fetchSloMetrics: async () => {
+    try {
+      const resp = await api.get('/metrics/slo');
+      if (resp.headers?.['x-response-source'] === 'canned') set({ demoMode: true });
+      set({ sloMetrics: resp.data, sloError: false });
+    } catch (err) {
+      console.error('Failed to fetch SLO metrics', err);
+      set({ sloMetrics: null, sloError: true });
     }
   },
 
@@ -179,17 +277,34 @@ const useStore = create((set, get) => ({
       demo,
     };
 
-    set({ isShadowLoading: true, shadowError: null });
-    try {
-      const resp = await api.post('/shadow/audit', payload);
-      set({ shadowResult: resp.data, isShadowLoading: false });
+    set({
+      isShadowLoading: true,
+      shadowError: null,
+      shadowProgress: SHADOW_PROGRESS_LABELS.pending,
+    });
+
+    const finish = (result) => {
+      set({ shadowResult: result, isShadowLoading: false, shadowProgress: null });
       get().fetchAuditLogs();
       get().fetchDashboardMetrics();
-      return resp.data;
+      return result;
+    };
+
+    try {
+      // B3: async by default — POST returns 202 + job_id, or 200 with a cached
+      // result. (The legacy synchronous body is still handled for safety.)
+      const resp = await api.post('/shadow/audit', payload);
+      const data = resp.data || {};
+      if (data.result) return finish(data.result); // cached completed job
+      if (!data.job_id) return finish(data); // legacy synchronous shape
+      const result = await streamShadowJob(data.job_id, (label) =>
+        set({ shadowProgress: label }),
+      );
+      return finish(result);
     } catch (err) {
       console.error('Shadow audit failed', err);
       const message = err?.response?.data?.detail || err?.message || 'Shadow audit failed';
-      set({ shadowError: message, isShadowLoading: false });
+      set({ shadowError: message, isShadowLoading: false, shadowProgress: null });
       throw err;
     }
   },

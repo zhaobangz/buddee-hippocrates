@@ -34,7 +34,6 @@ torch==2.5.1
 transformers==4.46.2
 numpy==1.26.4
 sentence-transformers==3.3.1
-faiss-cpu==1.9.0.post1
 
 # --- Tracing & Observability ---
 opentelemetry-api==1.28.2
@@ -50,6 +49,17 @@ alembic==1.18.4
 psycopg2-binary==2.9.12
 pgvector==0.4.2
 
+# --- Audit-root signing & WORM export (OPTIONAL, lazy-imported) ---
+# core/merkle.py signs the daily Merkle root and mirrors it to an Object Lock
+# bucket. The cloud SDKs are imported lazily and only when the matching
+# BUDDI_AUDIT_KMS_PROVIDER / BUDDI_AUDIT_ROOTS_BUCKET is configured, so they
+# are NOT required for the default build (dev/CI use the Ed25519/HMAC + local
+# export path). Install the one(s) your deployment uses and pin to a current
+# release:
+#   GCP KMS signing:        google-cloud-kms
+#   GCS Object Lock export: google-cloud-storage
+#   AWS KMS + S3 Object Lock: boto3
+
 # --- Rate limiting ---
 # Redis-backed rate limiter (manual §4.2 Bottleneck #1). slowapi wraps the
 # `limits` package; we use its Limiter as a thin handle around the shared
@@ -57,6 +67,11 @@ pgvector==0.4.2
 # redis-py client is pulled in explicitly so test code can monkey-patch it.
 slowapi==0.1.9
 redis==5.2.1
+
+# --- Billing (PROMPT_04) ---
+# Stripe SDK for the billing routes + webhook. backend/billing.py imports it at
+# module top, so it is a hard dependency of the billing surface.
+stripe==15.2.1
 
 # --- Testing ---
 # Test/CI-only tooling (pytest, pytest-asyncio, fakeredis, lupa, ruff) lives

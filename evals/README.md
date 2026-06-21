@@ -14,15 +14,22 @@ PR-gated metric. Every code change to `core/agent.py`,
 ```
 evals/
 ├── README.md                ← this file
-├── golden/                  ← curated, clinician-labeled cases
-│   ├── case_001.json
+├── golden/                  ← committed, synthetic clinician-labeled seed set
+│   ├── case_001.json        ←   loaded by run_eval (glob: case_*.json)
 │   ├── case_002.json
-│   └── ...
+│   ├── ...
+│   └── synthetic_sample.json ←  schema demonstrator (NOT loaded as a case)
+├── golden_set/              ← real labeled set (gitignored — never commit PHI)
 ├── synthea/                 ← synthetic FHIR bundles (manual §2.2 week 4)
 │   └── bundle_*.json
+├── results/                 ← generated eval reports (gitignored)
 ├── run_eval.py              ← the CI entry point
 └── metrics.py               ← precision / recall / abstain-rate math
 ```
+
+Only files matching `case_*.json` are loaded as scored cases. `synthetic_sample.json`
+shows the case shape for whoever grows the real golden set under `golden_set/`
+(which is `.gitignore`d so de-identified-but-sensitive labels never land in git).
 
 A **golden case** is a single JSON document with the shape:
 
@@ -64,13 +71,19 @@ python -m evals.run_eval --cases evals/golden --offline
 
 ## CI gate
 
-`.github/workflows/main.yml` runs `python -m evals.run_eval --offline`
-on every PR. The job fails when:
+`.github/workflows/main.yml` runs `python -m evals.run_eval --ci`
+on every PR (`--ci` implies `--offline`). The job fails when:
 
 * Top-3-codes precision drops by more than 5% versus the baseline in
   `evals/baseline.json`, or
 * Recall drops by more than 5%, or
-* Any `must_abstain_codes` violation is detected.
+* Any `must_abstain_codes` violation is detected, or
+* (when set) precision/recall falls below the absolute floors
+  `EVAL_PRECISION_FLOOR` / `EVAL_RECALL_FLOOR`.
+
+The absolute floors default to `0.0` (disabled) so the deterministic
+offline CI run — whose demo-fallback baseline is intentionally low —
+stays green. The real-LLM nightly run sets both to `0.60`.
 
 The baseline file is human-edited — bump it intentionally after a
 clinician review confirms the new behaviour is desired.

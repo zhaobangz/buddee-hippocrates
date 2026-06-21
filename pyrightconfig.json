@@ -1,0 +1,40 @@
+{
+  // Project type-checking baseline (committed so Pylance in the IDE and the
+  // `pyright` CLI behave identically for every developer). The project's
+  // canonical interpreter is the repo-local `venv/` that the Makefile and CI
+  // install into — pinning it here means first-party imports and required
+  // third-party deps (e.g. argon2-cffi) always resolve.
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.11",
+
+  "include": ["backend", "core", "tools", "scripts", "evals", "tests"],
+  "exclude": [
+    "**/__pycache__",
+    "**/node_modules",
+    "venv",
+    ".venv",
+    "frontend",
+    "alembic/versions"
+  ],
+  // Repo root on the path so `import core.x` / `import backend.x` resolve the
+  // same way they do at runtime (mirrors python.analysis.extraPaths).
+  "extraPaths": ["."],
+
+  "typeCheckingMode": "basic",
+
+  // --- SQLAlchemy legacy-`Column()` false positives -----------------------
+  // The ORM in core/models.py is declared with the classic
+  // `col = Column(Type, ...)` style (124 columns / 17 models), so the type
+  // checker infers each instance attribute as `Column[T]` instead of `T`.
+  // Reading or assigning those attributes then trips the rules below
+  // everywhere an ORM row is used — pure false positives, not runtime bugs
+  // (`row.timestamp` really is a `datetime` at runtime). Relaxed project-wide
+  // so the Problems panel reflects real issues only. The clean way to
+  // re-tighten these is to migrate the models to SQLAlchemy 2.0 typed
+  // `Mapped[...]` / `mapped_column()`, after which these can return to
+  // "error". reportMissingImports and reportCallIssue stay ON.
+  "reportArgumentType": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportAttributeAccessIssue": "none"
+}

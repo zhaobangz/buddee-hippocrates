@@ -22,6 +22,15 @@ Buddi is a FastAPI-first backend for revenue integrity and compliance workflows 
 - **Safety + audit helpers:** `core/safety.py`
 - **Migrations:** Alembic (`alembic/`)
 
+> **Legacy local artifacts (`*.faiss` / `*.pkl`).** Earlier revisions shipped a
+> FAISS sidecar index (`guidelines_index.faiss` + `guidelines_metadata.pkl`).
+> Retrieval is now **pgvector-backed** (`core/rag_engine.py`) and nothing in the
+> codebase reads those files, so they are **not required to run the app**. They
+> are git-ignored (`*.faiss`, `*.pkl`) and were removed from version control; if
+> you have local copies you can delete them. Should a future FAISS path be
+> reintroduced, generate the index from `core/rag_engine.py` rather than
+> committing the binaries.
+
 ---
 
 ## Quick start (local backend)

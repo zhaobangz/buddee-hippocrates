@@ -1,0 +1,67 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write    # for Workload Identity Federation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/buddi/buddi-api"
+          docker build -t "${IMAGE}:staging-${{ github.sha }}" -t "${IMAGE}:staging-latest" .
+          docker push "${IMAGE}:staging-${{ github.sha }}"
+          docker push "${IMAGE}:staging-latest"
+
+      - name: Deploy to Cloud Run (no traffic)
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/buddi/buddi-api:staging-${{ github.sha }}"
+          gcloud run services update buddi-api-staging \
+            --image="$IMAGE" \
+            --region="${{ env.REGION }}" \
+            --no-traffic \
+            --project="${{ env.PROJECT_ID }}"
+
+      - name: Run DB migrations on staging
+        run: |
+          gcloud run jobs execute buddi-migrate-staging \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --wait
+
+      - name: Smoke test staging revision
+        run: |
+          REVISION_URL=$(gcloud run revisions describe \
+            $(gcloud run revisions list --service=buddi-api-staging --region=${{ env.REGION }} --format="value(metadata.name)" --limit=1) \
+            --region=${{ env.REGION }} --format="value(status.url)")
+          curl -fsS "${REVISION_URL}/health" || (echo "Staging health check failed"; exit 1)
+
+      - name: Shift traffic to new revision
+        run: |
+          gcloud run services update-traffic buddi-api-staging \
+            --to-latest \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}"

@@ -45,8 +45,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # requirements-dev.txt pins the lint/test runners plus fakeredis+lupa
+          # so the Redis rate-limiter test (tests/test_rate_limit.py) is
+          # reproducible in CI. Falls back to a bare install if it's absent.
+          if [ -f requirements-dev.txt ]; then
+            pip install -r requirements-dev.txt
+          else
+            pip install ruff pytest
+          fi
 
       # Track 1 / Step 1 (ARCH-01, TEST-02, CQ-02): lint the canonical code
       # paths. The legacy `app/` tree has been deleted (Track 2 Step 11) so
@@ -104,7 +111,11 @@ jobs:
           API_KEY: "ci-test-api-key-abcdef1234567890"
           CORS_ORIGINS: "http://localhost:5173"
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/buddi"
-        run: python -m evals.run_eval --offline --cases evals/golden --baseline evals/baseline.json
+        # --ci implies --offline and applies the absolute EVAL_*_FLOOR floors
+        # on top of the relative regression gate. Floors are left unset here
+        # (default 0.0) because the deterministic demo-fallback baseline is
+        # intentionally low; the real-LLM nightly run sets them to 0.60.
+        run: python -m evals.run_eval --ci --cases evals/golden --baseline evals/baseline.json
 
       # Verify the Synthea generator stays in sync with the bundles
       # shipped under evals/synthea/bundles/ — catches drift where the
@@ -115,6 +126,41 @@ jobs:
         run: |
           python -m evals.synthea.generate --out /tmp/buddi-synthea-check
           test "$(ls /tmp/buddi-synthea-check/*.json | wc -l)" -ge 25
+
+      # ------------------------------------------------------------------
+      # Security scanning + image build (PROMPT_06 / BUILD_PLAN §3.5).
+      #
+      # gitleaks and the Docker build are BLOCKING. pip-audit and mypy run as
+      # advisory gates (continue-on-error): the dependency tree carries known
+      # transitive CVEs in heavy ML libs (torch/transformers) and the code
+      # predates mypy adoption (SQLAlchemy Column[...] / FastAPI responses
+      # false-positives need the mypy SQLAlchemy plugin). They run so findings
+      # surface in the logs and get burned down over time, without red-lining
+      # every build on pre-existing debt. Promote to blocking as the backlog
+      # is cleared.
+      # ------------------------------------------------------------------
+      - name: Security scan — pip-audit (advisory)
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2024-48
+
+      - name: Security scan — gitleaks (secrets in code)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Allowlists deterministic CI/test fixtures + placeholders so the gate
+          # is blocking without false-positiving on non-secrets. See .gitleaks.toml.
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+
+      - name: Build Docker image (verify build succeeds)
+        run: docker build -t buddi:ci-${{ github.sha }} .
+
+      - name: Type check with mypy (advisory)
+        continue-on-error: true
+        run: |
+          pip install mypy types-requests
+          mypy backend/ core/ --ignore-missing-imports --no-strict-optional
 
   frontend:
     runs-on: ubuntu-latest
@@ -136,6 +182,9 @@ jobs:
         env:
           VITE_API_BASE: http://localhost:8001/api
         run: npm run build
+
+  # The adversarial red-team suite runs nightly from its own workflow,
+  # .github/workflows/red_team.yml (build-out C1 / PROMPT_05).
 
   deploy-staging:
     needs: [test, frontend]

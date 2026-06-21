@@ -1,0 +1,52 @@
+# Keep the build context small and ensure nothing secret/irrelevant is sent to
+# the Docker daemon. The Dockerfile uses explicit COPYs (backend/, core/, tools/,
+# alembic/, alembic.ini, requirements.txt), so this is defense-in-depth + speed.
+.git/
+.github/
+.gitignore
+
+# Frontend + node
+frontend/
+node_modules/
+
+# Virtualenvs / caches
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Secrets / local config — never ship these
+.env
+.env.*
+!.env.example
+config/credentials.json
+config/*.json
+*.pem
+*.key
+*.p12
+secrets/
+
+# Runtime / PHI artifacts
+data/
+storage/
+logs/
+*.log
+audit_log.json
+memory.json
+prior_auth_store.json
+*.faiss
+*.pkl
+
+# Not needed at runtime in the image
+tests/
+evals/
+docs/
+infra/
+PROMPT_*.md
+*.md
+.DS_Store

@@ -7,13 +7,13 @@ This guide covers running Buddi's optional React/Vite frontend against the curre
 Start backend from repo root:
 
 ```bash
-python start_dev.py
+python3 start_dev.py
 ```
 
 or production-parity launcher:
 
 ```bash
-python start.py
+python3 start.py
 ```
 
 Backend target: `http://localhost:8001`

@@ -26,6 +26,7 @@ const ShadowPage = () => {
   const shadowResult = useStore((state) => state.shadowResult);
   const isShadowLoading = useStore((state) => state.isShadowLoading);
   const shadowError = useStore((state) => state.shadowError);
+  const shadowProgress = useStore((state) => state.shadowProgress);
 
   const [noteOverride, setNoteOverride] = useState(null);
   const [billedCodesOverride, setBilledCodesOverride] = useState(null);
@@ -143,6 +144,12 @@ const ShadowPage = () => {
         </form>
 
         <div className="lg:col-span-3 space-y-6">
+          {isShadowLoading && shadowProgress && (
+            <div className="glass-panel p-4 rounded-2xl border-medical-500/20 bg-medical-500/5 flex items-center">
+              <Loader2 className="w-4 h-4 mr-3 animate-spin text-medical-400" />
+              <span className="text-sm font-semibold text-slate-200">{shadowProgress}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <motion.div whileHover={{ y: -4 }} className="glass-panel p-5 rounded-3xl border-emerald-500/20 bg-emerald-500/5">
               <DollarSign className="w-5 h-5 text-emerald-400 mb-3" />

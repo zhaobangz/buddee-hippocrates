@@ -2,7 +2,7 @@
 
 **Owner:** Founder (Zhao)
 **Cadence:** Updated every Friday during retrospective. Manual §7.2 Risk #3.
-**Last reviewed:** 2026-05-08
+**Last reviewed:** 2026-06-13
 
 This is the brutal-honest counterweight to the marketing site. The
 manual prescribes reading this document *at the start of every sales
@@ -13,9 +13,12 @@ on this list but is on the marketing site instead is a counsel risk.
 
 * **Authenticated FastAPI backend** with per-tenant API keys and
   row-level security policies on every clinical table.
-* **Shadow-mode HCC suggestion path** with a confidence floor (0.70)
-  and mandatory evidence quote — anything below either gate is
-  abstained and recorded in the audit chain.
+* **Shadow-mode HCC suggestion path** with a confidence floor (0.70),
+  a mandatory evidence quote, and an **LLM-as-judge second pass** that
+  independently re-checks every uncertain-band suggestion (confidence
+  in `[floor, 0.85)`) against the chart before surfacing it. Anything
+  that fails any gate — or that the judge will not affirm — is abstained
+  (fail-closed) and recorded in the audit chain.
 * **Hash-chained `audit_events` table** with a daily Merkle root
   signed by a configured Ed25519 key (HMAC fallback in dev).
 * **FHIR R4 bundle ingest** with size-cap, schema validation, and a
@@ -36,7 +39,7 @@ on this list but is on the marketing site instead is a counsel risk.
 | "Live AI agent" (hero chat)                                    | Live when Anthropic key + BAA confirmed; otherwise canned demo replies.                  |
 | "50 health systems"                                            | Aspirational copy; remove or replace with `getWaitlistCount()`.                          |
 | "Auto-submits prior authorizations"                            | Never. Buddi drafts; clinicians submit. This is a structural moat, not a TODO.           |
-| "Tamper-proof audit log"                                       | Hash-chained + daily Merkle root. Production wiring of HSM-backed KMS still pending.     |
+| "Tamper-proof audit log"                                       | Hash-chained + daily Merkle root, signed via Cloud KMS (GCP/AWS) and mirrored to an Object Lock bucket. Code path is live; awaiting cloud key + bucket provisioning. |
 | "Fine-tuned on physician data"                                 | Anthropic Claude + pgvector RAG. No customer data used for training.                     |
 
 ## What is in flight (Weeks 1–4 sprint)
@@ -45,18 +48,20 @@ Per `Buddi_Strategic_Founders_Operating_Manual.pdf` §2.2 and the
 30-day action tracker:
 
 - [x] Daily Merkle-root background task (`backend/api.py`).
-- [x] `core/merkle.py` with Ed25519 / HMAC signing.
+- [x] `core/merkle.py` with Cloud KMS (GCP/AWS) signing + Ed25519 / HMAC fallback, offline public-key verification, and Object Lock (WORM) export.
 - [x] Postgres RLS migration (`7a3c8d9f0142`).
 - [x] BAA tripwire (`core/llm_manager.py:_baa_guard`).
 - [x] FHIR-ingest BAA precondition (`_enforce_baa_precondition`).
 - [x] Anthropic-primary LLM stack; LangChain stripped from the prompt path.
 - [x] HNSW index on `document_chunks.embedding` (§4.2 Bottleneck #2).
 - [x] Confidence floor + abstain path (`core/agent.py:_apply_safety_floor`).
+- [x] LLM-as-judge second pass (§7.2 Risk #2 #4, `core/agent.py:_judge_suggestions`).
+- [x] Audit-chain moat test coverage (`tests/test_audit_merkle.py` — build / sign / verify / **tamper detection**).
 - [x] Eval harness with CI gate (`evals/`).
 - [x] 25 Synthea synthetic FHIR bundles + hosted demo route.
 - [ ] OpenAI BAA filed and confirmed (founder action, week 1).
 - [ ] Anthropic BAA filed and confirmed (founder action, week 1).
-- [ ] Ed25519 signing key provisioned in Cloud KMS (founder action, week 1).
+- [ ] Cloud KMS signing key (EC P-256) + Object Lock bucket provisioned and `BUDDI_AUDIT_KMS_*` / `BUDDI_AUDIT_ROOTS_BUCKET` set (code path ready; founder/infra action, week 1).
 - [ ] Clinical advisor hired and named on the marketing site (week 2).
 - [ ] Counsel review of TrustAnchor copy on `buddi-web` (week 3).
 - [ ] First design-partner LOI signed (week 5 stretch).

@@ -1,9 +1,15 @@
-import React from 'react';
-import { Search, Bell, Users, ShieldCheck } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Search, Bell, Users, ShieldCheck, Building2 } from 'lucide-react';
 import useStore from '../store/useStore';
 
 const TopBar = () => {
   const currentPatient = useStore((state) => state.currentPatient);
+  const tenantId = useStore((state) => state.tenantId);
+  const fetchTenantContext = useStore((state) => state.fetchTenantContext);
+
+  useEffect(() => {
+    fetchTenantContext();
+  }, [fetchTenantContext]);
 
   return (
     <header className="h-16 border-b border-white/5 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between z-10">
@@ -30,6 +36,17 @@ const TopBar = () => {
             <ShieldCheck className="w-3 h-3 text-teal-400" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-teal-400/80">Shadow Mode On</span>
           </div>
+          {tenantId && (
+            <>
+              <div className="w-[1px] h-3 bg-white/10" />
+              <div className="flex items-center space-x-2" title="Active tenant (last 8 chars of UUID)">
+                <Building2 className="w-3 h-3 text-slate-400" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 font-mono">
+                  Tenant …{tenantId.slice(-8)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center space-x-3">

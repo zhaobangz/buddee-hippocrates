@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import SLOPanel from '../components/SLOPanel';
 import PriorAuthModal from '../components/PriorAuthModal';
 
 const Dashboard = () => {
@@ -27,6 +28,7 @@ const Dashboard = () => {
 
   // Hydrate metrics on first mount so the hero numbers reflect the latest
   // recovery events without the user having to navigate away and back.
+  // (The SLO panel owns its own /api/metrics/slo fetch + refresh.)
   useEffect(() => {
     fetchDashboardMetrics();
     const intervalId = window.setInterval(fetchDashboardMetrics, 30_000);
@@ -140,6 +142,9 @@ const Dashboard = () => {
       </AnimatePresence>
 
       <AnalyticsDashboard />
+
+      {/* PROMPT_07 Task 3: PHI-safe operator SLO panel. */}
+      <SLOPanel />
 
       <div className="pt-8 border-t border-white/5">
         <h2 className="text-xl font-bold text-slate-100 mb-6 tracking-tight flex items-center gap-3">

@@ -23,21 +23,32 @@ Merkle root closes that gap: every 24h we
        a GCS / S3 bucket with Object Lock so the signed roots are
        *append-only* even if the DB is fully compromised.
 
-Signing key resolution:
+Signing key resolution (``MerkleSigner.from_env()``), highest priority first:
 
-    * ``BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH`` — path to a PEM-encoded Ed25519
-      private key (preferred for production; the public half is what an
-      OIG auditor verifies against).
-    * Fallback: a deterministic HMAC-SHA256 signature derived from
-      ``BUDDI_STORAGE_KEY``. This keeps local dev / CI working without a
-      KMS but is **not** an acceptable production posture and is flagged
-      as such in the signature envelope (``algorithm=hmac-sha256-dev``).
+    1. **Cloud KMS** — ``BUDDI_AUDIT_KMS_PROVIDER`` (``gcp`` | ``aws``) +
+       ``BUDDI_AUDIT_KMS_KEY`` (the GCP CryptoKeyVersion resource name or the
+       AWS KMS key id / ARN). This is the production posture the manual
+       recommends: the private key never leaves the HSM. Crucially, the
+       *public* half is fetched once at startup and embedded in every signed
+       envelope, so verification is **offline** — an OIG auditor (or our own
+       verifier) checks the signature against the published public key with
+       no call back to KMS and no contact with Buddi.
+    2. ``BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH`` — path to a PEM-encoded Ed25519
+       private key (a self-managed alternative to KMS; the public half is
+       still what an auditor verifies against).
+    3. Fallback: a deterministic HMAC-SHA256 signature derived from
+       ``BUDDI_STORAGE_KEY``. This keeps local dev / CI working without a
+       KMS but is **not** an acceptable production posture and is flagged
+       as such in the signature envelope (``algorithm=hmac-sha256-dev``).
 
-The manual's recommendation is GCP KMS (or AWS KMS) backing an Ed25519
-key. ``MerkleSigner.from_env()`` is the seam where that integration
-plugs in without changing the API surface; today it returns the local
-Ed25519 / HMAC fallback. See ``docs/COMPLIANCE/phi_flow.md`` for the
-production wiring plan.
+Object Lock export (``export_daily_root`` → ``BUDDI_AUDIT_ROOTS_BUCKET``):
+the signed envelope is always written to the local ``BUDDI_AUDIT_ROOTS_DIR``
+(the canonical read path for verification), and *additionally* mirrored to a
+WORM object-storage bucket (``s3://…`` or ``gs://…``) with Object Lock
+retention when one is configured. That mirror is the append-only archive a
+verifier trusts even if the host and the Postgres DB are fully compromised.
+
+See ``docs/COMPLIANCE/phi_flow.md`` for the production wiring plan.
 """
 
 from __future__ import annotations
@@ -49,7 +60,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -153,6 +164,112 @@ def _normalize_hex(value: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _verify_with_public_key(
+    algorithm: str, public_key_pem: Optional[str], message: bytes, signature: bytes
+) -> bool:
+    """Verify an asymmetric signature against a published public key (offline).
+
+    This is the auditor path: given only the algorithm, the PEM-encoded
+    public key (which travels inside every signed envelope), the canonical
+    message and the signature bytes, decide whether the signature is valid —
+    with **no** call back to KMS and no Buddi-side secret. Returns False on
+    any malformed input or signature mismatch (fail closed).
+    """
+
+    if not public_key_pem:
+        return False
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
+    except Exception:  # pragma: no cover — cryptography is pinned in requirements.txt
+        logger.error("cryptography package is required to verify signed roots")
+        return False
+
+    try:
+        public_key = serialization.load_pem_public_key(public_key_pem.encode("ascii"))
+        # ``load_pem_public_key`` returns a union of key types, only some of
+        # which expose ``verify``. Narrowing with ``isinstance`` per algorithm
+        # both satisfies the type checker and fails closed when the PEM key
+        # type does not match the algorithm declared in the envelope — an
+        # auditor must never accept, say, an RSA signature "verified" against
+        # an EC key.
+        if algorithm == "ed25519":
+            if not isinstance(public_key, ed25519.Ed25519PublicKey):
+                return False
+            public_key.verify(signature, message)
+        elif algorithm == "ecdsa-p256-sha256":
+            if not isinstance(public_key, ec.EllipticCurvePublicKey):
+                return False
+            public_key.verify(signature, message, ec.ECDSA(hashes.SHA256()))
+        elif algorithm == "ecdsa-p384-sha384":
+            if not isinstance(public_key, ec.EllipticCurvePublicKey):
+                return False
+            public_key.verify(signature, message, ec.ECDSA(hashes.SHA384()))
+        elif algorithm == "rsa-pkcs1-sha256":
+            if not isinstance(public_key, rsa.RSAPublicKey):
+                return False
+            public_key.verify(signature, message, padding.PKCS1v15(), hashes.SHA256())
+        elif algorithm == "rsa-pss-sha256":
+            if not isinstance(public_key, rsa.RSAPublicKey):
+                return False
+            public_key.verify(
+                signature,
+                message,
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                hashes.SHA256(),
+            )
+        else:
+            return False
+        return True
+    except InvalidSignature:
+        return False
+    except Exception as e:  # malformed key / signature — fail closed
+        logger.warning("Public-key verification raised %s; treating as invalid", e)
+        return False
+
+
+#: GCP Cloud KMS ``CryptoKeyVersionAlgorithm`` name → (envelope algorithm,
+#: digest field expected by ``asymmetric_sign``). Only the algorithms a
+#: healthcare deployment would realistically pick are supported; anything
+#: else raises so we never silently sign with an unverifiable scheme.
+_GCP_KMS_ALGORITHMS: Dict[str, tuple] = {
+    "EC_SIGN_P256_SHA256": ("ecdsa-p256-sha256", "sha256"),
+    "EC_SIGN_P384_SHA384": ("ecdsa-p384-sha384", "sha384"),
+    "RSA_SIGN_PKCS1_2048_SHA256": ("rsa-pkcs1-sha256", "sha256"),
+    "RSA_SIGN_PKCS1_3072_SHA256": ("rsa-pkcs1-sha256", "sha256"),
+    "RSA_SIGN_PKCS1_4096_SHA256": ("rsa-pkcs1-sha256", "sha256"),
+    "RSA_SIGN_PSS_2048_SHA256": ("rsa-pss-sha256", "sha256"),
+    "RSA_SIGN_PSS_3072_SHA256": ("rsa-pss-sha256", "sha256"),
+    "RSA_SIGN_PSS_4096_SHA256": ("rsa-pss-sha256", "sha256"),
+}
+
+#: AWS KMS ``KeySpec`` → (envelope algorithm, AWS ``SigningAlgorithm``).
+_AWS_KMS_ALGORITHMS: Dict[str, tuple] = {
+    "ECC_NIST_P256": ("ecdsa-p256-sha256", "ECDSA_SHA_256"),
+    "ECC_NIST_P384": ("ecdsa-p384-sha384", "ECDSA_SHA_384"),
+    "RSA_2048": ("rsa-pkcs1-sha256", "RSASSA_PKCS1_V1_5_SHA_256"),
+    "RSA_3072": ("rsa-pkcs1-sha256", "RSASSA_PKCS1_V1_5_SHA_256"),
+    "RSA_4096": ("rsa-pkcs1-sha256", "RSASSA_PKCS1_V1_5_SHA_256"),
+}
+
+
+def _gcp_kms_client():  # pragma: no cover — thin SDK seam (monkeypatched in tests)
+    """Return a GCP Cloud KMS client. Lazy import so the SDK is optional."""
+
+    from google.cloud import kms  # type: ignore[import-not-found]  # optional dep
+
+    return kms.KeyManagementServiceClient()
+
+
+def _aws_kms_client():  # pragma: no cover — thin SDK seam (monkeypatched in tests)
+    """Return a boto3 KMS client. Lazy import so the SDK is optional."""
+
+    import boto3  # type: ignore[import-not-found]  # optional dep
+
+    return boto3.client("kms", region_name=os.getenv("AWS_REGION") or None)
+
+
 class MerkleSigner:
     """Pluggable signer for the daily Merkle root.
 
@@ -173,12 +290,14 @@ class MerkleSigner:
         signer,  # callable: bytes -> bytes
         verifier=None,  # callable: bytes (message), bytes (sig) -> bool
         public_key_pem: Optional[str] = None,
+        kms_provider: Optional[str] = None,
     ):
         self.algorithm = algorithm
         self.key_id = key_id
         self._signer = signer
         self._verifier = verifier
         self.public_key_pem = public_key_pem
+        self.kms_provider = kms_provider
 
     def sign(self, merkle_root: str, day: str, event_count: int) -> Dict[str, Any]:
         """Return a signature envelope for ``(day, merkle_root, event_count)``."""
@@ -188,6 +307,7 @@ class MerkleSigner:
         return {
             "algorithm": self.algorithm,
             "key_id": self.key_id,
+            "kms_provider": self.kms_provider,
             "signature_b64": base64.b64encode(signature_bytes).decode("ascii"),
             "signed_at": datetime.now(timezone.utc).isoformat(),  # Security: audit signatures must be timestamped in UTC.
             "public_key_pem": self.public_key_pem,
@@ -228,7 +348,35 @@ class MerkleSigner:
 
     @classmethod
     def from_env(cls) -> "MerkleSigner":
-        """Resolve the configured signer (Ed25519 file → HMAC dev fallback)."""
+        """Resolve the configured signer.
+
+        Priority: Cloud KMS (GCP/AWS) → local Ed25519 PEM → HMAC dev fallback.
+        A failure to initialise a *configured* higher-priority signer is
+        logged loudly and falls through to the next option so the API never
+        fails to start — the seal loop in ``backend/api.py`` records the
+        algorithm actually used, and production monitoring alerts on any
+        envelope whose ``algorithm`` is the dev HMAC fallback.
+        """
+
+        provider = os.getenv("BUDDI_AUDIT_KMS_PROVIDER", "").strip().lower()
+        kms_key = os.getenv("BUDDI_AUDIT_KMS_KEY", "").strip()
+        if provider and kms_key:
+            try:
+                if provider in {"gcp", "gcp-kms", "google", "cloudkms"}:
+                    return cls._gcp_kms_signer(kms_key)
+                if provider in {"aws", "aws-kms"}:
+                    return cls._aws_kms_signer(kms_key)
+                raise ValueError(
+                    f"Unknown BUDDI_AUDIT_KMS_PROVIDER={provider!r} (expected 'gcp' or 'aws')"
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to initialise %s KMS signer for key %s: %s; "
+                    "falling back to local signing key",
+                    provider,
+                    kms_key,
+                    e,
+                )
 
         pem_path = os.getenv("BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH", "").strip()
         if pem_path:
@@ -293,6 +441,92 @@ class MerkleSigner:
         )
 
     @classmethod
+    def _gcp_kms_signer(cls, key_name: str) -> "MerkleSigner":
+        """Build a signer backed by a GCP Cloud KMS asymmetric-sign key.
+
+        ``key_name`` is a CryptoKeyVersion resource name
+        (``projects/…/cryptoKeyVersions/N``). The private key never leaves
+        the HSM; we fetch the public half once and verify against it offline.
+        """
+
+        client = _gcp_kms_client()
+        pub = client.get_public_key(name=key_name)
+        public_key_pem = pub.pem
+        gcp_algo = getattr(pub.algorithm, "name", None) or str(pub.algorithm)
+        if gcp_algo not in _GCP_KMS_ALGORITHMS:
+            raise ValueError(
+                f"Unsupported GCP KMS key algorithm {gcp_algo!r} for {key_name}; "
+                f"supported: {sorted(_GCP_KMS_ALGORITHMS)}"
+            )
+        algorithm, digest_field = _GCP_KMS_ALGORITHMS[gcp_algo]
+        digest_fn = {"sha256": hashlib.sha256, "sha384": hashlib.sha384}[digest_field]
+
+        def _sign(message: bytes) -> bytes:
+            digest = {digest_field: digest_fn(message).digest()}
+            response = client.asymmetric_sign(name=key_name, digest=digest)
+            return response.signature
+
+        def _verify(message: bytes, signature: bytes) -> bool:
+            return _verify_with_public_key(algorithm, public_key_pem, message, signature)
+
+        return cls(
+            algorithm=algorithm,
+            key_id=key_name,
+            signer=_sign,
+            verifier=_verify,
+            public_key_pem=public_key_pem,
+            kms_provider="gcp",
+        )
+
+    @classmethod
+    def _aws_kms_signer(cls, key_id: str) -> "MerkleSigner":
+        """Build a signer backed by an AWS KMS asymmetric (SIGN_VERIFY) key.
+
+        ``key_id`` is a KMS key id, alias, or ARN. The canonical message is
+        small (well under the 4 KiB ``MessageType=RAW`` limit), so KMS hashes
+        it server-side; we verify offline against the fetched public key.
+        """
+
+        from cryptography.hazmat.primitives import serialization
+
+        client = _aws_kms_client()
+        info = client.get_public_key(KeyId=key_id)
+        key_spec = info.get("KeySpec") or info.get("CustomerMasterKeySpec")
+        if key_spec not in _AWS_KMS_ALGORITHMS:
+            raise ValueError(
+                f"Unsupported AWS KMS KeySpec {key_spec!r} for {key_id}; "
+                f"supported: {sorted(_AWS_KMS_ALGORITHMS)}"
+            )
+        algorithm, signing_algorithm = _AWS_KMS_ALGORITHMS[key_spec]
+        # AWS returns the public key DER-encoded (SubjectPublicKeyInfo).
+        public_key = serialization.load_der_public_key(info["PublicKey"])
+        public_key_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode("ascii")
+
+        def _sign(message: bytes) -> bytes:
+            response = client.sign(
+                KeyId=key_id,
+                Message=message,
+                MessageType="RAW",
+                SigningAlgorithm=signing_algorithm,
+            )
+            return response["Signature"]
+
+        def _verify(message: bytes, signature: bytes) -> bool:
+            return _verify_with_public_key(algorithm, public_key_pem, message, signature)
+
+        return cls(
+            algorithm=algorithm,
+            key_id=key_id,
+            signer=_sign,
+            verifier=_verify,
+            public_key_pem=public_key_pem,
+            kms_provider="aws",
+        )
+
+    @classmethod
     def _dev_hmac_signer(cls) -> "MerkleSigner":
         # Use BUDDI_STORAGE_KEY so we don't introduce yet another env var
         # for the dev fallback. The algorithm string is explicit so
@@ -331,6 +565,41 @@ def reset_signer_cache() -> None:
     _signer_singleton = None
 
 
+def verify_envelope(
+    envelope: Dict[str, Any], day: str, merkle_root: str, event_count: int
+) -> bool:
+    """Verify a signature envelope independently of the *currently* configured signer.
+
+    Verification is driven by the envelope itself, not by ``get_signer()``,
+    so a multi-year audit trail survives key rotation: a day signed last year
+    with an Ed25519 key (or a since-retired KMS key) still verifies against
+    the public key embedded in its own envelope, even after we've rotated to
+    a new key. Asymmetric signatures (Ed25519 / ECDSA / RSA, including all
+    KMS-backed ones) verify **offline** against ``public_key_pem``; only the
+    symmetric dev HMAC needs the shared secret from the active signer.
+    """
+
+    algorithm = envelope.get("algorithm")
+    sig_b64 = envelope.get("signature_b64")
+    if not algorithm or not sig_b64:
+        return False
+    message = MerkleSigner._canonical_message(day, merkle_root, event_count)
+    try:
+        signature = base64.b64decode(sig_b64)
+    except Exception:
+        return False
+
+    if algorithm == "hmac-sha256-dev":
+        # Symmetric: re-derivation needs the shared secret, which only the
+        # active HMAC signer holds (it never travels in the envelope).
+        signer = get_signer()
+        if signer.algorithm != "hmac-sha256-dev":
+            return False
+        return signer.verify(envelope, day, merkle_root, event_count)
+
+    return _verify_with_public_key(algorithm, envelope.get("public_key_pem"), message, signature)
+
+
 # ---------------------------------------------------------------------------
 # Daily-root build / export / verify
 # ---------------------------------------------------------------------------
@@ -345,6 +614,10 @@ class DailyRoot:
     event_count: int
     event_hashes: List[str]
     signature: Dict[str, Any] = field(default_factory=dict)
+    #: Set by ``export_daily_root`` when the envelope is mirrored to an Object
+    #: Lock bucket. Deliberately excluded from ``to_envelope`` so it never
+    #: changes the signed/persisted payload — it is run metadata, not content.
+    object_lock_uri: Optional[str] = None
 
     def to_envelope(self) -> Dict[str, Any]:
         return {
@@ -417,23 +690,44 @@ def build_daily_root(db: Session, day: date) -> DailyRoot:
 
 
 def export_daily_root(daily: DailyRoot, base_dir: Optional[Path] = None) -> Path:
-    """Persist the signed envelope to disk (or object storage shim).
+    """Persist the signed envelope locally and mirror it to Object Lock.
 
-    The path layout is ``{base_dir}/YYYY/MM/YYYY-MM-DD.root.json``. In
-    production this directory should be backed by GCS / S3 with Object
-    Lock — the file write itself is intentionally vanilla so swapping in
-    a storage backend is a 5-line change in this function.
+    The local path layout is ``{base_dir}/YYYY/MM/YYYY-MM-DD.root.json`` and
+    is the canonical read path for ``load_signed_root`` / verification. When
+    ``BUDDI_AUDIT_ROOTS_BUCKET`` is configured (``s3://…`` or ``gs://…``) the
+    same bytes are additionally written to that WORM bucket with Object Lock
+    retention, giving an append-only archive that survives full host/DB
+    compromise. Returns the *local* path; the bucket URI (if any) is recorded
+    on ``daily.object_lock_uri``.
     """
 
     out_dir = (base_dir or _roots_dir()) / daily.day[:4] / daily.day[5:7]
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{daily.day}{_ROOT_FILE_SUFFIX}"
     payload = daily.to_envelope()
+    serialized = json.dumps(payload, indent=2, sort_keys=True)
     # Write atomically so a partial write cannot corrupt yesterday's
     # signed root. tmp → rename is sufficient for local fs / GCS-fuse.
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    tmp_path.write_text(serialized, encoding="utf-8")
     tmp_path.replace(path)
+
+    target = _object_lock_target()
+    if target:
+        # A failure to write the immutable archive copy is a compliance
+        # event, not something to swallow: re-raise so the seal loop logs the
+        # day as un-sealed and operators are alerted. The local copy is
+        # already durable, so a later backfill can re-mirror it.
+        try:
+            daily.object_lock_uri = _export_to_object_lock(target, daily, serialized.encode("utf-8"))
+            logger.info(
+                "Signed root for %s mirrored to Object Lock bucket: %s",
+                daily.day,
+                daily.object_lock_uri,
+            )
+        except Exception as e:
+            logger.error("Object Lock export failed for %s (%s): %s", daily.day, target, e)
+            raise
     return path
 
 
@@ -480,7 +774,6 @@ def verify_signed_roots_against_db(
     to pass both signature verification and root recomputation.
     """
 
-    signer = get_signer()
     days = list_signed_root_days(base_dir)
     per_day: List[Dict[str, Any]] = []
     valid_days = 0
@@ -497,7 +790,7 @@ def verify_signed_roots_against_db(
 
         recomputed = build_daily_root_unsigned(db, target_day)
         root_matches = recomputed.merkle_root == envelope.merkle_root
-        sig_ok = signer.verify(
+        sig_ok = verify_envelope(
             envelope.signature,
             envelope.day,
             envelope.merkle_root,
@@ -543,6 +836,126 @@ def build_daily_root_unsigned(db: Session, day: date) -> DailyRoot:
     )
 
 
+# ---------------------------------------------------------------------------
+# Object Lock (WORM) export
+# ---------------------------------------------------------------------------
+
+
+def _object_lock_target() -> Optional[str]:
+    """The configured Object Lock bucket URI (``s3://…`` / ``gs://…``), or None."""
+
+    return os.getenv("BUDDI_AUDIT_ROOTS_BUCKET", "").strip() or None
+
+
+def _object_lock_retention() -> tuple:
+    """Resolve (retention mode, retention days) for the WORM mirror.
+
+    Defaults to ``COMPLIANCE`` mode for ~7 years (2555 days) — comfortably
+    beyond the HIPAA 6-year documentation-retention floor. COMPLIANCE mode
+    cannot be shortened or bypassed by *any* principal, including the root
+    account, which is the whole point of the moat.
+    """
+
+    mode = os.getenv("BUDDI_AUDIT_OBJECT_LOCK_MODE", "COMPLIANCE").strip().upper()
+    try:
+        days = int(os.getenv("BUDDI_AUDIT_OBJECT_LOCK_DAYS", "2555"))
+    except ValueError:
+        days = 2555
+    return mode, days
+
+
+def _object_lock_key(prefix: str, daily: DailyRoot) -> str:
+    """Mirror the local ``YYYY/MM/DAY.root.json`` layout under the bucket prefix."""
+
+    parts = [
+        prefix.strip("/"),
+        daily.day[:4],
+        daily.day[5:7],
+        f"{daily.day}{_ROOT_FILE_SUFFIX}",
+    ]
+    return "/".join(p for p in parts if p)
+
+
+def _export_to_object_lock(target: str, daily: DailyRoot, body: bytes) -> str:
+    """Write ``body`` to the configured WORM bucket; return the object URI."""
+
+    scheme, sep, rest = target.partition("://")
+    if not sep:
+        raise ValueError(f"Object Lock bucket must be a URI (s3://… or gs://…), got {target!r}")
+    bucket, _, prefix = rest.partition("/")
+    if not bucket:
+        raise ValueError(f"Object Lock bucket URI is missing a bucket name: {target!r}")
+    key = _object_lock_key(prefix, daily)
+    scheme = scheme.lower()
+    if scheme == "s3":
+        return _put_s3_object_lock(bucket, key, body)
+    if scheme in {"gs", "gcs"}:
+        return _put_gcs_object_lock(bucket, key, body)
+    raise ValueError(f"Unsupported Object Lock bucket scheme {scheme!r} (use s3:// or gs://)")
+
+
+def _put_s3_object_lock(bucket: str, key: str, body: bytes) -> str:
+    """Upload to S3 with an Object Lock retention header."""
+
+    client = _s3_client()
+    mode, days = _object_lock_retention()
+    kwargs: Dict[str, Any] = {
+        "Bucket": bucket,
+        "Key": key,
+        "Body": body,
+        "ContentType": "application/json",
+    }
+    if mode in {"COMPLIANCE", "GOVERNANCE"}:
+        kwargs["ObjectLockMode"] = mode
+        kwargs["ObjectLockRetainUntilDate"] = datetime.now(timezone.utc) + timedelta(days=days)
+    client.put_object(**kwargs)
+    return f"s3://{bucket}/{key}"
+
+
+def _put_gcs_object_lock(bucket: str, key: str, body: bytes) -> str:
+    """Upload to GCS, refusing to overwrite an existing generation (write-once).
+
+    The bucket's retention policy (provisioned via IaC) is the primary
+    immutability control; we additionally request per-object retention where
+    the SDK supports it, and use ``if_generation_match=0`` so a re-seal can
+    never clobber an already-archived root.
+    """
+
+    client = _gcs_client()
+    blob = client.bucket(bucket).blob(key)
+    blob.upload_from_string(body, content_type="application/json", if_generation_match=0)
+    try:
+        mode, days = _object_lock_retention()
+        if mode in {"COMPLIANCE", "GOVERNANCE", "LOCKED"}:
+            blob.retention.mode = "Locked"
+            blob.retention.retain_until_time = datetime.now(timezone.utc) + timedelta(days=days)
+            blob.patch()
+    except Exception as e:  # pragma: no cover — depends on SDK / bucket capabilities
+        logger.warning(
+            "GCS per-object retention not applied for %s: %s; "
+            "relying on the bucket retention policy for immutability",
+            key,
+            e,
+        )
+    return f"gs://{bucket}/{key}"
+
+
+def _s3_client():  # pragma: no cover — thin SDK seam (monkeypatched in tests)
+    """Return a boto3 S3 client. Lazy import so the SDK is optional."""
+
+    import boto3  # type: ignore[import-not-found]  # optional dep
+
+    return boto3.client("s3", region_name=os.getenv("AWS_REGION") or None)
+
+
+def _gcs_client():  # pragma: no cover — thin SDK seam (monkeypatched in tests)
+    """Return a google-cloud-storage client. Lazy import so the SDK is optional."""
+
+    from google.cloud import storage  # type: ignore[import-not-found]  # optional dep
+
+    return storage.Client()
+
+
 __all__ = [
     "EMPTY_TREE_ROOT",
     "DailyRoot",
@@ -556,5 +969,6 @@ __all__ = [
     "list_signed_root_days",
     "load_signed_root",
     "reset_signer_cache",
+    "verify_envelope",
     "verify_signed_roots_against_db",
 ]

@@ -1,0 +1,88 @@
+name: Red Team — Adversarial Prompt Suite
+
+on:
+  schedule:
+    - cron: "0 2 * * *"   # 02:00 UTC nightly
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  red-team:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: ankane/pgvector:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: buddi
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run Alembic migrations
+        env:
+          BUDDI_TEST_MODE: "1"
+          SECRET_KEY: "ci-test-secret-key-0123456789abcdef0123456789abcdef"
+          BUDDI_STORAGE_KEY: "ci-test-storage-key-not-for-prod"
+          API_KEY: "ci-test-api-key-abcdef1234567890"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/buddi"
+          CORS_ORIGINS: "http://localhost:5173"
+        run: alembic upgrade head
+
+      - name: Start API server (background)
+        env:
+          BUDDI_TEST_MODE: "1"
+          ENVIRONMENT: "test"
+          BUDDI_RATE_LIMIT_DISABLED: "1"
+          BUDDI_DISABLE_WORKER: "1"
+          SECRET_KEY: "ci-test-secret-key-0123456789abcdef0123456789abcdef"
+          BUDDI_STORAGE_KEY: "ci-test-storage-key-not-for-prod"
+          API_KEY: "ci-test-api-key-abcdef1234567890"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/buddi"
+          CORS_ORIGINS: "http://localhost:5173"
+          ANTHROPIC_API_KEY: ""       # empty — red team uses stub paths
+        run: |
+          uvicorn backend.api:app --host 0.0.0.0 --port 8001 &
+          sleep 8
+          curl -fsS http://localhost:8001/api/health -H "X-API-Key: ci-test-api-key-abcdef1234567890" \
+            || curl -fsS http://localhost:8001/api/internal/health \
+            || (echo "API did not start"; exit 1)
+
+      - name: Run red team suite
+        env:
+          BUDDI_TEST_URL: "http://localhost:8001"
+          BUDDI_TEST_API_KEY: "ci-test-api-key-abcdef1234567890"
+        run: python evals/red_team/runner.py --ci
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: red-team-results-${{ github.run_id }}
+          path: evals/red_team/results_latest.json
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.ALERT_EMAIL_WEBHOOK }}" ]; then
+            curl -s -X POST "${{ secrets.ALERT_EMAIL_WEBHOOK }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"text\": \"Red team suite FAILED on run ${{ github.run_id }}. Check artifacts.\"}"
+          fi

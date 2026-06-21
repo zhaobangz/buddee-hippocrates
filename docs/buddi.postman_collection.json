@@ -1,0 +1,119 @@
+{
+  "info": {
+    "_postman_id": "b0dd1ee0-0000-4000-8000-000000000001",
+    "name": "Buddee Clinical AI API",
+    "description": "Core Buddee endpoints. Set the `base_url` and `api_key` collection variables; the pre-request script attaches X-API-Key to every request. All examples use synthetic data only.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8001" },
+    { "key": "api_key", "value": "REPLACE_WITH_YOUR_API_KEY" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Attach the API key to every request in this collection.",
+          "pm.request.headers.upsert({ key: 'X-API-Key', value: pm.collectionVariables.get('api_key') });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{base_url}}/api/health", "host": ["{{base_url}}"], "path": ["api", "health"] }
+      }
+    },
+    {
+      "name": "Shadow audit (Marcus Holloway synthetic)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"patient_id\": \"MH-SYNTHETIC-001\",\n  \"note\": \"65-year-old male with longstanding Type 2 diabetes mellitus with peripheral neuropathy, CKD stage 3b, and hypertension. A1c 8.4%.\",\n  \"billed_codes\": [\"E11.9\", \"I10\"]\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/shadow/audit", "host": ["{{base_url}}"], "path": ["api", "shadow", "audit"] }
+      }
+    },
+    {
+      "name": "Get job status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/jobs/:job_id",
+          "host": ["{{base_url}}"],
+          "path": ["api", "jobs", ":job_id"],
+          "variable": [{ "key": "job_id", "value": "REPLACE_WITH_JOB_ID" }]
+        }
+      }
+    },
+    {
+      "name": "Generate prior authorization",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"procedure_code\": \"70553\",\n  \"payer\": \"Medicare\",\n  \"clinical_context\": \"Progressive headaches with focal neurologic findings; MRI brain requested.\",\n  \"demo\": true\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/prior-auth/generate", "host": ["{{base_url}}"], "path": ["api", "prior-auth", "generate"] }
+      }
+    },
+    {
+      "name": "Verify audit chain",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{base_url}}/api/audit/verify", "host": ["{{base_url}}"], "path": ["api", "audit", "verify"] }
+      }
+    },
+    {
+      "name": "List demo Synthea bundles",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{base_url}}/api/demo/synthea", "host": ["{{base_url}}"], "path": ["api", "demo", "synthea"] }
+      }
+    },
+    {
+      "name": "Ingest a demo Synthea bundle",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/demo/synthea/marcus_holloway/ingest",
+          "host": ["{{base_url}}"],
+          "path": ["api", "demo", "synthea", "marcus_holloway", "ingest"]
+        }
+      }
+    },
+    {
+      "name": "SLO metrics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{base_url}}/api/metrics/slo", "host": ["{{base_url}}"], "path": ["api", "metrics", "slo"] }
+      }
+    },
+    {
+      "name": "Billing — subscribe",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"physician_count\": 3\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/billing/subscribe", "host": ["{{base_url}}"], "path": ["api", "billing", "subscribe"] }
+      }
+    }
+  ]
+}

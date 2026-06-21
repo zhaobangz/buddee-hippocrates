@@ -1,0 +1,114 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1955-01-01",
+        "gender": "female",
+        "id": "f554ed33-9100-531c-b9aa-e9211528b6a9",
+        "name": [
+          {
+            "family": "Castillo",
+            "given": [
+              "Irene"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "5b2226ea-afa1-9034-7d4f-ca69de8aca98",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/f554ed33-9100-531c-b9aa-e9211528b6a9"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NzAteWVhci1vbGQgZmVtYWxlIGFkbWl0dGVkIHdpdGggc2Vwc2lzIHNlY29uZGFyeSB0byBFLiBjb2xpIHVyaW5hcnkgdHJhY3QgaW5mZWN0aW9uLiBQcmVzZW50ZWQgZmVicmlsZSBhbmQgaHlwb3RlbnNpdmU7IGxhY3RhdGUgMy4xIG9uIGFkbWlzc2lvbiwgbm9ybWFsaXplZCBhZnRlciBmbHVpZCByZXN1c2NpdGF0aW9uIGFuZCBJViBjZWZ0cmlheG9uZS4gSGVtb2R5bmFtaWNhbGx5IHN0YWJsZSBvbiBob3NwaXRhbCBkYXkgMy4=",
+              "title": "Progress note (sepsis-uti)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/5b2226ea-afa1-9034-7d4f-ca69de8aca98"
+            }
+          ]
+        },
+        "id": "f4027f67-0bfc-d2c2-703f-055bc42aca49",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/f554ed33-9100-531c-b9aa-e9211528b6a9"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "A41.51",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/5b2226ea-afa1-9034-7d4f-ca69de8aca98"
+        },
+        "id": "8c4af894-9bc7-3f13-6a3b-c4a1a8410da1",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/f554ed33-9100-531c-b9aa-e9211528b6a9"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "N39.0",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/5b2226ea-afa1-9034-7d4f-ca69de8aca98"
+        },
+        "id": "a29eea6c-4f46-61a9-5d94-93d9071b784d",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/f554ed33-9100-531c-b9aa-e9211528b6a9"
+        }
+      }
+    }
+  ],
+  "id": "b1f65be7-7d26-a639-5285-6146e5317e18",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

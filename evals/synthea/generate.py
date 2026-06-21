@@ -336,6 +336,64 @@ CASES: List[SyntheticCase] = [
 ]
 
 
+# Build-out A3.2: a stable 5-bundle fixture set — one per the strategy-doc
+# condition list (diabetes with complications, CHF, COPD, CKD, sepsis) — is
+# committed under evals/synthea/fixtures/ and powers the hosted demo
+# (/api/demo/bundles) plus the _demo_shadow_result fallback (A3.4). Sepsis is
+# not represented in the 25-case CASES library above, so it is defined here.
+SEPSIS_CASE = SyntheticCase(
+    slug="sepsis-uti",
+    given_name="Irene", family_name="Castillo", gender="female",
+    birth_year=1955,
+    note=(
+        "70-year-old female admitted with sepsis secondary to E. coli "
+        "urinary tract infection. Presented febrile and hypotensive; lactate "
+        "3.1 on admission, normalized after fluid resuscitation and IV "
+        "ceftriaxone. Hemodynamically stable on hospital day 3."
+    ),
+    billed_codes=["A41.51", "N39.0"],
+    encounter_class="IMP",
+)
+
+
+def _case_by_slug(slug: str) -> SyntheticCase:
+    for case in CASES:
+        if case.slug == slug:
+            return case
+    raise KeyError(slug)
+
+
+# The committed demo/ingest fixtures, in canonical order. The first entry
+# (Marcus Holloway, diabetic CKD) is the backward-compat default for
+# _demo_shadow_result(bundle_name="marcus_holloway").
+FIXTURE_CASES: List[SyntheticCase] = [
+    _case_by_slug("diabetic-ckd"),       # diabetes with complications
+    _case_by_slug("chf-systolic"),       # CHF
+    _case_by_slug("copd-exacerbation"),  # COPD
+    _case_by_slug("ckd-stage4"),         # CKD
+    SEPSIS_CASE,                         # sepsis
+]
+
+
+def _fixture_filename(case: SyntheticCase) -> str:
+    """Demo-friendly, patient-named fixture filename (e.g. marcus_holloway.json)."""
+
+    return f"{case.given_name}_{case.family_name}".lower() + ".json"
+
+
+def write_fixtures(output_dir: Path) -> List[Path]:
+    """(Re)write the committed 5-bundle demo fixture set (build-out A3.2)."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths: List[Path] = []
+    for case in FIXTURE_CASES:
+        bundle = _build_bundle(case)
+        path = output_dir / _fixture_filename(case)
+        path.write_text(json.dumps(bundle, indent=2, sort_keys=True), encoding="utf-8")
+        paths.append(path)
+    return paths
+
+
 def _build_bundle(case: SyntheticCase) -> Dict:
     """Render a single ``SyntheticCase`` into a FHIR Bundle dict."""
 
@@ -449,9 +507,18 @@ def main(argv: List[str] | None = None) -> int:
         default=Path("evals/synthea/bundles"),
         help="Directory to write the synthetic bundles into.",
     )
+    parser.add_argument(
+        "--fixtures",
+        action="store_true",
+        help="Also (re)write the committed 5-bundle demo fixture set under "
+        "evals/synthea/fixtures/ (build-out A3.2).",
+    )
     args = parser.parse_args(argv)
     written = write_bundles(args.out)
     print(f"Wrote {len(written)} synthetic FHIR bundles to {args.out}")
+    if args.fixtures:
+        fixtures = write_fixtures(Path("evals/synthea/fixtures"))
+        print(f"Wrote {len(fixtures)} demo fixtures to evals/synthea/fixtures")
     return 0
 
 

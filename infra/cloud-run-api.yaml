@@ -1,0 +1,46 @@
+# Deploy with:
+#   gcloud run services replace infra/cloud-run-api.yaml --region=$REGION
+# Substitute PROJECT_ID, REGION, IMAGE_TAG before applying.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: buddi-api
+  annotations:
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "20"
+        run.googleapis.com/vpc-access-connector: projects/PROJECT_ID/locations/REGION/connectors/buddi-vpc
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      serviceAccountName: buddi-api@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/buddi/buddi-api:IMAGE_TAG
+          ports:
+            - containerPort: 8001
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: BUDDI_DISABLE_WORKER
+              value: "0"    # worker runs in-process for single-service deploys; set "1" when using buddi-worker
+          envFrom: []       # secrets injected via Secret Manager volume mounts (see below)
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: secrets
+          secret:
+            secretName: buddi-api-secrets
+            # In production: use individual secret references per env var
+            # via run.googleapis.com/secrets annotation, not a volume mount.
+            # This YAML is a template — adjust to match your Secret Manager layout.

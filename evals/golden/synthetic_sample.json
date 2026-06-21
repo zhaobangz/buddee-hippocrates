@@ -1,0 +1,61 @@
+{
+    "_comment": "Build-out A2.1 schema demonstrator. This file is NOT loaded by run_eval.py (the loader globs only case_*.json), so it never affects the regression gate. It shows the golden-case shape for whoever grows the real, clinician-labeled golden set under evals/golden_set/ (gitignored — never commit real PHI). Each entry below is fully synthetic (Synthea-style), HIPAA Safe-Harbor clean, and demonstrates one HCC bucket. expected_codes = codes a careful clinician would surface; must_abstain_codes = codes the agent must NOT surface for this encounter.",
+    "schema_version": 1,
+    "encounters": [
+        {
+            "case_id": "synthetic_001_diabetes_complications",
+            "clinician_id": "placeholder:synthetic-demonstrator",
+            "labeled_at": "2026-06-01T00:00:00Z",
+            "specialty": "primary_care",
+            "tenant_id_hint": "synthetic",
+            "note": "58-year-old female with type 2 diabetes mellitus and diabetic peripheral neuropathy. Reports bilateral foot tingling; monofilament exam abnormal. A1c 8.9%. Continue metformin, add gabapentin for neuropathic pain.",
+            "billed_codes": ["E11.9"],
+            "expected_codes": ["E11.42"],
+            "must_abstain_codes": ["E10.42", "C50.9"]
+        },
+        {
+            "case_id": "synthetic_002_chf_systolic",
+            "clinician_id": "placeholder:synthetic-demonstrator",
+            "labeled_at": "2026-06-01T00:00:00Z",
+            "specialty": "cardiology",
+            "tenant_id_hint": "synthetic",
+            "note": "72-year-old male with chronic systolic congestive heart failure, EF 30% on recent echo. NYHA class III. On carvedilol, lisinopril, furosemide. Presents for routine follow-up; mild ankle edema, no acute decompensation.",
+            "billed_codes": ["I50.9"],
+            "expected_codes": ["I50.22"],
+            "must_abstain_codes": ["I50.32", "J44.1"]
+        },
+        {
+            "case_id": "synthetic_003_copd_exacerbation",
+            "clinician_id": "placeholder:synthetic-demonstrator",
+            "labeled_at": "2026-06-01T00:00:00Z",
+            "specialty": "pulmonology",
+            "tenant_id_hint": "synthetic",
+            "note": "65-year-old former smoker with chronic obstructive pulmonary disease, presenting with acute exacerbation: increased dyspnea, purulent sputum. Started on prednisone burst and azithromycin. No respiratory failure; SpO2 93% on room air.",
+            "billed_codes": ["J44.9"],
+            "expected_codes": ["J44.1"],
+            "must_abstain_codes": ["J96.00", "I50.9"]
+        },
+        {
+            "case_id": "synthetic_004_ckd_stage4",
+            "clinician_id": "placeholder:synthetic-demonstrator",
+            "labeled_at": "2026-06-01T00:00:00Z",
+            "specialty": "nephrology",
+            "tenant_id_hint": "synthetic",
+            "note": "70-year-old male with chronic kidney disease stage 4, eGFR 24, secondary to hypertensive nephrosclerosis. Anemia of CKD with Hgb 10.1. Counseled on dialysis planning and dietary phosphate restriction.",
+            "billed_codes": ["N18.9", "I10"],
+            "expected_codes": ["N18.4", "I12.9"],
+            "must_abstain_codes": ["N18.6", "Z99.2"]
+        },
+        {
+            "case_id": "synthetic_005_sepsis_resolved",
+            "clinician_id": "placeholder:synthetic-demonstrator",
+            "labeled_at": "2026-06-01T00:00:00Z",
+            "specialty": "internal_medicine",
+            "tenant_id_hint": "synthetic",
+            "note": "61-year-old female admitted for sepsis secondary to E. coli urinary tract infection, now resolving on day 4 of IV ceftriaxone. Hemodynamically stable, lactate normalized, afebrile for 48 hours. Transitioning to oral antibiotics.",
+            "billed_codes": ["A41.51"],
+            "expected_codes": ["A41.51", "N39.0"],
+            "must_abstain_codes": ["R65.21", "A41.9"]
+        }
+    ]
+}

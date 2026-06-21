@@ -13,8 +13,6 @@ gets a fakeredis client whenever it tries to open a connection from a
 
 from __future__ import annotations
 
-import os
-
 import fakeredis
 import pytest
 import redis
@@ -24,14 +22,25 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-# Make sure the limiter is on even though conftest.py may set the disable
-# flag in other suites; we want to exercise the real code path here.
-os.environ.pop("BUDDI_RATE_LIMIT_DISABLED", None)
-
-from backend.middleware import (  # noqa: E402
+from backend.middleware import (
     RateLimitConfig,
     RateLimitMiddleware,
 )
+
+
+@pytest.fixture(autouse=True)
+def _force_limiter_enabled(monkeypatch):
+    """Exercise the real limiter code path in this module.
+
+    conftest.py disables the limiter suite-wide (``BUDDI_RATE_LIMIT_DISABLED=1``).
+    We clear it *per test* — rather than at import time — so this module's apps
+    build with the limiter ON without leaking the unset into the session-scoped
+    ``client`` fixture. That client's middleware stack builds lazily during the
+    run; an import-time ``os.environ.pop`` would leave it enabled and let request
+    counts accumulate into spurious 429s in unrelated suites. ``monkeypatch``
+    restores the previous value after each test.
+    """
+    monkeypatch.delenv("BUDDI_RATE_LIMIT_DISABLED", raising=False)
 
 
 # ---------------------------------------------------------------------------

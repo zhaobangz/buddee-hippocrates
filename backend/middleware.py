@@ -143,6 +143,42 @@ def _trusted_proxy_cidrs() -> Tuple[ipaddress.IPv4Network, ...]:
     return tuple(networks)
 
 
+def validate_trusted_proxy_cidrs() -> Tuple[ipaddress.IPv4Network, ...]:
+    """Startup guard for ``TRUSTED_PROXY_CIDRS`` (Issue 8).
+
+    Parsing is lenient (malformed entries are dropped with a warning), so a
+    typo or an empty value can silently collapse the trusted set to zero
+    networks. With zero trusted networks, ``_client_identity`` never honours
+    ``X-Forwarded-For`` — which is the safe default for a direct-to-internet
+    deployment, but a *misconfiguration* behind a real proxy where an
+    attacker could otherwise spoof XFF to mint a fresh rate-limit bucket per
+    request. Rather than boot a non-development process in that ambiguous
+    state, we fail closed.
+
+    Returns the parsed networks. Logs the resolved set at INFO. Raises
+    ``ValueError`` when the set is empty and ``ENVIRONMENT`` is not
+    ``development``.
+    """
+
+    cidrs = _trusted_proxy_cidrs()
+    logger.info("Trusted proxy CIDRs: %s", [str(n) for n in cidrs])
+    if not cidrs:
+        environment = os.getenv("ENVIRONMENT", "production").strip().lower()
+        if environment != "development":
+            raise ValueError(
+                "TRUSTED_PROXY_CIDRS parsed to zero valid networks in a "
+                f"non-development environment (ENVIRONMENT={environment!r}). "
+                "Set a valid comma-separated CIDR list (e.g. '127.0.0.1/32') so "
+                "a spoofed X-Forwarded-For header cannot bypass per-IP rate "
+                "limiting."
+            )
+        logger.warning(
+            "TRUSTED_PROXY_CIDRS parsed to zero networks; permitted only "
+            "because ENVIRONMENT=development."
+        )
+    return cidrs
+
+
 def _client_identity(request: Request, trusted: Tuple[ipaddress.IPv4Network, ...]) -> str:
     """Resolve a stable per-client identity for the rate-limit key.
 

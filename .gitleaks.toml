@@ -1,0 +1,37 @@
+# gitleaks configuration for the Buddi repo.
+#
+# We run gitleaks as a BLOCKING secret-scan gate in CI (.github/workflows/main.yml).
+# This config builds on gitleaks' full default ruleset and only ADDS an allowlist
+# for matches that are provably NOT secrets:
+#   * deterministic, non-production CI/test fixture credentials (ci-test-*,
+#     test-only-*, test-api-key-*), used by the pytest suite and the CI env blocks;
+#   * .env.example / docs placeholders (changeme*, yourpassword, sk-ant-...);
+#   * prompt + runbook documentation.
+#
+# Real secrets never live in the tree (see .gitignore: .env, config/credentials.json,
+# *.pem, *.key, secrets/). Real provider tokens, private keys, and cloud
+# credentials do NOT match the allowlist below, so the gate still fails on them.
+title = "Buddi gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-secret matches: CI/test fixtures, placeholders, and docs"
+paths = [
+  '''\.env\.example$''',
+  '''^PROMPT_[0-9].*\.md$''',
+  '''(^|/)docs/''',
+  '''(^|/)tests/''',
+  '''(^|/)evals/red_team/''',
+]
+regexes = [
+  '''changeme[_a-z0-9]*''',
+  '''ci-test-[a-z0-9-]+''',
+  '''test-only-[a-z0-9-]+''',
+  '''test-api-key-[a-z0-9]+''',
+  '''test-real-key-''',
+  '''yourpassword''',
+  '''sk-ant-\.\.\.''',
+  '''sk-\.\.\.''',
+]

@@ -1,0 +1,93 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Staging image tag to promote (e.g. staging-abc1234)"
+        required: true
+      confirm:
+        description: "Type DEPLOY to confirm"
+        required: true
+
+# Shared with the steps below (the promote/canary steps reference env.REGISTRY,
+# env.PROJECT_ID and env.REGION). Mirrors deploy-staging.yml.
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm intent
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "Confirmation string incorrect. Aborting."
+            exit 1
+          fi
+
+  deploy-prod:
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production    # requires manual approval in GitHub Environments
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Promote image to prod tag
+        run: |
+          SRC="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/buddi/buddi-api:${{ github.event.inputs.image_tag }}"
+          DST="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/buddi/buddi-api:prod-${{ github.sha }}"
+          docker pull "$SRC"
+          docker tag "$SRC" "$DST"
+          docker push "$DST"
+
+      - name: Canary deploy — 10% traffic
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/buddi/buddi-api:prod-${{ github.sha }}"
+          gcloud run services update buddi-api \
+            --image="$IMAGE" \
+            --region="${{ env.REGION }}" \
+            --no-traffic \
+            --project="${{ env.PROJECT_ID }}"
+          REVISION=$(gcloud run revisions list --service=buddi-api --region=${{ env.REGION }} --format="value(metadata.name)" --limit=1)
+          gcloud run services update-traffic buddi-api \
+            --to-revisions="${REVISION}=10" \
+            --region="${{ env.REGION }}"
+
+      - name: 30-minute soak (auto-rollback on error rate > 1%)
+        run: |
+          echo "Soaking for 30 minutes... (in production, hook this to Cloud Monitoring alert)"
+          sleep 1800
+          # TODO: query Cloud Monitoring API for error rate on this revision
+          # If error_rate > 0.01, roll back and exit 1
+
+      - name: Shift to 100% traffic
+        run: |
+          gcloud run services update-traffic buddi-api \
+            --to-latest \
+            --region="${{ env.REGION }}"
+
+      - name: Run DB migrations on prod
+        run: |
+          gcloud run jobs execute buddi-migrate-prod \
+            --region="${{ env.REGION }}" \
+            --wait
+
+      - name: Post-deploy verification
+        run: |
+          curl -fsS "https://api.buddi.health/health" || (echo "Prod health check failed"; exit 1)

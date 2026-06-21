@@ -1,0 +1,114 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1950-01-01",
+        "gender": "male",
+        "id": "6f0f9f7b-98aa-f64a-457a-2e2b6c28afed",
+        "name": [
+          {
+            "family": "Yamamoto",
+            "given": [
+              "Daniel"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "25ba276c-3bec-8a10-7204-31338ed8b498",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/6f0f9f7b-98aa-f64a-457a-2e2b6c28afed"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NzUteWVhci1vbGQgbWFsZSB3aXRoIHN0YWdlIDQgQ0tELCBlR0ZSIDI2LiBOZXBocm9sb2d5IHByZXBhcmluZyBmb3IgQVYgZmlzdHVsYSBjcmVhdGlvbi4gTm8gZGlhYmV0ZXMuIEh5cGVydGVuc2l2ZSBDS0Qu",
+              "title": "Progress note (ckd-stage4)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/25ba276c-3bec-8a10-7204-31338ed8b498"
+            }
+          ]
+        },
+        "id": "4ce1d8c9-856a-892d-4e29-fdb1435de783",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/6f0f9f7b-98aa-f64a-457a-2e2b6c28afed"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "N18.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/25ba276c-3bec-8a10-7204-31338ed8b498"
+        },
+        "id": "a6fbfe87-3389-24b3-c1d0-9251a1d208c9",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/6f0f9f7b-98aa-f64a-457a-2e2b6c28afed"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I10",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/25ba276c-3bec-8a10-7204-31338ed8b498"
+        },
+        "id": "348feb7e-f669-f94b-54bd-937bf6f65280",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/6f0f9f7b-98aa-f64a-457a-2e2b6c28afed"
+        }
+      }
+    }
+  ],
+  "id": "f8e1d715-b507-0230-dac9-77e7a8243ea1",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

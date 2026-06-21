@@ -5,9 +5,17 @@ This guide reflects the **current** Buddi deployment model: containerized FastAP
 ## What is production-canonical
 
 - Runtime API: `backend.api:app` on port `8001`
-- Container entrypoint runs: `alembic upgrade head && uvicorn ...`
-- Auth is required on all routes (`API_KEY` / bearer)
-- Health probe endpoint: `GET /api/health`
+- Two-service split (§3.5): the **API** runs the default image CMD (`uvicorn`);
+  the **worker** (`buddi-worker`) reuses the *same image* with its CMD overridden
+  to `python -m core.worker` (see `infra/cloud-run-worker.yaml`).
+- Schema migrations run as a **separate Cloud Run Job** (`buddi-migrate-*`) on each
+  deploy — **not** on container start — so autoscaled replicas never race on
+  `alembic upgrade head`. Locally, run `make migrate` (or
+  `docker compose run --rm api alembic upgrade head`) before first start.
+- Auth is required on all API routes (`API_KEY` / bearer)
+- Health probes: `GET /health` (unauthenticated — used by the container
+  `HEALTHCHECK` and the deploy smoke tests) and `GET /api/health` (authenticated,
+  DB-backed readiness)
 - RAG retrieval uses PostgreSQL + `pgvector` (not FAISS index files)
 
 ## Required environment variables
@@ -69,6 +77,44 @@ BUDDI_API_KEY=your-api-key \
 python scripts/verify_system.py
 ```
 
+## Two-service deployment (§3.5)
+
+Both services run the **same image**; only the CMD and scaling differ.
+
+| | `buddi-api` | `buddi-worker` |
+|---|---|---|
+| Template | `infra/cloud-run-api.yaml` | `infra/cloud-run-worker.yaml` |
+| CMD | default (`uvicorn …`) | `python -m core.worker` |
+| minScale / maxScale | 1 / 20 | 0 / 10 |
+| `BUDDI_DISABLE_WORKER` | `0` in-process, or `1` when the worker service drains the queue | n/a |
+| `BUDDI_DISABLE_MERKLE_TASK` | `0` (API seals the daily Merkle root) | `1` |
+
+Apply a template (after substituting `PROJECT_ID`/`REGION`/`IMAGE_TAG`):
+
+```bash
+gcloud run services replace infra/cloud-run-api.yaml --region="$REGION"
+gcloud run services replace infra/cloud-run-worker.yaml --region="$REGION"
+```
+
+Local parity is `docker compose up` (api + worker + Postgres/pgvector + an OTel
+collector); see `docker-compose.yml`.
+
+## Secret management & onboarding
+
+- Secrets are injected from **Secret Manager** (never baked into the image; see
+  `.gitignore`). Rotation procedures: **`docs/runbooks/secret_rotation.md`**.
+- Provision a tenant + API key: `python scripts/provision_tenant.py --slug acme \
+  --name "Acme" --scopes clinician,ingest`. The raw key is printed once.
+
 ## CI/CD status in repo
 
-`.github/workflows/main.yml` currently runs lint + tests. Staging/production deploy jobs are placeholders with warning markers and are not fully wired yet.
+- `.github/workflows/main.yml` — lint (ruff), pytest, eval-regression gate, Synthea
+  drift check, plus **security scanning** (gitleaks blocking, configured via
+  `.gitleaks.toml`; pip-audit + mypy advisory) and a Docker **build verification**.
+- `.github/workflows/deploy-staging.yml` — on push to `main`: build/push the image to
+  Artifact Registry, deploy a **no-traffic** revision, run the `buddi-migrate-staging`
+  job, smoke-test `/health`, then shift traffic. Authenticates via **Workload
+  Identity Federation** (no long-lived SA keys).
+- `.github/workflows/deploy-prod.yml` — manual `workflow_dispatch` gated by a typed
+  `DEPLOY` confirmation and the protected `production` GitHub Environment: promote a
+  staging image, **canary at 10%**, 30-minute soak, then 100% traffic.

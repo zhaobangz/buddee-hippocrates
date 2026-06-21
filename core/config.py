@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_EMBED_MODEL: str = "text-embedding-3-large"
 
+    # --- Stripe billing (PROMPT_04 / strategy-doc §2.1 gap #10) ---
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_ID_MONTHLY: str = ""
+    STRIPE_PRICE_ID_GAIN_SHARE: str = ""
+
     # --- Storage / Memory ---
     MEMORY_ENABLED: bool = True
     MAX_MEMORY_HISTORY: int = 10

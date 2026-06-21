@@ -62,7 +62,7 @@ def ingest_cms_hcc_models():
         }
         documents_to_add.append(doc)
         
-    logger.info(f"Adding {len(documents_to_add)} records to FAISS index.")
+    logger.info(f"Adding {len(documents_to_add)} records to the pgvector store.")
     rag.add_documents(documents_to_add)
     logger.info("Ingestion complete.")
 

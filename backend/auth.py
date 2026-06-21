@@ -106,7 +106,11 @@ def _test_mode_static_fallback(request: Request, presented_key: str | None) -> A
         return None
     fallback_tid = uuid.UUID("00000000-0000-0000-0000-000000000001")
     request.state.tenant_id = fallback_tid
-    request.state.scopes = ["test", "clinician", "admin", "ingest"]
+    # Security: test-mode scopes must not include admin or ingest to prevent
+    # accidental privilege escalation in CI. Tests that need those scopes
+    # provision a real TenantApiKey row instead (see tests/conftest.py:
+    # the ``tenant_api_key`` fixture, which skips when no test DB is present).
+    request.state.scopes = ["test", "clinician"]
     request.state.api_key_id = None
     return AuthenticatedClient("api-key", tenant_id=fallback_tid, scopes=request.state.scopes)
 

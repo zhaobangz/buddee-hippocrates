@@ -149,6 +149,14 @@ def main(argv: List[str] | None = None) -> int:
         help="Skip the real LLM call (CI default).",
     )
     parser.add_argument(
+        "--ci",
+        action="store_true",
+        help="CI mode: implies --offline (CI has no BAA / live LLM) and "
+        "applies the absolute precision/recall floors from "
+        "EVAL_PRECISION_FLOOR / EVAL_RECALL_FLOOR on top of the relative "
+        "regression gate.",
+    )
+    parser.add_argument(
         "--tolerance",
         type=float,
         default=0.05,
@@ -161,6 +169,11 @@ def main(argv: List[str] | None = None) -> int:
         "intentional baseline bumps).",
     )
     args = parser.parse_args(argv)
+
+    # --ci is the canonical CI invocation (build-out A2.3): it never has the
+    # BAA / live LLM, so it always runs offline against the demo fallback.
+    if args.ci:
+        args.offline = True
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -187,6 +200,13 @@ def main(argv: List[str] | None = None) -> int:
             )
         )
 
+    # Absolute precision/recall floors (build-out A2.2). Default 0.0 (disabled)
+    # so the deterministic offline CI run — whose demo-fallback baseline is
+    # intentionally low — stays green. Set EVAL_PRECISION_FLOOR /
+    # EVAL_RECALL_FLOOR (e.g. 0.60) for the real-LLM golden-set run.
+    precision_floor = float(os.getenv("EVAL_PRECISION_FLOOR", "0") or "0")
+    recall_floor = float(os.getenv("EVAL_RECALL_FLOOR", "0") or "0")
+
     summary = aggregate(scores)
     report = {
         "summary": asdict(summary),
@@ -194,7 +214,10 @@ def main(argv: List[str] | None = None) -> int:
         "config": {
             "cases_dir": str(args.cases),
             "offline": args.offline,
+            "ci": args.ci,
             "tolerance": args.tolerance,
+            "precision_floor": precision_floor,
+            "recall_floor": recall_floor,
         },
     }
     print(json.dumps(report, indent=2, sort_keys=True))
@@ -204,16 +227,32 @@ def main(argv: List[str] | None = None) -> int:
         args.output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
         logger.info("Wrote report to %s", args.output)
 
-    if args.no_regression_gate:
-        return 0
+    failures: List[str] = []
 
-    baseline = _load_baseline(args.baseline)
-    failures = regression_against_baseline(
-        current=summary, baseline=baseline, tolerance=args.tolerance
-    )
+    # Absolute floor gate. Always evaluated; default floors of 0.0 never fire.
+    if summary.precision < precision_floor:
+        failures.append(
+            f"precision {summary.precision:.3f} below floor {precision_floor:.2f} "
+            "(EVAL_PRECISION_FLOOR)"
+        )
+    if summary.recall < recall_floor:
+        failures.append(
+            f"recall {summary.recall:.3f} below floor {recall_floor:.2f} "
+            "(EVAL_RECALL_FLOOR)"
+        )
+
+    # Relative regression gate + must-abstain hard fail vs the curated baseline.
+    if not args.no_regression_gate:
+        baseline = _load_baseline(args.baseline)
+        failures.extend(
+            regression_against_baseline(
+                current=summary, baseline=baseline, tolerance=args.tolerance
+            )
+        )
+
     if failures:
         for failure in failures:
-            logger.error("Eval regression: %s", failure)
+            logger.error("Eval gate failure: %s", failure)
         return 1
     logger.info("Eval passed: precision=%.3f recall=%.3f", summary.precision, summary.recall)
     return 0

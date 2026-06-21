@@ -3,6 +3,12 @@
 # Track 1 / Step 1 (ARCH-01, CFG-01, DO-01): canonical surface is backend.api:app
 # on port 8001.
 #
+# §3.5 infra build-out: this stack now mirrors the production two-service split
+# (api + worker, both from the same image), plus Postgres+pgvector and a local
+# OpenTelemetry collector. The api and worker reach Postgres over the compose
+# network, so DATABASE_URL in .env must use host `db` (e.g.
+# postgresql://buddi:${POSTGRES_PASSWORD}@db:5432/buddi).
+#
 # Re-audit (April 21) follow-ups applied here:
 #   - DO-05 (FIXED): the full source bind-mount `.:/app` has been removed.
 #     Only the `data/` directory is mounted so persisted audit logs and
@@ -11,9 +17,6 @@
 #   - CFG-04 (FIXED): DEV_MODE is now parameterized via the environment so
 #     production compose-based deploys default to `false`. Local developers
 #     opt in via `.env` or `DEV_MODE=true docker compose up`.
-#
-# Track 2 Step 10 will introduce the Redis service for distributed rate
-# limiting; the stub is left commented for that step.
 version: "3.8"
 
 services:
@@ -24,8 +27,8 @@ services:
       - "8001:8001"
     volumes:
       # DO-05: only the runtime data directory is bind-mounted. Source code
-      # lives inside the image (COPY . . in the Dockerfile) and must NOT be
-      # overridable from the host.
+      # lives inside the image (explicit COPYs in the Dockerfile) and must NOT
+      # be overridable from the host.
       - ./data:/app/data
     env_file:
       - .env
@@ -36,9 +39,13 @@ services:
       - DEV_MODE=${DEV_MODE:-false}
       - PORT=8001
       - PYTHONPATH=/app
+    depends_on:
+      db:
+        condition: service_healthy
     # `--reload` is dev-only; see start_dev.py for the local dev loop. The
     # compose command mirrors the Dockerfile CMD so `docker compose up` runs
-    # the canonical production-parity process.
+    # the canonical production-parity process, plus the proxy-header flags the
+    # service needs when fronted by a reverse proxy locally.
     command: >
       uvicorn backend.api:app
       --host 0.0.0.0
@@ -46,25 +53,59 @@ services:
       --proxy-headers
       --forwarded-allow-ips=*
 
+  # §4.2 Bottleneck #3 / build-out B3: the async job worker drains the `jobs`
+  # queue. Same image as `api`, CMD overridden to run the worker entrypoint.
+  worker:
+    build: .
+    image: buddi:${BUDDI_VERSION:-dev}
+    command: ["python", "-m", "core.worker"]
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      BUDDI_DISABLE_MERKLE_TASK: "1"   # merkle task runs in api only
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Local OpenTelemetry collector. In production Cloud Run exports directly to
+  # Cloud Trace via OTLP; locally the api/worker send to http://otel-collector:4318
+  # (set OTLP_ENDPOINT accordingly) and traces are logged by the collector.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.106.0
+    command: ["--config=/etc/otel-config.yaml"]
+    volumes:
+      - ./infra/otel-config.yaml:/etc/otel-config.yaml:ro
+    ports:
+      - "4318:4318"
+    restart: unless-stopped
+
+  # DB-01 / DB-02: Postgres + pgvector. A healthcheck gates `api` and `worker`
+  # startup (depends_on: condition: service_healthy) so neither binds before the
+  # database accepts connections. Run migrations once before first use:
+  #   docker compose run --rm api alembic upgrade head
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-buddi}
+      POSTGRES_USER: ${POSTGRES_USER:-buddi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - buddi_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buddi} -d ${POSTGRES_DB:-buddi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   # TODO(Track 2 Step 10 / SEC-07): Redis for slowapi distributed rate limiting.
   # redis:
   #   image: redis:7-alpine
   #   ports:
   #     - "6379:6379"
 
-  # TODO(Track 1 Step 2 / DB-01, DB-02): enable Postgres+pgvector once migrations
-  # are wired. Keeping this commented prevents accidentally binding an unmigrated
-  # database.
-  # db:
-  #   image: pgvector/pgvector:pg16
-  #   environment:
-  #     POSTGRES_DB: buddi_db
-  #     POSTGRES_USER: buddi
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-  #   volumes:
-  #     - buddi_pgdata:/var/lib/postgresql/data
-  #   ports:
-  #     - "5432:5432"
-
-# volumes:
-#   buddi_pgdata:
+volumes:
+  buddi_pgdata:

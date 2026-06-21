@@ -1,0 +1,114 @@
+{
+  "entry": [
+    {
+      "resource": {
+        "birthDate": "1958-01-01",
+        "gender": "male",
+        "id": "05ceea48-d488-d4c5-13e2-075e91ecfe91",
+        "name": [
+          {
+            "family": "Holloway",
+            "given": [
+              "Marcus"
+            ],
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "3a6ab583-a99b-4d50-a092-0fa13adc94a0",
+        "resourceType": "Encounter",
+        "status": "finished",
+        "subject": {
+          "reference": "Patient/05ceea48-d488-d4c5-13e2-075e91ecfe91"
+        }
+      }
+    },
+    {
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "NjcteWVhci1vbGQgbWFsZSB3aXRoIHR5cGUgMiBkaWFiZXRlcyBtZWxsaXR1cyBjb21wbGljYXRlZCBieSBjaHJvbmljIGtpZG5leSBkaXNlYXNlIHN0YWdlIDNhLiBlR0ZSIDUxIGFuZCB1cmluZSBhbGJ1bWluL2NyZWF0aW5pbmUgcmF0aW8gNDIgbWcvZy4gSHlwZXJ0ZW5zaW9uIHRyZWF0ZWQgd2l0aCBsaXNpbm9wcmlsLg==",
+              "title": "Progress note (diabetic-ckd)"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "Encounter/3a6ab583-a99b-4d50-a092-0fa13adc94a0"
+            }
+          ]
+        },
+        "id": "b52b5de6-1e8d-16ed-7353-493fad5681d8",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "Patient/05ceea48-d488-d4c5-13e2-075e91ecfe91"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "E11.9",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/3a6ab583-a99b-4d50-a092-0fa13adc94a0"
+        },
+        "id": "1667b953-b54b-030a-6269-d690aa56888d",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/05ceea48-d488-d4c5-13e2-075e91ecfe91"
+        }
+      }
+    },
+    {
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "I10",
+              "system": "http://hl7.org/fhir/sid/icd-10-cm"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "Encounter/3a6ab583-a99b-4d50-a092-0fa13adc94a0"
+        },
+        "id": "b0e0869a-dbe3-4e56-c735-dc6612891856",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "Patient/05ceea48-d488-d4c5-13e2-075e91ecfe91"
+        }
+      }
+    }
+  ],
+  "id": "54cea673-5cf9-0e6c-c0a1-25f2bae69491",
+  "meta": {
+    "tag": [
+      {
+        "code": "synthea-vignette",
+        "display": "Synthetic, Safe-Harbor compliant; no real PHI",
+        "system": "https://buddi.health/fhir/CodeSystem/synthetic"
+      }
+    ]
+  },
+  "resourceType": "Bundle",
+  "type": "collection"
+}

@@ -75,6 +75,19 @@ class SecureStorage:
         return self._derive_fernet(salt).decrypt(token)
 
     # ------------------------------------------------------------------
+    # In-memory blobs (for DB BYTEA columns, e.g. ehr_integrations tokens)
+    # ------------------------------------------------------------------
+    def encrypt_blob(self, text: str) -> bytes:
+        """Encrypt a string to a salted Fernet blob suitable for a BYTEA column."""
+
+        return self._encrypt(text.encode("utf-8"))
+
+    def decrypt_blob(self, blob: bytes) -> str:
+        """Decrypt a blob produced by :meth:`encrypt_blob`."""
+
+        return self._decrypt(bytes(blob)).decode("utf-8")
+
+    # ------------------------------------------------------------------
     # JSON
     # ------------------------------------------------------------------
     def save_json(self, file_path: str, data: Any) -> bool:

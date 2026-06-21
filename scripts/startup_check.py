@@ -38,7 +38,7 @@ def check_sounddevice():
 def check_pytorch_transformers():
     ok_torch, torch_res = check_import('torch')
     ok_trans, trans_res = check_import('transformers')
-    info = {
+    info: dict[str, object] = {
         'torch': ok_torch,
         'transformers': ok_trans,
     }

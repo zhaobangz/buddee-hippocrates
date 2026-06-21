@@ -31,7 +31,7 @@ def seed_guidelines():
         }
     ]
     
-    print(f"Seeding {len(guidelines)} clinical guidelines into FAISS index...")
+    print(f"Seeding {len(guidelines)} clinical guidelines into the pgvector store...")
     rag.add_documents(guidelines)
     print("Success: Guidelines indexed.")
 

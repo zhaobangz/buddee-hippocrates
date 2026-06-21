@@ -13,8 +13,8 @@ AI product: PHI exposure, audit-chain integrity, and availability.
 | Tier  | Definition                                                                                  | Initial response time | Notification           |
 | ----- | ------------------------------------------------------------------------------------------- | --------------------- | ---------------------- |
 | Sev-1 | Suspected or confirmed PHI breach; audit chain fails verification; production fully down.   | Immediate (<15min)    | Founder + counsel.     |
-| Sev-2 | Partial outage; degraded LLM provider; a single tenant cannot ingest.                       | 1 hour                | Founder + customer.    |
-| Sev-3 | Recoverable error spike; eval regression in production; cost / quota alert.                 | 4 business hours      | Founder.               |
+| Sev-2 | `/shadow/audit` p95 > 60s; nightly red-team suite failure; partial outage; degraded LLM provider; a single tenant cannot ingest. | 1 hour | Founder + customer. |
+| Sev-3 | Elevated error rate; eval regression in production; cost / quota alert.                      | 4 business hours      | Founder.               |
 
 ## Sev-1: PHI breach (suspected or confirmed)
 
@@ -39,6 +39,27 @@ knows or *should have known* (45 CFR § 164.408). Move fast.
    unconfirmed. They have their own notification obligations.
 5. **Open a privileged retrospective document** under
    `docs/RETRO/incident-YYYY-MM-DD.md` (not committed to git).
+
+## Sev-1: PHI sent to an LLM without an executed BAA
+
+The single highest-probability Sev-1 (§7.2 Risk #1): real PHI reaches a model
+provider before the Business Associate Agreement is on file. The BAA tripwire
+(`core/llm_manager._baa_guard` + the `/ingest/fhir` 412 guard) should make this
+impossible, so its occurrence means the guard regressed.
+
+1. **Stop the bleed.** Confirm `BUDDI_BAA_CONFIRMED` is `0` (or flip it) and
+   confirm the affected tenant's `tenants.baa_confirmed` is `false`. Both gate
+   ingest; with either tripped, `/ingest/fhir` returns 412 and the LLM path
+   refuses oversized / `<clinical_note>`-delimited prompts.
+2. **Identify what was sent.** Pull the audit chain for the tenant and grep for
+   `shadow_mode_rcm` / `prior_auth_draft` events in the exposure window — the
+   payloads record note length and codes (PHI itself is `redact_for_logs`-clean
+   in logs, encrypted at rest in the DB).
+3. **Confirm provider retention.** Anthropic under a BAA does not train on or
+   retain inputs; without a BAA, assume the input was retained and treat as a
+   breach. Contact the provider to request deletion and a written attestation.
+4. **Treat as a PHI breach** — follow the breach procedure below (counsel within
+   1 hour; 45 CFR § 164.408 clock).
 
 ## Sev-1: Audit chain fails verification
 
@@ -113,14 +134,50 @@ not by the engineer at 3am. Pre-built templates live under
 
 ## On-call escalation
 
-| Role               | Owner       | Backup            |
-| ------------------ | ----------- | ----------------- |
-| Primary on-call    | Founder     | Hire #2 (TBD)     |
-| Counsel            | (TBD firm)  | —                 |
-| Clinical advisor   | Hire #1     | Founder           |
-| Cloud / KMS access | Founder     | Hire #2 (TBD)     |
+| Role               | Owner                     | Backup            |
+| ------------------ | ------------------------- | ----------------- |
+| Primary on-call    | `[FOUNDER_NAME]`          | Hire #2 (TBD)     |
+| Counsel            | (TBD firm)                | —                 |
+| Clinical advisor   | `[CLINICAL_ADVISOR_NAME]` | `[FOUNDER_NAME]`  |
+| Cloud / KMS access | `[FOUNDER_NAME]`          | Hire #2 (TBD)     |
 
 The "founder gets sick" mitigation in manual §7.3 #10 lives here:
 the Cloud Run + Cloud SQL + KMS infrastructure must run unattended
 for ≥30 days. Document the GPG-key escrow location at the next
 retrospective.
+
+## Post-mortem template
+
+Copy into `docs/RETRO/incident-YYYY-MM-DD.md` (gitignored) within 5 business
+days of any Sev-1 / Sev-2. Blameless — focus on the system, not the person.
+
+```markdown
+# Incident <YYYY-MM-DD> — <one-line title>
+
+- **Severity:** Sev-_
+- **Detected at / by:** <UTC timestamp> / <alert | customer | manual>
+- **Resolved at:** <UTC timestamp>   **Duration:** <hh:mm>
+- **Author / responders:** [FOUNDER_NAME], …
+- **PHI involved?:** yes / no   **Breach clock started (§164.408)?:** yes / no
+
+## Impact
+Who/what was affected (tenants, records, SLO), and for how long.
+
+## Timeline (UTC)
+- HH:MM — …
+
+## Root cause
+The technical cause and the contributing factors (the "5 whys").
+
+## Detection & response
+How we found out; what worked; where we lost time.
+
+## Action items
+| # | Action | Owner | Due | Status |
+|---|--------|-------|-----|--------|
+| 1 | …      | …     | …   | open   |
+
+## Lessons / guardrails added
+Tests, alerts, or runbook updates that make this class of incident impossible
+or self-evident next time.
+```

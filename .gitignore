@@ -20,6 +20,7 @@ node_modules/
 .vscode/
 __pycache__/
 *.pyc
+*.pyo
 
 # Clinical Data (Keep local unless explicitly intended for cloud)
 audit_log.json
@@ -28,6 +29,12 @@ prior_auth_store.json
 *.faiss
 *.pkl
 
+# Issue 1: data/ holds runtime artifacts (SQLite caches, ingested bundles
+# that may contain PHI). Keep the tracked ingest source scripts; ignore
+# everything else under it.
+data/*
+!data/*.py
+
 # Security: never commit local credential material or secret-bearing config files.
 config/credentials.json
 config/*.json
@@ -35,6 +42,17 @@ config/*.json
 *.key
 *.p12
 secrets/
+
+# Eval harness (build-out A2): the committed seed set lives in evals/golden/
+# (synthetic, clinician-labeled). The *real* labeled golden set — which may be
+# derived from de-identified patient data — lives in evals/golden_set/ and is
+# NEVER committed. Keep the schema demonstrator and README only. Per-run eval
+# reports under evals/results/ are also generated, not committed.
+evals/golden_set/*.json
+!evals/golden_set/README.md
+!evals/golden_set/synthetic_sample.json
+evals/results/
+evals/red_team/results_*.json
 
 # Logs
 logs/
@@ -45,8 +63,10 @@ logs/
 .input_history
 frontend.pid
 
-# CMS-AUD-01: signed daily Merkle roots are durable artifacts uploaded to
-# GCS Object Lock in production. Locally we generate them at runtime; we
-# only commit the README explaining the directory.
-storage/audit_roots/*.json
-storage/audit_roots/*.json.tmp
+# CMS-AUD-01 / Issue 1: storage/ holds runtime PHI artifacts — signed daily
+# Merkle roots (uploaded to GCS/S3 Object Lock in production) and any other
+# locally generated audit material. Ignore the whole tree but keep the
+# directory-explaining READMEs so the layout stays documented.
+storage/**
+!storage/**/
+!storage/**/README.md

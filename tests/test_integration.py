@@ -91,34 +91,43 @@ VALID_BUNDLE = {
 }
 
 
-def test_fhir_ingest_accepts_valid_bundle(client, auth_headers):
-    # The agent's LLM call is mocked — we only want to verify that the
-    # HTTP layer validates the bundle and returns a recognised response.
+def test_fhir_ingest_accepts_valid_bundle(client, tenant_api_key):
+    # Issue 6/7: FHIR ingest requires the ``ingest`` scope, which the test-mode
+    # fallback no longer grants — so we provision a real ingest-scoped key with
+    # a confirmed BAA (skips when the test DB is unavailable).
     #
-    # 200 — bundle accepted and processed (BAA confirmed, agent up).
-    # 412 — BAA precondition not met (manual §7.2 Risk #1, the default
-    #       fail-closed state in CI where the DB is unreachable).
+    # The agent's LLM call is mocked — we only want to verify that the HTTP
+    # layer validates the bundle and returns a recognised response.
+    #
+    # 200 — bundle accepted and processed.
+    # 412 — BAA precondition not met (e.g. the baa_confirmed flag was not
+    #       readable under RLS); the detail must reference the BAA.
     # 503 — agent failed to bootstrap in this environment.
+    #
+    # A 403 here would mean the ingest scope check regressed and is explicitly
+    # excluded by the accepted set below.
+    headers = tenant_api_key(["ingest"], baa_confirmed=True)
     with patch("core.agent.Agent.handle", return_value=json.dumps({"ok": True})):
         resp = client.post(
             "/ingest/fhir",
-            headers=auth_headers,
+            headers=headers,
             json=VALID_BUNDLE,
         )
     assert resp.status_code in (200, 412, 503)
     if resp.status_code == 200:
         assert resp.json()["status"] == "success"
     elif resp.status_code == 412:
-        # The detail must reference the BAA precondition so a regression
-        # to a different fail-closed reason gets caught.
         assert "BAA" in resp.json()["detail"]
 
 
-def test_fhir_ingest_rejects_invalid_bundle(client, auth_headers):
+def test_fhir_ingest_rejects_invalid_bundle(client, tenant_api_key):
+    # A malformed bundle is rejected at validation (422) before the BAA gate,
+    # but the ``ingest`` scope is still required to reach that point.
+    headers = tenant_api_key(["ingest"], baa_confirmed=True)
     bad_bundle = {"resourceType": "NotABundle", "type": "collection"}
     resp = client.post(
         "/ingest/fhir",
-        headers=auth_headers,
+        headers=headers,
         json=bad_bundle,
     )
     assert resp.status_code in (422, 503)
@@ -127,6 +136,24 @@ def test_fhir_ingest_rejects_invalid_bundle(client, auth_headers):
 def test_fhir_ingest_requires_auth(client):
     resp = client.post("/ingest/fhir", json=VALID_BUNDLE)
     assert resp.status_code == 401
+
+
+def test_fhir_ingest_forbidden_without_ingest_scope(client, auth_headers):
+    # Issue 6 + 7: the test-mode fallback grants only ["test", "clinician"], so
+    # the ingest route (require_scope("ingest")) must reject it with 403. No DB
+    # is required — the authorization gate fires before any bundle processing.
+    resp = client.post("/ingest/fhir", headers=auth_headers, json=VALID_BUNDLE)
+    assert resp.status_code == 403
+
+
+def test_fhir_ingest_blocks_unconfirmed_baa(client, tenant_api_key):
+    # Issue 5: a tenant whose BAA is not confirmed must be refused at ingest
+    # with HTTP 412 even with a valid ingest-scoped key. Requires a real
+    # TenantApiKey row, so it skips when the test DB is unavailable.
+    headers = tenant_api_key(["ingest"], baa_confirmed=False)
+    resp = client.post("/ingest/fhir", headers=headers, json=VALID_BUNDLE)
+    assert resp.status_code == 412
+    assert "BAA" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +173,19 @@ def test_audit_query_returns_json(client, auth_headers):
     assert isinstance(body["events"], list)
 
 
+def test_audit_verify_requires_auth(client):
+    resp = client.get("/api/audit/verify")
+    assert resp.status_code == 401
+
+
+def test_audit_verify_requires_admin_scope(client, auth_headers):
+    # Issue 7: /api/audit/verify is admin-only. The clinician-scoped fallback
+    # key must be rejected with 403 (no DB required — the scope gate fires
+    # before the handler touches the audit chain).
+    resp = client.get("/api/audit/verify", headers=auth_headers)
+    assert resp.status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # 5. Prior-auth generation
 # ---------------------------------------------------------------------------
@@ -159,16 +199,19 @@ def test_prior_auth_requires_auth(client):
 
 
 def test_prior_auth_generation_creates_draft(client, auth_headers):
-    # We need a real encounter FK only if the DB is online; with the
-    # in-test Postgres the insert will fail on FK (encounter_id uuid) and
-    # return 500. That's acceptable as a proof that the route is routed
-    # and auth-gated; we accept 200 or 500 here but reject 401/403/404.
+    # Build-out B3: the default route now enqueues a job (202). This test
+    # exercises the inline draft via ?sync=true. We need a real encounter FK
+    # only if the DB is online; with the in-test Postgres the insert will fail
+    # on FK (encounter_id uuid) and return 500. That's acceptable as a proof
+    # that the route is routed and auth-gated; we accept 200 or 500 here but
+    # reject 401/403/404.
     resp = client.post(
         "/api/prior-auth/generate",
         headers=auth_headers,
         params={
             "encounter_id": "00000000-0000-0000-0000-000000000000",
             "procedure_code": "CPT-12345",
+            "sync": "true",
         },
     )
     assert resp.status_code in (200, 500)

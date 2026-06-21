@@ -1,0 +1,28 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: buddi-worker
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/vpc-access-connector: projects/PROJECT_ID/locations/REGION/connectors/buddi-vpc
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+    spec:
+      containerConcurrency: 4
+      timeoutSeconds: 300   # LLM calls can take up to 5 min on large bundles
+      serviceAccountName: buddi-worker@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/buddi/buddi-api:IMAGE_TAG
+          command: ["python", "-m", "core.worker"]
+          resources:
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: BUDDI_DISABLE_MERKLE_TASK
+              value: "1"    # merkle task runs in api only

@@ -23,6 +23,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -30,8 +31,9 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text as sa_text,
 )
-from sqlalchemy.dialects.postgresql import BYTEA, JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import declarative_base, relationship  # noqa: F401  (relationship re-exported for future models)
 
 Base = declarative_base()
@@ -57,6 +59,15 @@ class Tenant(Base):
     # docs/COMPLIANCE/baa_status.md.
     baa_confirmed = Column(Boolean, nullable=False, default=False, server_default="false")
     baa_confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    # PROMPT_04: Stripe billing linkage. ``stripe_customer_id`` is set on first
+    # subscribe; the subscription_* fields are driven by Stripe webhooks
+    # (invoice.paid -> active, customer.subscription.deleted -> canceled).
+    # subscription_status values: none | trialing | active | past_due | canceled
+    stripe_customer_id = Column(String(255), nullable=True, index=True)
+    subscription_status = Column(Text, nullable=True, server_default="none")
+    subscription_id = Column(Text, nullable=True, index=True)
+    subscription_current_period_end = Column(DateTime(timezone=True), nullable=True)
+    physician_count = Column(Integer, nullable=True, server_default="1")
 
 
 class TenantApiKey(Base):
@@ -249,6 +260,68 @@ class AuditEvent(Base):
     timestamp = Column(DateTime(timezone=True), default=_utcnow)
     cryptographic_hash = Column(Text)
     previous_hash = Column(Text)
+
+
+class Job(Base):
+    """Async job queue for LLM-bound work (strategy-doc §4.2 Bottleneck #3).
+
+    The API enqueues ``shadow_audit`` / ``prior_auth`` work and returns HTTP
+    202 immediately; a worker process drains ``pending`` rows and persists the
+    full result payload when complete. Tenant isolation for polling is enforced
+    application-side by filtering on ``tenant_id``.
+    """
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','processing','completed','failed')",
+            name="jobs_status_check",
+        ),
+    )
+
+    id = Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=sa_text("gen_random_uuid()"),
+    )
+    tenant_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    job_type = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="pending", server_default="pending")
+    input_payload = Column(JSONB, nullable=False)
+    result_payload = Column(JSONB)
+    error_message = Column(Text)
+    idempotency_key = Column(Text, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default=sa_text("now()"))
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class WebhookEndpoint(Base):
+    """Customer-registered webhook target (build-out B2 / strategy-doc §2.1 gap #8).
+
+    ``secret`` holds the HMAC signing secret **encrypted at rest** (via
+    ``core/storage.SecureStorage`` / BUDDI_STORAGE_KEY), not an Argon2 hash:
+    outgoing payloads are signed with HMAC-SHA256 using the *raw* secret, which
+    a one-way Argon2 hash could not provide. Encryption-at-rest gives the same
+    "never store the secret in plaintext" property while keeping it recoverable
+    for signing. The customer holds the matching raw secret to verify
+    signatures.
+    """
+
+    __tablename__ = "webhook_endpoints"
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    url = Column(Text, nullable=False)
+    secret = Column(Text, nullable=False)  # SecureStorage-encrypted signing secret
+    events = Column(ARRAY(Text), nullable=False)
+    active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 
 class RecoveryEvent(Base):

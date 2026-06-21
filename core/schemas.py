@@ -31,6 +31,32 @@ class ShadowModeResponse(BaseModel):
     citations: List[str] = Field(default_factory=list, description="Guideline chunk IDs or source labels used in this audit.")
 
 
+# ── LLM-as-judge verdict (manual §7.2 Risk #2 mitigation #4) ─────────
+#
+# A second, independent LLM call adjudicates each first-pass HCC suggestion
+# whose confidence sits in the "uncertain band" (>= floor, < judge threshold).
+# Only a "yes" survives — a hallucinated code that a hurried coder might
+# approve is dropped before it ever reaches the operator UI. Verdicts are
+# recorded in the audit chain so the abstain/rejection rate is queryable
+# per tenant (manual §6.2 Quality signal).
+
+class JudgeVerdict(BaseModel):
+    code: str = Field(..., description="The candidate ICD-10 / HCC code under review.")
+    verdict: Literal["yes", "no", "abstain"] = Field(
+        ...,
+        description=(
+            "'yes' only if the clinical note clearly documents the condition "
+            "and the cited evidence quote supports the code per ICD-10/HCC "
+            "documentation standards; 'no' if unsupported; 'abstain' if the "
+            "evidence is too ambiguous to decide."
+        ),
+    )
+    rationale: str = Field(
+        default="",
+        description="One-sentence justification for the verdict (no PHI beyond the evidence already cited).",
+    )
+
+
 # ── Prior-authorization draft (deliverable 4.5) ──────────────────────
 
 class EvidenceSnippet(BaseModel):
