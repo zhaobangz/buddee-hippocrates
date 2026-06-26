@@ -119,6 +119,7 @@ def leaf_hash(event: Dict[str, Any]) -> str:
         {
             "event_id": event.get("event_id"),
             "event_type": event.get("event_type"),
+            "tenant_id": event.get("tenant_id"),
             "timestamp": event.get("timestamp"),
             "previous_hash": event.get("previous_hash"),
             "cryptographic_hash": event.get("cryptographic_hash"),
@@ -299,10 +300,16 @@ class MerkleSigner:
         self.public_key_pem = public_key_pem
         self.kms_provider = kms_provider
 
-    def sign(self, merkle_root: str, day: str, event_count: int) -> Dict[str, Any]:
+    def sign(
+        self,
+        merkle_root: str,
+        day: str,
+        event_count: int,
+        tenant_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Return a signature envelope for ``(day, merkle_root, event_count)``."""
 
-        message = self._canonical_message(day, merkle_root, event_count)
+        message = self._canonical_message(day, merkle_root, event_count, tenant_id)
         signature_bytes = self._signer(message)
         return {
             "algorithm": self.algorithm,
@@ -311,9 +318,17 @@ class MerkleSigner:
             "signature_b64": base64.b64encode(signature_bytes).decode("ascii"),
             "signed_at": datetime.now(timezone.utc).isoformat(),  # Security: audit signatures must be timestamped in UTC.
             "public_key_pem": self.public_key_pem,
+            "tenant_id": tenant_id,
         }
 
-    def verify(self, envelope: Dict[str, Any], day: str, merkle_root: str, event_count: int) -> bool:
+    def verify(
+        self,
+        envelope: Dict[str, Any],
+        day: str,
+        merkle_root: str,
+        event_count: int,
+        tenant_id: Optional[str] = None,
+    ) -> bool:
         """Best-effort signature verification.
 
         Returns True when the envelope's algorithm matches our signer and
@@ -328,7 +343,7 @@ class MerkleSigner:
         if not sig_b64:
             return False
         signature_bytes = base64.b64decode(sig_b64)
-        message = self._canonical_message(day, merkle_root, event_count)
+        message = self._canonical_message(day, merkle_root, event_count, tenant_id)
         if self._verifier is None:
             # HMAC path: re-sign + constant-time compare.
             expected = self._signer(message)
@@ -339,10 +354,20 @@ class MerkleSigner:
             return False
 
     @staticmethod
-    def _canonical_message(day: str, merkle_root: str, event_count: int) -> bytes:
-        return _canonical_json(
-            {"day": day, "merkle_root": merkle_root, "event_count": event_count}
-        ).encode("utf-8")
+    def _canonical_message(
+        day: str,
+        merkle_root: str,
+        event_count: int,
+        tenant_id: Optional[str] = None,
+    ) -> bytes:
+        payload: Dict[str, Any] = {
+            "day": day,
+            "merkle_root": merkle_root,
+            "event_count": event_count,
+        }
+        if tenant_id:
+            payload["tenant_id"] = tenant_id
+        return _canonical_json(payload).encode("utf-8")
 
     # -- Factories ----------------------------------------------------------
 
@@ -360,6 +385,10 @@ class MerkleSigner:
 
         provider = os.getenv("BUDDI_AUDIT_KMS_PROVIDER", "").strip().lower()
         kms_key = os.getenv("BUDDI_AUDIT_KMS_KEY", "").strip()
+        production = os.getenv("ENVIRONMENT", "production").strip().lower() == "production"
+        require_configured_signer = (
+            production or os.getenv("BUDDI_AUDIT_REQUIRE_CONFIGURED_SIGNER", "").strip() == "1"
+        )
         if provider and kms_key:
             try:
                 if provider in {"gcp", "gcp-kms", "google", "cloudkms"}:
@@ -377,6 +406,8 @@ class MerkleSigner:
                     kms_key,
                     e,
                 )
+                if require_configured_signer:
+                    raise RuntimeError("Configured audit KMS signer failed to initialise") from e
 
         pem_path = os.getenv("BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH", "").strip()
         if pem_path:
@@ -393,6 +424,14 @@ class MerkleSigner:
                     pem_path,
                     e,
                 )
+                if require_configured_signer:
+                    raise RuntimeError("Configured audit root signing key failed to load") from e
+        if require_configured_signer:
+            raise RuntimeError(
+                "Production audit root signing requires BUDDI_AUDIT_KMS_PROVIDER/"
+                "BUDDI_AUDIT_KMS_KEY or BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH. "
+                "Refusing to use the dev HMAC signer."
+            )
         return cls._dev_hmac_signer()
 
     @classmethod
@@ -566,7 +605,11 @@ def reset_signer_cache() -> None:
 
 
 def verify_envelope(
-    envelope: Dict[str, Any], day: str, merkle_root: str, event_count: int
+    envelope: Dict[str, Any],
+    day: str,
+    merkle_root: str,
+    event_count: int,
+    tenant_id: Optional[str] = None,
 ) -> bool:
     """Verify a signature envelope independently of the *currently* configured signer.
 
@@ -583,7 +626,8 @@ def verify_envelope(
     sig_b64 = envelope.get("signature_b64")
     if not algorithm or not sig_b64:
         return False
-    message = MerkleSigner._canonical_message(day, merkle_root, event_count)
+    tenant = tenant_id or envelope.get("tenant_id")
+    message = MerkleSigner._canonical_message(day, merkle_root, event_count, tenant)
     try:
         signature = base64.b64decode(sig_b64)
     except Exception:
@@ -595,7 +639,7 @@ def verify_envelope(
         signer = get_signer()
         if signer.algorithm != "hmac-sha256-dev":
             return False
-        return signer.verify(envelope, day, merkle_root, event_count)
+        return signer.verify(envelope, day, merkle_root, event_count, tenant)
 
     return _verify_with_public_key(algorithm, envelope.get("public_key_pem"), message, signature)
 
@@ -614,6 +658,7 @@ class DailyRoot:
     event_count: int
     event_hashes: List[str]
     signature: Dict[str, Any] = field(default_factory=dict)
+    tenant_id: Optional[str] = None
     #: Set by ``export_daily_root`` when the envelope is mirrored to an Object
     #: Lock bucket. Deliberately excluded from ``to_envelope`` so it never
     #: changes the signed/persisted payload — it is run metadata, not content.
@@ -622,6 +667,7 @@ class DailyRoot:
     def to_envelope(self) -> Dict[str, Any]:
         return {
             "day": self.day,
+            **({"tenant_id": self.tenant_id} if self.tenant_id else {}),
             "merkle_root": self.merkle_root,
             "event_count": self.event_count,
             "event_hashes": list(self.event_hashes),
@@ -636,10 +682,15 @@ class DailyRoot:
             event_count=int(envelope.get("event_count", 0)),
             event_hashes=[str(h) for h in envelope.get("event_hashes", [])],
             signature=dict(envelope.get("signature") or {}),
+            tenant_id=str(envelope["tenant_id"]) if envelope.get("tenant_id") else None,
         )
 
 
-def _events_for_day(db: Session, day: date) -> List[Dict[str, Any]]:
+def _events_for_day(
+    db: Session,
+    day: date,
+    tenant_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """Read every audit event whose timestamp falls inside ``day`` UTC."""
 
     # Lazy import to avoid SQLAlchemy load on bare ``import core.merkle``.
@@ -647,19 +698,21 @@ def _events_for_day(db: Session, day: date) -> List[Dict[str, Any]]:
 
     start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
     end = datetime.fromordinal(start.toordinal() + 1).replace(tzinfo=timezone.utc)
-    rows = (
+    query = (
         db.query(AuditEvent)
         .filter(AuditEvent.timestamp >= start)
         .filter(AuditEvent.timestamp < end)
-        .order_by(AuditEvent.event_id.asc())
-        .all()
     )
+    if tenant_id:
+        query = query.filter(AuditEvent.tenant_id == tenant_id)
+    rows = query.order_by(AuditEvent.event_id.asc()).all()
     projected: List[Dict[str, Any]] = []
     for row in rows:
         projected.append(
             {
                 "event_id": row.event_id,
                 "event_type": row.event_type,
+                "tenant_id": str(row.tenant_id) if getattr(row, "tenant_id", None) else None,
                 "timestamp": row.timestamp.isoformat() if row.timestamp else None,
                 "previous_hash": row.previous_hash,
                 "cryptographic_hash": row.cryptographic_hash,
@@ -669,15 +722,20 @@ def _events_for_day(db: Session, day: date) -> List[Dict[str, Any]]:
     return projected
 
 
-def build_daily_root(db: Session, day: date) -> DailyRoot:
+def build_daily_root(
+    db: Session,
+    day: date,
+    tenant_id: Optional[str] = None,
+) -> DailyRoot:
     """Compute and *sign* the Merkle root for ``day`` (UTC)."""
 
-    events = _events_for_day(db, day)
+    tenant_str = str(tenant_id) if tenant_id else None
+    events = _events_for_day(db, day, tenant_id=tenant_str)
     leaves = [leaf_hash(e) for e in events]
     root = compute_merkle_root(leaves)
     signer = get_signer()
     iso_day = day.isoformat()
-    signature = signer.sign(root, iso_day, len(events))
+    signature = signer.sign(root, iso_day, len(events), tenant_id=tenant_str)
     return DailyRoot(
         day=iso_day,
         merkle_root=root,
@@ -686,6 +744,7 @@ def build_daily_root(db: Session, day: date) -> DailyRoot:
             e.get("cryptographic_hash") or h for e, h in zip(events, leaves)
         ],
         signature=signature,
+        tenant_id=tenant_str,
     )
 
 
@@ -701,7 +760,10 @@ def export_daily_root(daily: DailyRoot, base_dir: Optional[Path] = None) -> Path
     on ``daily.object_lock_uri``.
     """
 
-    out_dir = (base_dir or _roots_dir()) / daily.day[:4] / daily.day[5:7]
+    root_base = base_dir or _roots_dir()
+    if daily.tenant_id:
+        root_base = root_base / "tenants" / daily.tenant_id
+    out_dir = root_base / daily.day[:4] / daily.day[5:7]
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{daily.day}{_ROOT_FILE_SUFFIX}"
     payload = daily.to_envelope()
@@ -731,10 +793,16 @@ def export_daily_root(daily: DailyRoot, base_dir: Optional[Path] = None) -> Path
     return path
 
 
-def load_signed_root(day: str, base_dir: Optional[Path] = None) -> Optional[DailyRoot]:
+def load_signed_root(
+    day: str,
+    base_dir: Optional[Path] = None,
+    tenant_id: Optional[str] = None,
+) -> Optional[DailyRoot]:
     """Return the persisted envelope for ``day``, or None if missing."""
 
     base = base_dir or _roots_dir()
+    if tenant_id:
+        base = base / "tenants" / str(tenant_id)
     path = base / day[:4] / day[5:7] / f"{day}{_ROOT_FILE_SUFFIX}"
     if not path.exists():
         return None
@@ -746,10 +814,15 @@ def load_signed_root(day: str, base_dir: Optional[Path] = None) -> Optional[Dail
     return DailyRoot.from_envelope(envelope)
 
 
-def list_signed_root_days(base_dir: Optional[Path] = None) -> List[str]:
+def list_signed_root_days(
+    base_dir: Optional[Path] = None,
+    tenant_id: Optional[str] = None,
+) -> List[str]:
     """Inventory of every signed daily root currently on disk."""
 
     base = base_dir or _roots_dir()
+    if tenant_id:
+        base = base / "tenants" / str(tenant_id)
     if not base.exists():
         return []
     days: List[str] = []
@@ -759,7 +832,9 @@ def list_signed_root_days(base_dir: Optional[Path] = None) -> List[str]:
 
 
 def verify_signed_roots_against_db(
-    db: Session, base_dir: Optional[Path] = None
+    db: Session,
+    base_dir: Optional[Path] = None,
+    tenant_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Recompute each signed root from the live DB and compare.
 
@@ -774,11 +849,11 @@ def verify_signed_roots_against_db(
     to pass both signature verification and root recomputation.
     """
 
-    days = list_signed_root_days(base_dir)
+    days = list_signed_root_days(base_dir, tenant_id=tenant_id)
     per_day: List[Dict[str, Any]] = []
     valid_days = 0
     for iso_day in days:
-        envelope = load_signed_root(iso_day, base_dir)
+        envelope = load_signed_root(iso_day, base_dir, tenant_id=tenant_id)
         if envelope is None:
             per_day.append({"day": iso_day, "status": "missing_envelope", "verified": False})
             continue
@@ -788,13 +863,14 @@ def verify_signed_roots_against_db(
             per_day.append({"day": iso_day, "status": "invalid_day_label", "verified": False})
             continue
 
-        recomputed = build_daily_root_unsigned(db, target_day)
+        recomputed = build_daily_root_unsigned(db, target_day, tenant_id=tenant_id)
         root_matches = recomputed.merkle_root == envelope.merkle_root
         sig_ok = verify_envelope(
             envelope.signature,
             envelope.day,
             envelope.merkle_root,
             envelope.event_count,
+            tenant_id=tenant_id,
         )
         day_verified = bool(root_matches and sig_ok)
         if day_verified:
@@ -802,6 +878,7 @@ def verify_signed_roots_against_db(
         per_day.append(
             {
                 "day": iso_day,
+                "tenant_id": tenant_id,
                 "verified": day_verified,
                 "signature_valid": sig_ok,
                 "root_matches_db": root_matches,
@@ -820,10 +897,15 @@ def verify_signed_roots_against_db(
     }
 
 
-def build_daily_root_unsigned(db: Session, day: date) -> DailyRoot:
+def build_daily_root_unsigned(
+    db: Session,
+    day: date,
+    tenant_id: Optional[str] = None,
+) -> DailyRoot:
     """Build a ``DailyRoot`` without signing — used by verification."""
 
-    events = _events_for_day(db, day)
+    tenant_str = str(tenant_id) if tenant_id else None
+    events = _events_for_day(db, day, tenant_id=tenant_str)
     leaves = [leaf_hash(e) for e in events]
     return DailyRoot(
         day=day.isoformat(),
@@ -833,6 +915,7 @@ def build_daily_root_unsigned(db: Session, day: date) -> DailyRoot:
             e.get("cryptographic_hash") or h for e, h in zip(events, leaves)
         ],
         signature={},
+        tenant_id=tenant_str,
     )
 
 
@@ -869,6 +952,8 @@ def _object_lock_key(prefix: str, daily: DailyRoot) -> str:
 
     parts = [
         prefix.strip("/"),
+        "tenants" if daily.tenant_id else "",
+        daily.tenant_id or "",
         daily.day[:4],
         daily.day[5:7],
         f"{daily.day}{_ROOT_FILE_SUFFIX}",

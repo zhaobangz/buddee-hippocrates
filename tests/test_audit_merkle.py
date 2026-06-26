@@ -16,6 +16,7 @@ projection logic and Merkle math are exercised faithfully.
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
@@ -53,9 +54,10 @@ class _FakeSession:
         return _FakeQuery(self._rows)
 
 
-def _row(event_id, event_type, payload, *, prev, crypto, hour=12):
+def _row(event_id, event_type, payload, *, prev, crypto, hour=12, tenant_id=None):
     return SimpleNamespace(
         event_id=event_id,
+        tenant_id=tenant_id,
         event_type=event_type,
         timestamp=datetime(2026, 6, 1, hour, 0, 0, tzinfo=timezone.utc),
         previous_hash=prev,
@@ -185,6 +187,17 @@ def test_ed25519_signer_roundtrip(tmp_path, monkeypatch):
     assert signer.verify(envelope, "2026-06-01", "2" * 64, 2) is False
 
 
+def test_production_requires_configured_signer(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("BUDDI_AUDIT_KMS_PROVIDER", raising=False)
+    monkeypatch.delenv("BUDDI_AUDIT_KMS_KEY", raising=False)
+    monkeypatch.delenv("BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH", raising=False)
+    merkle.reset_signer_cache()
+
+    with pytest.raises(RuntimeError, match="Production audit root signing requires"):
+        merkle.get_signer()
+
+
 # ---------------------------------------------------------------------------
 # Daily-root build / export / verify against the DB
 # ---------------------------------------------------------------------------
@@ -260,6 +273,37 @@ def test_empty_day_is_still_signable(tmp_path, monkeypatch):
     merkle.export_daily_root(daily, base_dir=tmp_path)
     report = merkle.verify_signed_roots_against_db(db, base_dir=tmp_path)
     assert report["verified"] is True
+
+
+def test_tenant_root_uses_tenant_path_and_signature_scope(tmp_path, monkeypatch):
+    monkeypatch.delenv("BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    merkle.reset_signer_cache()
+
+    tenant_id = str(uuid.uuid4())
+    rows = _sample_rows()
+    for row in rows:
+        row.tenant_id = tenant_id
+    db = _FakeSession(rows)
+
+    daily = merkle.build_daily_root(db, DAY, tenant_id=tenant_id)
+    assert daily.tenant_id == tenant_id
+    assert daily.signature["tenant_id"] == tenant_id
+
+    path = merkle.export_daily_root(daily, base_dir=tmp_path)
+    assert f"tenants/{tenant_id}/2026/06" in path.as_posix()
+    assert merkle.list_signed_root_days(base_dir=tmp_path) == []
+    assert merkle.list_signed_root_days(base_dir=tmp_path, tenant_id=tenant_id) == [
+        "2026-06-01"
+    ]
+
+    report = merkle.verify_signed_roots_against_db(
+        db,
+        base_dir=tmp_path,
+        tenant_id=tenant_id,
+    )
+    assert report["verified"] is True
+    assert report["days"][0]["tenant_id"] == tenant_id
 
 
 # ---------------------------------------------------------------------------

@@ -3,17 +3,19 @@
 Implements the strategic-manual directive (§2.2 week 1–2 and BUILD_PLAN.md
 strategic bet #1):
 
-    Anthropic-first LLM stack with OpenAI as fallback. Claude Opus 4.7 for
-    clinical reasoning and safety arbitration; OpenAI text-embedding-3-large
+    Anthropic-first LLM stack with OpenAI as fallback. Claude Opus 4.8 for
+    clinical reasoning and safety arbitration; Claude Sonnet 4.6 for the
+    high-volume HCC/ICD coding suggestion path; OpenAI text-embedding-3-large
     for embeddings only (no PHI in the prompt path on OpenAI until you have
     a current BAA on file).
 
     Modernization over the previous raw-httpx implementation:
       * Uses the official ``anthropic`` Python SDK (v0.109+)
-      * Default model upgraded to ``claude-opus-4-7``
-      * ``temperature`` removed — returns 400 on Opus 4.7
-      * Adaptive thinking enabled for structured calls (improves clinical
-        reasoning accuracy with no additional code complexity)
+      * Default reasoning model upgraded to ``claude-opus-4-8``; coding
+        model defaults to ``claude-sonnet-4-6`` (no extended thinking)
+      * ``temperature`` removed — returns 400 on Opus 4.8 / Sonnet 4.6
+      * Adaptive thinking enabled for the reasoning tier only (improves
+        clinical reasoning accuracy with no additional code complexity)
       * ``output_config.effort = "high"`` tunes thinking depth for the
         clinical-coding workload (balanced quality / cost)
       * System-prompt prompt caching via ``cache_control`` (up to ~90%
@@ -136,7 +138,7 @@ def _resolve_model_for_provider(provider: str) -> str:
     if explicit and provider == "openai" and (explicit.startswith("gpt") or explicit.startswith("o")):
         return explicit
     if provider == "anthropic":
-        return os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7")
+        return os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8")
     return explicit or "gpt-4-turbo"
 
 
@@ -213,13 +215,19 @@ async def _anthropic_chat_sdk(
     prompt: str,
     structured: bool,
     timeout: float,
+    model_tier: str = "reasoning",
 ) -> str:
     """Call the Anthropic Messages API via the official Python SDK.
 
-    Structured calls enable adaptive thinking (``thinking: {type: "adaptive"}``)
-    and ``output_config.effort = "high"`` so the model reasons carefully about
-    clinical-coding suggestions.  Free-text calls stream to avoid HTTP timeouts
-    on long retrospective-QA outputs.
+    The *reasoning* tier enables adaptive thinking
+    (``thinking: {type: "adaptive"}``) and ``output_config.effort = "high"``
+    so Opus reasons carefully about safety-arbitration and payer-facing
+    drafts. The *coding* tier (Sonnet 4.6 for high-volume HCC/ICD
+    suggestions) does NOT use extended thinking — it is a faster, cheaper
+    path that still produces structured JSON.
+
+    Free-text calls stream to avoid HTTP timeouts on long retrospective-QA
+    outputs.
 
     The static system prompt is marked with ``cache_control`` so it is cached
     after the first request (saves ~90% on repeated calls once the prefix
@@ -247,10 +255,10 @@ async def _anthropic_chat_sdk(
         messages=[{"role": "user", "content": prompt}],
     )
 
-    if structured:
+    if structured and model_tier == "reasoning":
         # Adaptive thinking improves accuracy on multi-step clinical reasoning.
         # "high" effort balances quality and token cost for production workloads.
-        # Note: temperature/top_p are not set — they return 400 on Opus 4.7.
+        # Note: temperature/top_p are not set — they return 400 on these models.
         create_kwargs["thinking"] = {"type": "adaptive"}
         create_kwargs["output_config"] = {"effort": "high"}
 
@@ -324,13 +332,25 @@ class LLMManager:
         self._timeout = timeout
         self._provider = _resolve_provider()
         self._model = _resolve_model_for_provider(self._provider)
+        self._reasoning_model = os.getenv("ANTHROPIC_ROUTING_MODEL", "claude-opus-4-8")
+        self._coding_model = os.getenv("ANTHROPIC_CODING_MODEL", "claude-sonnet-4-6")
 
     # ------------------------------------------------------------------
     # Internal: provider dispatch
     # ------------------------------------------------------------------
 
-    async def _call_provider(self, prompt: str, *, structured: bool) -> str:
-        """Dispatch to the configured provider."""
+    async def _call_provider(
+        self, prompt: str, *, structured: bool, model_tier: str = "reasoning"
+    ) -> str:
+        """Dispatch to the configured provider.
+
+        ``model_tier`` selects the model when the provider is Anthropic:
+
+          * ``"reasoning"`` (default) → ``ANTHROPIC_ROUTING_MODEL``
+            (Opus 4.8) — safety arbitration, payer-facing drafts.
+          * ``"coding"`` → ``ANTHROPIC_CODING_MODEL`` (Sonnet 4.6) —
+            high-volume HCC/ICD suggestions, free-text narration.
+        """
 
         provider = self._provider
         if provider == "anthropic" and not _anthropic_api_key():
@@ -347,14 +367,29 @@ class LLMManager:
                 "OPENAI_API_KEY/LLM_API_KEY is set."
             )
 
+        # Resolve the model for this call. For Anthropic, the tier
+        # selects between the reasoning and coding models; for OpenAI
+        # the tier concept does not apply — use the generic model.
+        model = self._model
+        if provider == "anthropic":
+            if model_tier == "reasoning":
+                model = os.getenv(
+                    "ANTHROPIC_ROUTING_MODEL", "claude-opus-4-8"
+                ).strip()
+            elif model_tier == "coding":
+                model = os.getenv(
+                    "ANTHROPIC_CODING_MODEL", "claude-sonnet-4-6"
+                ).strip()
+
         if provider == "anthropic":
             try:
                 return await _anthropic_chat_sdk(
                     api_key=_anthropic_api_key(),
-                    model=self._model,
+                    model=model,
                     prompt=prompt,
                     structured=structured,
                     timeout=self._timeout,
+                    model_tier=model_tier,
                 )
             except anthropic_sdk.RateLimitError as e:
                 raise RetryError(
@@ -375,7 +410,7 @@ class LLMManager:
                     return await _openai_chat(
                         client,
                         api_key=_openai_api_key(),
-                        model=self._model,
+                        model=model,
                         prompt=prompt,
                         structured=structured,
                     )
@@ -395,7 +430,7 @@ class LLMManager:
     # Public async surface
     # ------------------------------------------------------------------
 
-    async def ask_llm_async(self, prompt: str) -> str:
+    async def ask_llm_async(self, prompt: str, *, model_tier: str = "coding") -> str:
         """Free-text completion. Returns "Error: ..." strings on failure for
         backward compatibility with ``core/agent.py``'s string handling."""
 
@@ -406,12 +441,14 @@ class LLMManager:
             return f"Refused by BAA guard: {e}"
 
         try:
-            return await self._call_provider(prompt, structured=False)
+            return await self._call_provider(prompt, structured=False, model_tier=model_tier)
         except Exception as e:
             logger.warning("LLM provider call failed: %s", e)
             return f"Clinical LLM Connection Error: {str(e)}"
 
-    async def ask_llm_structured_async(self, prompt: str, schema: Any) -> Any:
+    async def ask_llm_structured_async(
+        self, prompt: str, schema: Any, *, model_tier: str = "reasoning"
+    ) -> Any:
         """Structured output. Returns a parsed ``schema`` instance.
 
         Adds the schema to the prompt so the model knows the target shape,
@@ -429,7 +466,9 @@ class LLMManager:
             f"{prompt}\n\nCRITICAL: Return a valid JSON object EXACTLY adhering to "
             f"this schema:\n{json.dumps(schema_hint)}"
         )
-        raw = await self._call_provider(prompt_with_schema, structured=True)
+        raw = await self._call_provider(
+            prompt_with_schema, structured=True, model_tier=model_tier
+        )
         candidate = _extract_json_object(raw)
         try:
             return schema.model_validate_json(candidate)
@@ -457,11 +496,15 @@ class LLMManager:
         except RuntimeError:
             return asyncio.run(coro)
 
-    def ask_llm(self, prompt: str) -> str:
-        return self._run(self.ask_llm_async(prompt))
+    def ask_llm(self, prompt: str, *, model_tier: str = "coding") -> str:
+        return self._run(self.ask_llm_async(prompt, model_tier=model_tier))
 
-    def ask_llm_structured(self, prompt: str, schema: Any) -> Any:
-        return self._run(self.ask_llm_structured_async(prompt, schema))
+    def ask_llm_structured(
+        self, prompt: str, schema: Any, *, model_tier: str = "reasoning"
+    ) -> Any:
+        return self._run(
+            self.ask_llm_structured_async(prompt, schema, model_tier=model_tier)
+        )
 
     # ------------------------------------------------------------------
     # Diagnostics

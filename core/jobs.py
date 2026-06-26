@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.models import Job
+from core.secure_fields import decrypt_json_value, encrypt_json_value
 
 VALID_JOB_TYPES = {"shadow_audit", "prior_auth"}
 
@@ -78,7 +79,7 @@ async def enqueue(
         tenant_id=tenant_id,
         job_type=job_type,
         status="pending",
-        input_payload=input_payload,
+        input_payload=encrypt_json_value(input_payload),
         idempotency_key=idempotency_key,
     )
     db.add(job)
@@ -122,7 +123,7 @@ def mark_completed(db: Session, job: Job, result: dict[str, Any]) -> None:
     """Set status='completed', result_payload=result, completed_at=now()."""
 
     job.status = "completed"
-    job.result_payload = result
+    job.result_payload = encrypt_json_value(result)
     job.error_message = None
     job.completed_at = _now()
     db.flush()
@@ -135,6 +136,20 @@ def mark_failed(db: Session, job: Job, error: str) -> None:
     job.error_message = (error or "")[:2000]
     job.completed_at = _now()
     db.flush()
+
+
+def job_input_payload(job: Job) -> dict[str, Any]:
+    """Return a job input payload, decrypting encrypted-at-rest envelopes."""
+
+    decoded = decrypt_json_value(job.input_payload)
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def job_result_payload(job: Job) -> dict[str, Any] | None:
+    """Return a completed job result payload, decrypting encrypted-at-rest envelopes."""
+
+    decoded = decrypt_json_value(job.result_payload)
+    return decoded if isinstance(decoded, dict) else None
 
 
 # Backward-compatible aliases for earlier local build-out code/tests. New code
@@ -170,6 +185,8 @@ __all__ = [
     "enqueue",
     "fail_job",
     "get_job",
+    "job_input_payload",
+    "job_result_payload",
     "mark_completed",
     "mark_failed",
 ]

@@ -74,7 +74,7 @@ class _FakeLLM:
         self.calls = 0
         self.prompts = []
 
-    def ask_llm_structured(self, prompt, schema):
+    def ask_llm_structured(self, prompt, schema, *, model_tier="reasoning"):
         self.calls += 1
         self.prompts.append(prompt)
         if self._raise is not None:

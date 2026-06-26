@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, runtime_checkable
@@ -64,6 +65,12 @@ class Retriever(Protocol):
 
 DEFAULT_EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-large")
 DEFAULT_EMBED_DIMENSIONS = 1536  # Must match Vector(1536) in core/models.py.
+_PHI_QUERY_PATTERNS = (
+    re.compile(r"\bMRN[:\s#-]*\d{4,12}\b", re.IGNORECASE),
+    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    re.compile(r"\b\d{1,3}[- ]?year[- ]old\b", re.IGNORECASE),
+    re.compile(r"\b(patient|clinical note|assessment|medications?|allergies|dob)\b", re.IGNORECASE),
+)
 
 
 def _resolve_embed_model() -> str:
@@ -72,6 +79,16 @@ def _resolve_embed_model() -> str:
 
 def _resolve_openai_key() -> str:
     return os.getenv("OPENAI_API_KEY", "").strip()
+
+
+def _phi_embeddings_allowed() -> bool:
+    return os.getenv("BUDDI_ALLOW_PHI_EMBEDDINGS", "").strip() == "1"
+
+
+def _looks_like_phi_query(query: str) -> bool:
+    if len((query or "").encode("utf-8")) > int(os.getenv("BUDDI_MAX_RAG_QUERY_BYTES", "800")):
+        return True
+    return any(pattern.search(query or "") for pattern in _PHI_QUERY_PATTERNS)
 
 
 class _EmbeddingsOnlyOpenAI:
@@ -200,6 +217,9 @@ class RAGEngine:
         """
 
         if not self._client:
+            return []
+        if not _phi_embeddings_allowed() and _looks_like_phi_query(query):
+            logger.error("Blocked PHI-shaped RAG query before embedding provider call.")
             return []
 
         try:

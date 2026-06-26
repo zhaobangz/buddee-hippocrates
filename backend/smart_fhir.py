@@ -41,6 +41,7 @@ from urllib.parse import urlencode
 import httpx
 
 from core.models import EhrIntegration
+from core.outbound_security import validate_outbound_url
 from core.storage import SecureStorage
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,13 @@ logger = logging.getLogger(__name__)
 # Defaults target the SMART Health IT public sandbox's R4 endpoint.
 DEFAULT_FHIR_BASE_URL = "https://launch.smarthealthit.org/v/r4/fhir"
 DEFAULT_SCOPE = "launch/patient patient/*.read offline_access openid fhirUser"
+
+
+def _allowed_smart_hosts() -> frozenset[str]:
+    raw = os.getenv("SMART_ALLOWED_FHIR_HOSTS", "").strip()
+    if not raw:
+        return frozenset()
+    return frozenset(h.strip().lower() for h in raw.split(",") if h.strip())
 
 
 def _b64url_no_pad(raw: bytes) -> str:
@@ -102,8 +110,9 @@ class SMARTFHIRLauncher:
         self.redirect_uri = redirect_uri or os.getenv(
             "SMART_REDIRECT_URI", "http://localhost:8001/api/ehr/callback"
         )
-        self.fhir_base_url = (
-            fhir_base_url or os.getenv("SMART_FHIR_BASE_URL", DEFAULT_FHIR_BASE_URL)
+        self.fhir_base_url = validate_outbound_url(
+            fhir_base_url or os.getenv("SMART_FHIR_BASE_URL", DEFAULT_FHIR_BASE_URL),
+            allowed_hosts=_allowed_smart_hosts(),
         ).rstrip("/")
         self._http = http_client
         self._storage = storage
@@ -131,22 +140,37 @@ class SMARTFHIRLauncher:
         sandbox's conventional ``/auth/authorize`` + ``/auth/token`` layout.
         """
 
-        url = f"{self.fhir_base_url}/.well-known/smart-configuration"
+        url = validate_outbound_url(
+            f"{self.fhir_base_url}/.well-known/smart-configuration",
+            allowed_hosts=_allowed_smart_hosts(),
+        )
         client = self._client()
         try:
             resp = await client.get(url, headers={"Accept": "application/json"})
             resp.raise_for_status()
             data = resp.json()
             return SMARTEndpoints(
-                authorization_endpoint=data["authorization_endpoint"],
-                token_endpoint=data["token_endpoint"],
+                authorization_endpoint=validate_outbound_url(
+                    data["authorization_endpoint"],
+                    allowed_hosts=_allowed_smart_hosts(),
+                ),
+                token_endpoint=validate_outbound_url(
+                    data["token_endpoint"],
+                    allowed_hosts=_allowed_smart_hosts(),
+                ),
             )
         except Exception as e:  # noqa: BLE001 - discovery is best-effort
             logger.warning("SMART discovery failed (%s); using sandbox defaults", e)
             base = self.fhir_base_url.rsplit("/fhir", 1)[0]
             return SMARTEndpoints(
-                authorization_endpoint=f"{base}/auth/authorize",
-                token_endpoint=f"{base}/auth/token",
+                authorization_endpoint=validate_outbound_url(
+                    f"{base}/auth/authorize",
+                    allowed_hosts=_allowed_smart_hosts(),
+                ),
+                token_endpoint=validate_outbound_url(
+                    f"{base}/auth/token",
+                    allowed_hosts=_allowed_smart_hosts(),
+                ),
             )
 
     # ------------------------------------------------------------------
@@ -155,6 +179,10 @@ class SMARTFHIRLauncher:
     def authorization_url(
         self, endpoints: SMARTEndpoints, *, state: str, code_challenge: str, scope: str
     ) -> str:
+        auth_endpoint = validate_outbound_url(
+            endpoints.authorization_endpoint,
+            allowed_hosts=_allowed_smart_hosts(),
+        )
         params = {
             "response_type": "code",
             "client_id": self.client_id,
@@ -165,7 +193,7 @@ class SMARTFHIRLauncher:
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
         }
-        return f"{endpoints.authorization_endpoint}?{urlencode(params)}"
+        return f"{auth_endpoint}?{urlencode(params)}"
 
     async def exchange_code(
         self, endpoints: SMARTEndpoints, *, code: str, code_verifier: str
@@ -185,9 +213,10 @@ class SMARTFHIRLauncher:
             form["client_secret"] = self.client_secret
         client = self._client()
         resp = await client.post(
-            endpoints.token_endpoint,
+            validate_outbound_url(endpoints.token_endpoint, allowed_hosts=_allowed_smart_hosts()),
             data=form,
             headers={"Accept": "application/json"},
+            follow_redirects=False,
         )
         resp.raise_for_status()
         return resp.json()
@@ -197,7 +226,10 @@ class SMARTFHIRLauncher:
     ) -> Dict[str, Any]:
         """Fetch a patient's record as an R4 Bundle via ``$everything``."""
 
-        url = f"{self.fhir_base_url}/Patient/{patient_id}/$everything"
+        url = validate_outbound_url(
+            f"{self.fhir_base_url}/Patient/{patient_id}/$everything",
+            allowed_hosts=_allowed_smart_hosts(),
+        )
         client = self._client()
         resp = await client.get(
             url,
@@ -205,6 +237,7 @@ class SMARTFHIRLauncher:
                 "Authorization": f"Bearer {access_token}",
                 "Accept": "application/fhir+json",
             },
+            follow_redirects=False,
         )
         resp.raise_for_status()
         return resp.json()

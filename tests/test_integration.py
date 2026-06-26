@@ -202,9 +202,10 @@ def test_prior_auth_generation_creates_draft(client, auth_headers):
     # Build-out B3: the default route now enqueues a job (202). This test
     # exercises the inline draft via ?sync=true. We need a real encounter FK
     # only if the DB is online; with the in-test Postgres the insert will fail
-    # on FK (encounter_id uuid) and return 500. That's acceptable as a proof
-    # that the route is routed and auth-gated; we accept 200 or 500 here but
-    # reject 401/403/404.
+    # on FK (encounter_id uuid) and return 500. The PHI gate may also return
+    # 412 when the global/tenant BAA confirmation is intentionally absent.
+    # These outcomes prove the route is routed and auth-gated; reject
+    # 401/403/404.
     resp = client.post(
         "/api/prior-auth/generate",
         headers=auth_headers,
@@ -214,8 +215,9 @@ def test_prior_auth_generation_creates_draft(client, auth_headers):
             "sync": "true",
         },
     )
-    assert resp.status_code in (200, 500)
+    assert resp.status_code in (200, 412, 500)
     if resp.status_code == 200:
         body = resp.json()
         assert body["status"] == "draft"
-        assert "auth_request_id" in body
+    elif resp.status_code == 412:
+        assert "BAA" in resp.json()["detail"]

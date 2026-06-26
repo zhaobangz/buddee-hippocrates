@@ -1,0 +1,54 @@
+# Render Blueprint for Buddi — free-tier synthetic demo backend.
+#
+# Usage:
+#   1) Push this repo to GitHub.
+#   2) Render Dashboard → New → Blueprint → select this repo.
+#   3) Fill in the `sync: false` secrets when prompted (they are NOT stored in git).
+#   4) After the DB is reachable, run migrations once:
+#        DATABASE_URL='postgresql://…' python -m alembic upgrade head
+#      (or use a paid plan's Pre-Deploy Command: `alembic upgrade head`).
+#
+# Cost: `plan: free` = $0/mo (sleeps when idle). Bump to `starter` (~$7/mo)
+# for an always-on demo. See docs/DEPLOY_CHEAP.md.
+#
+# IMPORTANT: keep BUDDI_BAA_CONFIRMED=0 here. This is a non-BAA host, so the
+# fail-closed PHI guard must stay on. Never send real PHI to this deployment.
+
+services:
+  - type: web
+    name: buddi-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    # The image's HEALTHCHECK and the app both listen on 8001; PORT below tells
+    # Render to route to that port.
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8001"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # Fail-closed PHI posture — leave at 0 on this non-BAA host.
+      - key: BUDDI_BAA_CONFIRMED
+        value: "0"
+      # Anthropic is the default provider; leaving keys unset keeps the demo on
+      # the deterministic stub at $0. Add ANTHROPIC_API_KEY later if desired.
+      - key: LLM_PROVIDER
+        value: anthropic
+      # ---- Secrets: fill these in the Render UI (sync: false = not in git) ----
+      - key: DATABASE_URL          # Neon/Supabase PG16 + pgvector; NOT postgres:postgres
+        sync: false
+      - key: SECRET_KEY            # >=32 chars: python -c "import secrets;print(secrets.token_hex(32))"
+        sync: false
+      - key: BUDDI_STORAGE_KEY     # >=16 chars: python -c "import secrets;print(secrets.token_hex(16))"
+        sync: false
+      - key: API_KEY              # service key shared with the frontend VITE_API_KEY
+        sync: false
+      - key: CORS_ORIGINS         # e.g. https://your-app.vercel.app  (no '*')
+        sync: false
+      # Optional — only if you want real LLM output (costs money; PHI needs a BAA):
+      - key: ANTHROPIC_API_KEY
+        sync: false

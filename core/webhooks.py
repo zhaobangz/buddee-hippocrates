@@ -33,6 +33,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import httpx
 
 from core.models import WebhookEndpoint
+from core.outbound_security import validate_outbound_url
 from core.storage import SecureStorage
 
 logger = logging.getLogger(__name__)
@@ -93,11 +94,12 @@ def register_webhook(
         raise ValueError(f"Unknown webhook event(s): {', '.join(unknown)}")
     if not events:
         raise ValueError("At least one event type is required.")
+    safe_url = validate_outbound_url(url)
 
     encrypted = _storage(storage).encrypt_blob(secret)
     row = WebhookEndpoint(
         tenant_id=tenant_id,
-        url=url,
+        url=safe_url,
         secret=base64.b64encode(encrypted).decode("ascii"),
         events=list(events),
         active=True,
@@ -148,16 +150,20 @@ async def dispatch_webhook(
     body = canonical_body(event_type, payload)
     results: List[Dict[str, Any]] = []
     own_client = http_client is None
-    client = http_client or httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS)
+    client = http_client or httpx.AsyncClient(
+        timeout=WEBHOOK_TIMEOUT_SECONDS,
+        follow_redirects=False,
+    )
     try:
         for ep in targets:
             status_code: Optional[int] = None
             ok = False
             try:
+                safe_url = validate_outbound_url(ep.url)
                 secret = _decrypt_secret(ep.secret, storage)
                 signature = sign_payload(secret, body)
                 resp = await client.post(
-                    ep.url,
+                    safe_url,
                     content=body,
                     headers={
                         "Content-Type": "application/json",
@@ -165,6 +171,7 @@ async def dispatch_webhook(
                         "X-Buddi-Signature": f"sha256={signature}",
                     },
                     timeout=WEBHOOK_TIMEOUT_SECONDS,
+                    follow_redirects=False,
                 )
                 status_code = resp.status_code
                 ok = 200 <= resp.status_code < 300

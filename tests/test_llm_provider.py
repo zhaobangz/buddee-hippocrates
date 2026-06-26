@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from core.config import settings
-from core.rag_engine import _EmbeddingsOnlyOpenAI
+from core.rag_engine import _EmbeddingsOnlyOpenAI, _looks_like_phi_query
 
 
 def test_llm_provider_defaults_to_anthropic():
@@ -41,3 +41,10 @@ def test_non_embedding_call_raises_runtime_error(attr):
     guard = _EmbeddingsOnlyOpenAI(_FakeOpenAI())
     with pytest.raises(RuntimeError, match="embeddings-only"):
         getattr(guard, attr)
+
+
+def test_rag_blocks_clinical_note_shaped_embedding_query():
+    assert _looks_like_phi_query(
+        "67-year-old patient clinical note assessment includes medications"
+    )
+    assert not _looks_like_phi_query("CMS HCC ICD-10 risk adjustment coding guidelines")

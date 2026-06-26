@@ -54,6 +54,17 @@ def test_register_webhook_rejects_unknown_event():
         webhooks.register_webhook(MagicMock(), TENANT, "https://x.test", ["bogus.event"], SECRET)
 
 
+def test_register_webhook_rejects_private_url():
+    with pytest.raises(ValueError, match="non-public|not permitted"):
+        webhooks.register_webhook(
+            MagicMock(),
+            TENANT,
+            "https://127.0.0.1/hook",
+            [webhooks.EVENT_HCC_CREATED],
+            SECRET,
+        )
+
+
 def test_register_webhook_encrypts_secret_at_rest():
     # The stored secret must be recoverable (for HMAC) but never plaintext.
     enc = SecureStorage().encrypt_blob(SECRET)
@@ -129,6 +140,30 @@ async def test_dispatch_records_failure_without_raising():
         TENANT,
         webhooks.EVENT_AUDIT_FLAGGED,
         {"risk": "high"},
+        http_client=client,
+        audit_logger=audit_logger,
+    )
+    assert results[0]["ok"] is False
+    assert audit_calls == ["webhook.failed"]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_blocks_private_url_without_posting():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("must not POST to an unsafe endpoint")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    db = _fake_db([_endpoint([webhooks.EVENT_HCC_CREATED], url="https://127.0.0.1/hook")])
+    audit_calls = []
+
+    def audit_logger(_db, event_type, payload_data, tenant_id=None, **_):
+        audit_calls.append(event_type)
+
+    results = await webhooks.dispatch_webhook(
+        db,
+        TENANT,
+        webhooks.EVENT_HCC_CREATED,
+        {},
         http_client=client,
         audit_logger=audit_logger,
     )

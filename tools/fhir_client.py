@@ -5,10 +5,10 @@ APIs to retrieve structured patient records and lab results.
 """
 
 import os
-from urllib.parse import urlparse
 
 import httpx
 from typing import Dict, List, Any, Optional
+from core.outbound_security import validate_outbound_url
 from core.safety import log_audit_event
 
 MAX_FHIR_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -20,14 +20,11 @@ _ALLOWED_FHIR_HOSTS: frozenset[str] = frozenset(
 
 
 def _validate_fhir_url(url: str) -> str:
-    parsed = urlparse(url)
-    # Security: restrict outbound FHIR calls to an explicit host allowlist to prevent SSRF.
-    if parsed.hostname not in _ALLOWED_FHIR_HOSTS:
-        raise ValueError(
-            f"FHIR base URL host '{parsed.hostname}' is not in ALLOWED_FHIR_HOSTS. "
-            "Set ALLOWED_FHIR_HOSTS to include the FHIR server hostname."
-        )
-    return url
+    return validate_outbound_url(
+        url,
+        allowed_hosts=_ALLOWED_FHIR_HOSTS,
+        allow_private_hosts=os.getenv("ENVIRONMENT", "production").lower() != "production",
+    )
 
 
 def _check_response_size(response: httpx.Response) -> None:
@@ -46,7 +43,7 @@ class FHIRClient:
         url = f"{self.base_url}/Patient/{patient_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url)
+                response = await client.get(url, follow_redirects=False)
             _check_response_size(response)
             if response.status_code == 200:
                 log_audit_event("fhir_query_success", {"resource": "Patient", "id": patient_id})
@@ -60,7 +57,7 @@ class FHIRClient:
         url = f"{self.base_url}/Observation?patient=Patient/{patient_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url)
+                response = await client.get(url, follow_redirects=False)
             _check_response_size(response)
             if response.status_code == 200:
                 log_audit_event("fhir_query_success", {"resource": "Observation", "pid": patient_id})
@@ -74,7 +71,7 @@ class FHIRClient:
         url = f"{self.base_url}/MedicationStatement?patient=Patient/{patient_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url)
+                response = await client.get(url, follow_redirects=False)
             _check_response_size(response)
             if response.status_code == 200:
                 log_audit_event("fhir_query_success", {"resource": "MedicationStatement", "pid": patient_id})

@@ -84,6 +84,19 @@ def set_tenant_context(db: Session, tenant_id: Optional[uuid.UUID]) -> None:
         )
 
 
+def set_worker_context(db: Session, enabled: bool) -> None:
+    """Stamp the queue-worker marker used by the jobs RLS policy."""
+
+    payload = "1" if enabled else ""
+    try:
+        db.execute(text("SELECT set_config('app.worker_mode', :val, true)"), {"val": payload})
+    except SQLAlchemyError as e:
+        logger.warning(
+            "Failed to set Postgres app.worker_mode GUC (worker jobs RLS degraded): %s",
+            e,
+        )
+
+
 def tenant_scoped_session(request: Request) -> Generator[Session, None, None]:
     """FastAPI dependency that yields an RLS-scoped DB session.
 
@@ -104,9 +117,10 @@ def tenant_scoped_session(request: Request) -> Generator[Session, None, None]:
             # pool so a subsequent borrow cannot accidentally inherit a
             # stale tenant context.
             set_tenant_context(db, None)
+            set_worker_context(db, False)
         except Exception:
             pass
         db.close()
 
 
-__all__ = ["set_tenant_context", "tenant_scoped_session"]
+__all__ = ["set_tenant_context", "set_worker_context", "tenant_scoped_session"]

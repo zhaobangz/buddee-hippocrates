@@ -62,8 +62,10 @@ from core.merkle import (
     list_signed_root_days,
     verify_signed_roots_against_db,
 )
+from core.phi_guard import PHIProcessingNotAllowed, assert_phi_processing_allowed
 from core.schemas import MAX_FHIR_BUNDLE_BYTES, FHIRBundle, PriorAuthDraft, ShadowModeResponse
 from core.safety import redact_for_logs, sanitize_response
+from core.secure_fields import encrypt_json_value, encrypt_text_value
 from core.tracing import get_tracer, setup_tracing, shutdown_tracing
 from core.worker import worker_loop
 
@@ -102,8 +104,11 @@ DISABLE_WORKER = (
 )
 
 
-def _seal_merkle_root_for_yesterday(target_day: Optional[date] = None) -> Dict[str, Any]:
-    """Build, sign, and export the Merkle root for ``target_day`` (UTC).
+def _seal_merkle_root_for_yesterday(
+    target_day: Optional[date] = None,
+    tenant_id: Optional[uuid.UUID] = None,
+) -> Dict[str, Any]:
+    """Build, sign, and export tenant-scoped Merkle roots for ``target_day``.
 
     Runs on its own ``SessionLocal()`` rather than a request-scoped session
     so the daily cron-style task is independent of any inbound HTTP call.
@@ -113,36 +118,56 @@ def _seal_merkle_root_for_yesterday(target_day: Optional[date] = None) -> Dict[s
         target_day = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     db = SessionLocal()
     try:
-        daily = build_daily_root(db, day=target_day)
-        path = export_daily_root(daily)
-        # Self-audit: record the export itself in the chain so a verifier can
-        # see exactly when each root was sealed.
-        log_audit_event_postgres(
-            db,
-            "audit_merkle_root_sealed",
-            {
-                "day": daily.day,
-                "event_count": daily.event_count,
-                "merkle_root": daily.merkle_root,
-                "key_id": daily.signature.get("key_id"),
-                "algorithm": daily.signature.get("algorithm"),
-                "kms_provider": daily.signature.get("kms_provider"),
-                "export_path": str(path),
-                "object_lock_uri": daily.object_lock_uri,
-                "risk": "low",
-            },
-            actor_id="system:merkle-task",
-        )
+        tenant_ids = [tenant_id] if tenant_id is not None else [row[0] for row in db.query(models.Tenant.id).all()]
+        roots: List[Dict[str, Any]] = []
+        total_events = 0
+        for tenant_id in tenant_ids:
+            set_tenant_context(db, tenant_id)
+            daily = build_daily_root(db, day=target_day, tenant_id=str(tenant_id))
+            path = export_daily_root(daily)
+            total_events += daily.event_count
+            log_audit_event_postgres(
+                db,
+                "audit_merkle_root_sealed",
+                {
+                    "day": daily.day,
+                    "tenant_id": str(tenant_id),
+                    "event_count": daily.event_count,
+                    "merkle_root": daily.merkle_root,
+                    "key_id": daily.signature.get("key_id"),
+                    "algorithm": daily.signature.get("algorithm"),
+                    "kms_provider": daily.signature.get("kms_provider"),
+                    "export_path": str(path),
+                    "object_lock_uri": daily.object_lock_uri,
+                    "risk": "low",
+                },
+                actor_id="system:merkle-task",
+                tenant_id=str(tenant_id),
+            )
+            roots.append(
+                {
+                    "tenant_id": str(tenant_id),
+                    "day": daily.day,
+                    "event_count": daily.event_count,
+                    "merkle_root": daily.merkle_root,
+                    "export_path": str(path),
+                    "object_lock_uri": daily.object_lock_uri,
+                    "key_id": daily.signature.get("key_id"),
+                    "algorithm": daily.signature.get("algorithm"),
+                }
+            )
         return {
-            "day": daily.day,
-            "event_count": daily.event_count,
-            "merkle_root": daily.merkle_root,
-            "export_path": str(path),
-            "object_lock_uri": daily.object_lock_uri,
-            "key_id": daily.signature.get("key_id"),
-            "algorithm": daily.signature.get("algorithm"),
+            "day": target_day.isoformat(),
+            "event_count": total_events,
+            "merkle_root": roots[0]["merkle_root"] if len(roots) == 1 else None,
+            "tenants_sealed": len(roots),
+            "roots": roots,
         }
     finally:
+        try:
+            set_tenant_context(db, None)
+        except Exception:
+            pass
         db.close()
 
 
@@ -978,46 +1003,12 @@ async def chat_with_agent(
     patient_id = body.patient_id or DEMO_PATIENT["id"]
     tenant_id = _require_tenant_id(request)
     try:
-        payload = json.dumps({"message": body.message, "patient_id": patient_id})
-        parsed_response: Dict[str, Any] = {}
-        if agent:
-            raw_response = agent.handle(payload, task_type="detect", tenant_id=tenant_id)
-            try:
-                parsed_response = json.loads(raw_response)
-            except Exception:
-                parsed_response = {}
-            if parsed_response.get("identified_codes") is not None:
-                result = _normalize_shadow_result(parsed_response, patient_id, body.message, [])
-                audit_hash = log_audit_event_postgres(
-                    db,
-                    "chat_shadow_mode_rcm",
-                    {
-                        "patient_id": patient_id,
-                        "message_len": len(body.message),
-                        "recovered_revenue": result.get("recovered_revenue", 0),
-                        "identified_code_count": len(result.get("identified_codes", [])),
-                        "risk": "low",
-                    },
-                    actor_id=client,
-                    tenant_id=str(tenant_id),
-                    request_id=_request_id(request),
-                )
-                result["audit_hash"] = result.get("audit_hash") or audit_hash
-                return {
-                    "response": _format_shadow_chat(result),
-                    "citations": result.get("citations", []),
-                    "intent_detected": "shadow_mode_rcm",
-                    "audit_hash": audit_hash,
-                    "shadow_result": result,
-                }
-        if any(token in body.message.lower() for token in ("shadow", "hcc", "missed", "code", "coding", "revenue", "audit")):
-            patient = DEMO_PATIENT if patient_id == DEMO_PATIENT["id"] else {}
-            result = _run_shadow_agent(
-                patient_id,
-                patient.get("clinical_note") or body.message,
-                patient.get("billed_codes") or [],
-                tenant_id=tenant_id,
-            )
+        shadow_requested = any(
+            token in body.message.lower()
+            for token in ("shadow", "hcc", "missed", "code", "coding", "revenue", "audit")
+        )
+
+        def _shadow_chat_response(result: Dict[str, Any]) -> Dict[str, Any]:
             audit_hash = log_audit_event_postgres(
                 db,
                 "chat_shadow_mode_rcm",
@@ -1040,6 +1031,45 @@ async def chat_with_agent(
                 "audit_hash": audit_hash,
                 "shadow_result": result,
             }
+
+        if patient_id == DEMO_PATIENT["id"]:
+            if shadow_requested:
+                result = _demo_shadow_result(
+                    patient_id,
+                    DEMO_PATIENT["clinical_note"],
+                    DEMO_PATIENT["billed_codes"],
+                    source="chat_synthetic_demo",
+                )
+                return _shadow_chat_response(result)
+            return {
+                "response": sanitize_response(
+                    "Buddi is running in local demo mode. Ask me to find missed HCC codes for PT-9012 to run the shadow-mode workflow."
+                ),
+                "citations": [],
+                "intent_detected": "demo_assistant",
+            }
+
+        _enforce_baa_precondition(db, tenant_id)
+        payload = json.dumps({"message": body.message, "patient_id": patient_id})
+        parsed_response: Dict[str, Any] = {}
+        if agent:
+            raw_response = agent.handle(payload, task_type="detect", tenant_id=tenant_id)
+            try:
+                parsed_response = json.loads(raw_response)
+            except Exception:
+                parsed_response = {}
+            if parsed_response.get("identified_codes") is not None:
+                result = _normalize_shadow_result(parsed_response, patient_id, body.message, [])
+                return _shadow_chat_response(result)
+        if shadow_requested:
+            patient = {}
+            result = _run_shadow_agent(
+                patient_id,
+                patient.get("clinical_note") or body.message,
+                patient.get("billed_codes") or [],
+                tenant_id=tenant_id,
+            )
+            return _shadow_chat_response(result)
 
         if not agent:
             return {
@@ -1091,6 +1121,11 @@ async def _process_shadow_audit(
     synchronous route behaved.
     """
 
+    _enforce_baa_precondition(
+        db,
+        tenant_id,
+        synthetic=_is_synthetic_shadow_request(patient_id, demo),
+    )
     _t0 = time.monotonic()
     result = _run_shadow_agent(patient_id, note, billed_codes, tenant_id=tenant_id)
     parsed_result = ShadowModeResponse.model_validate(result)
@@ -1127,7 +1162,7 @@ async def _process_shadow_audit(
             encounter_id=None,
             prompt_template_version="shadow_mode_rcm:v1",
             model=settings.LLM_MODEL,
-            full_prompt=redact_for_logs(note, max_length=4000),
+            full_prompt=encrypt_text_value(str(redact_for_logs(note, max_length=4000))),
         )
         db.add(llm_request)
         db.flush()
@@ -1135,8 +1170,8 @@ async def _process_shadow_audit(
             models.LlmResponse(
                 tenant_id=tenant_id,
                 llm_request_id=llm_request.id,
-                raw_response=json.dumps(result_payload, default=str),
-                parsed_json=redact_for_logs(result_payload, max_length=4000),
+                raw_response=encrypt_text_value(json.dumps(result_payload, default=str)),
+                parsed_json=encrypt_json_value(redact_for_logs(result_payload, max_length=4000)),
             )
         )
         for code_item in parsed_result.identified_codes:
@@ -1211,7 +1246,7 @@ async def _enqueue_job_response(
     # on each attribute access below.
     job_id = str(job.id)
     status = job.status
-    cached_result = job.result_payload if status == "completed" else None
+    cached_result = job_queue.job_result_payload(job) if status == "completed" else None
     db.commit()
 
     if cached_result:
@@ -1268,12 +1303,14 @@ async def run_shadow_audit(
 
     tenant_id = _require_tenant_id(request)
     patient_id = body.patient_id or DEMO_PATIENT["id"]
-    note = DEMO_PATIENT["clinical_note"] if body.demo and patient_id == DEMO_PATIENT["id"] else body.note
+    synthetic = _is_synthetic_shadow_request(patient_id, body.demo)
+    note = DEMO_PATIENT["clinical_note"] if synthetic else body.note
     billed_codes = (
         DEMO_PATIENT["billed_codes"]
-        if body.demo and patient_id == DEMO_PATIENT["id"]
+        if synthetic
         else body.billed_codes
     )
+    _enforce_baa_precondition(db, tenant_id, synthetic=synthetic)
 
     if sync:
         with tracer.start_as_current_span("api_shadow_audit") as span:
@@ -1309,6 +1346,7 @@ async def run_shadow_audit(
             "note": note,
             "billed_codes": billed_codes,
             "demo": body.demo,
+            "synthetic": synthetic,
             "tenant_id": str(tenant_id),
             "actor": str(client),
             "request_id": _request_id(request),
@@ -1335,7 +1373,7 @@ async def get_job_status(
         raise HTTPException(status_code=404, detail="Job not found")
     resp: Dict[str, Any] = {"job_id": str(job.id), "status": job.status}
     if job.status == "completed":
-        resp["result"] = job.result_payload
+        resp["result"] = job_queue.job_result_payload(job)
     elif job.status == "failed":
         resp["error"] = job.error_message
     return resp
@@ -1366,7 +1404,7 @@ async def stream_job(
             if job.status != last_status:
                 last_status = job.status
                 if job.status == "completed":
-                    yield _sse({"status": "completed", "result": job.result_payload})
+                    yield _sse({"status": "completed", "result": job_queue.job_result_payload(job)})
                     return
                 if job.status == "failed":
                     yield _sse({"status": "failed", "error": job.error_message})
@@ -1500,11 +1538,12 @@ async def ingest_synthea_bundle(
         tenant_id=str(tenant_id),
         request_id=_request_id(request),
     )
-    result = _run_shadow_agent(
+    result = _demo_shadow_result(
         patient_id=f"synthea:{name}",
         note=agent_payload.get("note") or "",
         billed_codes=agent_payload.get("billed_codes") or [],
-        tenant_id=tenant_id,
+        source="synthea_synthetic_demo",
+        bundle_name=name,
     )
     return {
         "status": "success",
@@ -2162,13 +2201,18 @@ def _compute_dashboard_metrics(request: Request, db: Session) -> Dict[str, Any]:
         }
 
 
-def _enforce_baa_precondition(db: Session, tenant_id: uuid.UUID) -> None:
-    """Manual §7.2 Risk #1 — refuse FHIR ingest when BAA is unconfirmed.
+def _enforce_baa_precondition(
+    db: Session,
+    tenant_id: uuid.UUID,
+    *,
+    synthetic: bool = False,
+) -> None:
+    """Manual §7.2 Risk #1 — refuse real PHI when BAA is unconfirmed.
 
-    Returns silently when the tenant's ``baa_confirmed`` flag is True. Raises
-    HTTP 412 (Precondition Failed) otherwise so the customer integration
-    can surface a clear, actionable error rather than silently dropping
-    the bundle or, worse, processing it before paperwork lands.
+    Returns silently for synthetic/demo artifacts or when both the global
+    provider BAA flag and tenant ``baa_confirmed`` flag are set. Raises HTTP
+    412 otherwise so callers get a clear, actionable error before any PHI
+    reaches LLM/RAG processing.
 
     The check is **strict by default**: any error reading the flag is
     treated as "not confirmed". An ops escape hatch
@@ -2176,33 +2220,30 @@ def _enforce_baa_precondition(db: Session, tenant_id: uuid.UUID) -> None:
     incident response but should never be set under normal operation.
     """
 
-    if os.getenv("BUDDI_BAA_INGEST_ENFORCEMENT", "").strip().lower() == "disabled":
-        logger.warning(
-            "BAA precondition enforcement disabled by env var; this MUST be "
-            "a temporary incident-response state."
-        )
-        return
-
     try:
-        confirmed = (
-            db.query(models.Tenant.baa_confirmed)
-            .filter(models.Tenant.id == tenant_id)
-            .scalar()
-        )
-    except Exception as e:
-        logger.error("BAA precondition lookup failed for %s: %s", tenant_id, e)
-        confirmed = False
-
-    if not confirmed:
+        assert_phi_processing_allowed(db, tenant_id, synthetic=synthetic)
+    except PHIProcessingNotAllowed as e:
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail=(
-                "BAA precondition not met for this tenant. Real PHI cannot be "
-                "accepted until the Business Associate Agreement is filed and "
-                "tenants.baa_confirmed is set to TRUE. See "
+                f"BAA precondition not met for this tenant. {e} See "
                 "docs/COMPLIANCE/baa_status.md for the provisioning checklist."
             ),
-        )
+        ) from e
+    except Exception as e:
+        logger.error("BAA precondition lookup failed for %s: %s", tenant_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail=(
+                "BAA precondition could not be verified for this tenant. Real PHI "
+                "cannot be processed until the global provider BAA and tenant BAA "
+                "status are both confirmed."
+            ),
+        ) from e
+
+
+def _is_synthetic_shadow_request(patient_id: str, demo: bool) -> bool:
+    return bool(demo and patient_id == DEMO_PATIENT["id"])
 
 
 @app.post(
@@ -2340,6 +2381,7 @@ async def process_encounter(
     db: Session = Depends(tenant_scoped_session),
 ):
     tenant_id = _require_tenant_id(request)
+    _enforce_baa_precondition(db, tenant_id)
     log_audit_event_postgres(
         db,
         "encounter_processing_requested",
@@ -2459,6 +2501,10 @@ async def generate_prior_auth(
         proc = args["procedure_code"]
         if not proc:
             raise HTTPException(status_code=422, detail="procedure_code is required")
+        synthetic_prior_auth = bool(args["demo"])
+        if synthetic_prior_auth:
+            args["clinical_context"] = None
+        _enforce_baa_precondition(db, tenant_id, synthetic=synthetic_prior_auth)
 
         if not sync:
             # Build-out B3: enqueue the LLM-bound draft (worker dispatches to
@@ -2486,6 +2532,7 @@ async def generate_prior_auth(
                     "payer": args["payer"],
                     "clinical_context": args["clinical_context"],
                     "demo": args["demo"],
+                    "synthetic": synthetic_prior_auth,
                     "tenant_id": str(tenant_id),
                     "actor": str(client),
                     "request_id": _request_id(request),
@@ -2545,7 +2592,7 @@ async def generate_prior_auth(
                 procedure_code=proc,
                 payer_name=args["payer"],
                 status=auth_status,
-                submission_payload=submission_payload,
+                submission_payload=encrypt_json_value(submission_payload),
             )
             db.add(new_auth)
             db.flush()
@@ -2742,7 +2789,7 @@ async def verify_audit_logs(
     # B7.2: walk the signed daily Merkle roots FIRST — O(days), partition-pruned
     # by definition, and the artifact CMS auditors actually verify.
     try:
-        roots_summary = verify_signed_roots_against_db(db)
+        roots_summary = verify_signed_roots_against_db(db, tenant_id=str(tenant_id))
     except Exception as e:
         logger.error("Signed-root verification failure: %s", e)
         roots_summary = {
@@ -2818,10 +2865,11 @@ async def verify_audit_logs(
 
 
 @app.get("/api/audit/roots")
-async def list_audit_roots(client: str = ADMIN_AUTH):
+async def list_audit_roots(request: Request, client: str = ADMIN_AUTH):
     """List every signed Merkle root currently in ``storage/audit_roots/``."""
     # Security: signed root inventory is admin-only operational audit metadata.
-    days = list_signed_root_days()
+    tenant_id = _require_tenant_id(request)
+    days = list_signed_root_days(tenant_id=str(tenant_id))
     return {"count": len(days), "days": days}
 
 
@@ -2853,31 +2901,42 @@ async def seal_audit_root_now(
             raise HTTPException(status_code=422, detail=f"Invalid day: {e}") from e
     else:
         target = None
+    tenant_id = _require_tenant_id(request)
 
     # Audit the request itself in the chain. Use a standalone session so
     # this admin endpoint does not depend on the request-scoped session.
     audit_db = SessionLocal()
     try:
+        set_tenant_context(audit_db, tenant_id)
         log_audit_event_postgres(
             audit_db,
             "audit_merkle_root_seal_requested",
-            {"day": day, "sync": sync, "risk": "low"},
+            {"day": day, "sync": sync, "tenant_id": str(tenant_id), "risk": "low"},
             actor_id=str(client),
+            tenant_id=str(tenant_id),
             request_id=_request_id(request),
         )
     finally:
+        try:
+            set_tenant_context(audit_db, None)
+        except Exception:
+            pass
         audit_db.close()
 
 
     if sync:
         try:
-            result = await asyncio.to_thread(_seal_merkle_root_for_yesterday, target)
+            result = await asyncio.to_thread(
+                _seal_merkle_root_for_yesterday,
+                target,
+                tenant_id,
+            )
             return {"status": "sealed", **result}
         except Exception as e:
             logger.error("Manual seal failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Seal failed: {e}") from e
 
-    background_tasks.add_task(_seal_merkle_root_for_yesterday, target)
+    background_tasks.add_task(_seal_merkle_root_for_yesterday, target, tenant_id)
     return {
         "status": "scheduled",
         "day": day or (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat(),

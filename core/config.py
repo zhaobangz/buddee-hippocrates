@@ -63,11 +63,21 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "anthropic"
     LLM_API_URL: str = "https://api.openai.com/v1/chat/completions"
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "claude-opus-4-5"
+    LLM_MODEL: str = "claude-opus-4-8"
     ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL: str = "claude-opus-4-5"
+    ANTHROPIC_MODEL: str = "claude-opus-4-8"
     OPENAI_API_KEY: str = ""
     OPENAI_EMBED_MODEL: str = "text-embedding-3-large"
+
+    # Tier-based model routing — separates the high-stakes reasoning /
+    # safety-arbitration path (Opus) from the high-volume HCC/ICD coding
+    # suggestion path (Sonnet). core/llm_manager.py reads these.
+    #   * reasoning tier — confidence-floor adjudication, prior-auth drafts,
+    #     and anything that directly faces a payer. Defaults to Opus 4.8.
+    #   * coding tier — first-pass HCC shadow-audit suggestions and free-text
+    #     rationale narration. Defaults to Sonnet 4.6 (no extended thinking).
+    ANTHROPIC_ROUTING_MODEL: str = "claude-opus-4-8"
+    ANTHROPIC_CODING_MODEL: str = "claude-sonnet-4-6"
 
     # --- Stripe billing (PROMPT_04 / strategy-doc §2.1 gap #10) ---
     STRIPE_SECRET_KEY: str = ""

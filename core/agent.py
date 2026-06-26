@@ -76,6 +76,14 @@ def _judge_threshold() -> float:
 
 logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
+SHADOW_MODE_GUIDELINE_QUERY = (
+    "CMS HCC ICD-10 risk adjustment coding guidelines chronic disease "
+    "documentation diabetes kidney disease hypertension"
+)
+RETROSPECTIVE_QA_GUIDELINE_QUERY = (
+    "clinical documentation integrity retrospective coding quality audit "
+    "CMS ICD-10 HCC guidelines"
+)
 
 
 def _hash_id(value: str) -> str:
@@ -256,7 +264,7 @@ class Agent:
                 f"<input>\n{payload}\n</input>\n"
                 "Respond with the single best-matching intent name only."
             )
-            return self.llm.ask_llm(prompt).strip().lower()
+            return self.llm.ask_llm(prompt, model_tier="coding").strip().lower()
 
     # ------------------------------------------------------------------
     # Shadow-mode RCM
@@ -272,7 +280,11 @@ class Agent:
                 note = payload
                 billed_codes = []
 
-            docs = self.rag.search(note, top_k=2, tenant_id=tenant_id)
+            docs = self.rag.search(
+                SHADOW_MODE_GUIDELINE_QUERY,
+                top_k=2,
+                tenant_id=tenant_id,
+            )
             span.set_attribute("rag_docs_found", len(docs))
             guideline_context = (
                 "\n".join([f"- {d['text']}" for d in docs])
@@ -331,7 +343,9 @@ Perform a Shadow-Mode audit of the clinical note against previously billed codes
 """
 
             try:
-                response_obj = self.llm.ask_llm_structured(prompt, ShadowModeResponse)
+                response_obj = self.llm.ask_llm_structured(
+                    prompt, ShadowModeResponse, model_tier="coding"
+                )
 
                 # ---- §7.2 Risk #2: confidence floor + mandatory-evidence
                 # filtering. Anything that fails either gate is dropped
@@ -433,7 +447,11 @@ Perform a Shadow-Mode audit of the clinical note against previously billed codes
     # ------------------------------------------------------------------
     def _process_retrospective_qa(self, note: str, ctx: Dict[str, Any], tenant_id: Optional[uuid.UUID] = None) -> str:
         with tracer.start_as_current_span("retrospective_qa_audit") as span:
-            docs = self.rag.search(note, top_k=2, tenant_id=tenant_id)
+            docs = self.rag.search(
+                RETROSPECTIVE_QA_GUIDELINE_QUERY,
+                top_k=2,
+                tenant_id=tenant_id,
+            )
             span.set_attribute("rag_docs_found", len(docs))
             guideline_context = (
                 "\n".join([f"- {d['text']}" for d in docs])
@@ -462,7 +480,7 @@ Conduct a retrospective QA audit of the chart based on adherence to the
 listed clinical guidelines. Emphasize cryptographically-verifiable audit
 trails.
 """
-            return self.llm.ask_llm(prompt)
+            return self.llm.ask_llm(prompt, model_tier="coding")
 
     # ------------------------------------------------------------------
     # Prior-auth draft (deliverable 4.5)
@@ -538,7 +556,9 @@ for procedure code {procedure_code} for an encounter ({encounter_id}). Payer:
 }}
 """
             try:
-                response_obj = self.llm.ask_llm_structured(prompt, PriorAuthDraft)
+                response_obj = self.llm.ask_llm_structured(
+                    prompt, PriorAuthDraft, model_tier="reasoning"
+                )
                 # Sanitise the visible letter only — the structured fields are
                 # rendered in well-defined UI containers and don't risk being
                 # misread as a direct medical recommendation.
@@ -672,7 +692,9 @@ def _judge_suggestions(
         justification = (getattr(item, "justification", "") or "").strip()
         prompt = _judge_prompt(note, code, description, justification)
         try:
-            verdict_obj = llm.ask_llm_structured(prompt, JudgeVerdict)
+            verdict_obj = llm.ask_llm_structured(
+                prompt, JudgeVerdict, model_tier="reasoning"
+            )
             verdict = (getattr(verdict_obj, "verdict", "") or "").strip().lower()
         except Exception as e:  # fail-closed on any judge failure
             logger.warning(

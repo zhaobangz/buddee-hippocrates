@@ -22,6 +22,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Claude Code (local settings contain model/provider info)
+.claude/
+
 # Clinical Data (Keep local unless explicitly intended for cloud)
 audit_log.json
 memory.json

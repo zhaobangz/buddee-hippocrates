@@ -106,6 +106,8 @@ def test_enqueue_and_poll(db_tenant):
     job = _enqueue(db, tenant_id)
     assert job.status == "pending"
     assert job.started_at is None
+    assert job.input_payload != {"note": "demo", "billed_codes": []}
+    assert job_queue.job_input_payload(job) == {"note": "demo", "billed_codes": []}
 
     claimed = job_queue.claim_next_pending(db)
     assert claimed is not None
@@ -138,7 +140,8 @@ def test_mark_completed(db_tenant):
 
     db.expire(job)  # force a reload so we assert what actually hit the DB
     assert job.status == "completed"
-    assert job.result_payload == result
+    assert job.result_payload != result
+    assert job_queue.job_result_payload(job) == result
     assert job.completed_at is not None
 
 
