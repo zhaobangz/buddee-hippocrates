@@ -13,7 +13,6 @@ The single most important cost/compliance fact about this codebase:
 > Real patient data is a different tier: it requires **signed BAAs** (Anthropic +
 > your cloud host) and paid managed infrastructure. Do not point real PHI at any
 > Tier 0/1 deployment.
-
 ---
 
 ## Cost tiers at a glance
