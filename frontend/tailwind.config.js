@@ -7,50 +7,57 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
       colors: {
-        medical: {
-          50: '#f0fdfa',
-          100: '#ccfbf1',
-          200: '#99f6e4',
-          300: '#5eead4',
-          400: '#2dd4bf',
-          500: '#14b8a6',
-          600: '#0d9488',
-          700: '#0f766e',
-          800: '#115e59',
-          900: '#134e4a',
-          950: '#042f2e',
+        clinical: {
+          // Light theme tokens
+          bg: '#F6F7F5',
+          surface: '#FFFFFF',
+          border: '#E3E7E4',
+          fill: '#EEF1EF',
+          ink: '#15302D',
+          secondary: '#4A625E',
+          muted: '#6E827F',
+          // Primary action
+          primary: '#0F766E',
+          'primary-hover': '#115E59',
+          // Status (on white)
+          positive: '#047857',
+          'positive-bg': '#ECFDF3',
+          caution: '#B45309',
+          'caution-bg': '#FEF3E2',
+          risk: '#BE123C',
+          'risk-bg': '#FDECEF',
+          info: '#1D4ED8',
+          'info-bg': '#EFF6FF',
         },
-        brand: {
-          cyan: '#22d3ee',
-          teal: '#2dd4bf',
-          indigo: '#6366f1',
-          dark: '#0f172a',
-          card: 'rgba(30, 41, 59, 0.7)',
-        }
       },
-      backgroundImage: {
-        'glass-gradient': 'linear-gradient(135deg, rgba(20, 184, 166, 0.1), rgba(34, 211, 238, 0.1))',
-        'mesh-gradient': 'radial-gradient(at 0% 0%, rgba(20, 184, 166, 0.15) 0, transparent 50%), radial-gradient(at 50% 0%, rgba(34, 211, 238, 0.15) 0, transparent 50%), radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.15) 0, transparent 50%)',
+      borderRadius: {
+        card: '8px',
+        control: '6px',
       },
-      animation: {
-        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'float': 'float 6s ease-in-out infinite',
-        'glow': 'glow 2s ease-in-out infinite alternate',
+      spacing: {
+        '4.5': '1.125rem',
       },
-      keyframes: {
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
-        },
-        glow: {
-          '0%': { boxShadow: '0 0 5px rgba(45, 212, 191, 0.2), 0 0 10px rgba(45, 212, 191, 0.1)' },
-          '100%': { boxShadow: '0 0 15px rgba(45, 212, 191, 0.6), 0 0 30px rgba(45, 212, 191, 0.3)' },
-        }
+      maxWidth: {
+        'content': '1200px',
       },
-      backdropBlur: {
-        xs: '2px',
-      }
+      boxShadow: {
+        'card': '0 1px 2px rgba(21,48,45,0.06)',
+        'card-dark': '0 1px 2px rgba(0,0,0,0.2)',
+        'dropdown': '0 4px 12px rgba(21,48,45,0.12)',
+        'dropdown-dark': '0 4px 12px rgba(0,0,0,0.35)',
+      },
+      transitionDuration: {
+        '150': '150ms',
+        '200': '200ms',
+      },
+      transitionTimingFunction: {
+        'out': 'ease-out',
+      },
     },
   },
   plugins: [],

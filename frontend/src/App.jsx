@@ -6,6 +6,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import Dashboard from './pages/Dashboard';
@@ -15,23 +16,29 @@ import AuditPage from './pages/AuditPage';
 import useStore, { subscribeApiKey, getRuntimeApiKey } from './store/useStore';
 
 /**
- * Lightweight in-app prompt for the X-API-Key header.
+ * Full-page sign-in / connect screen.
  *
- * The launch deploy uses a build-time `VITE_API_KEY`, but local-dev runs
- * (and any environment where baking the secret into the bundle is
- * unacceptable) need a way to provide the key after page load. We listen
- * for 401s on the shared axios instance, prompt the user once, and keep
- * the value in memory only — never localStorage.
+ * Replaces the old modal-over-broken-app approach with a centered card
+ * on the light background. On 401 mid-session, shows the same page with
+ * "Your session key is no longer valid."
  */
 function ApiKeyPrompt() {
   const setApiKey = useStore((state) => state.setApiKey);
   const [needsKey, setNeedsKey] = useState(!getRuntimeApiKey());
   const [draft, setDraft] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [isReAuth, setIsReAuth] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeApiKey((key, meta) => {
-      if (!key && meta?.unauthorized) setNeedsKey(true);
-      if (key) setNeedsKey(false);
+      if (!key && meta?.unauthorized) {
+        setNeedsKey(true);
+        setIsReAuth(true);
+      }
+      if (key) {
+        setNeedsKey(false);
+        setIsReAuth(false);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -39,32 +46,114 @@ function ApiKeyPrompt() {
   if (!needsKey) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-      <div className="glass-panel rounded-2xl p-6 max-w-md w-full mx-4">
-        <h3 className="text-sm font-bold text-slate-100 mb-2">Connect to Buddi</h3>
-        <p className="text-xs text-slate-500 mb-4">
-          Enter your Buddi API key to get started. Your key stays in browser memory only —
-          it's never saved to disk or localStorage.
-        </p>
-        <input
-          type="password"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="API key"
-          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-100 text-sm mb-3"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            if (draft.trim()) {
-              setApiKey(draft.trim());
-              setNeedsKey(false);
-            }
-          }}
-          className="btn-primary w-full py-2 rounded-xl text-xs font-bold"
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center"
+      style={{ backgroundColor: 'var(--color-bg)' }}
+    >
+      <div className="w-full max-w-sm mx-6">
+        {/* Logo */}
+        <div className="flex items-center gap-3 mb-6">
+          <img
+            src="/Buddee_Health.png"
+            alt="Buddee Health"
+            className="w-10 h-10 rounded object-contain"
+          />
+          <div>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--color-ink)' }}>
+              Buddee Health
+            </h1>
+            <p className="text-sm" style={{ color: 'var(--color-secondary)' }}>
+              Coding review and audit support for your revenue-cycle team
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="card"
         >
-          Connect
-        </button>
+          <div className="card-body space-y-4">
+            {isReAuth && (
+              <div
+                className="text-sm p-3 rounded-control"
+                style={{
+                  backgroundColor: 'var(--color-caution-bg, #FEF3E2)',
+                  color: '#B45309',
+                }}
+              >
+                Your session key is no longer valid. Please re-enter it.
+              </div>
+            )}
+
+            <div>
+              <label className="label" htmlFor="api-key-input">
+                API key
+              </label>
+              <div className="relative">
+                <input
+                  id="api-key-input"
+                  type={showKey ? 'text' : 'password'}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Enter your API key"
+                  className="input pr-10"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: 'var(--color-muted)' }}
+                  aria-label={showKey ? 'Hide key' : 'Show key'}
+                >
+                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-xs mt-1.5" style={{ color: 'var(--color-muted)' }}>
+                Your key stays in this browser's memory — never saved to disk.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (draft.trim()) {
+                  setApiKey(draft.trim());
+                  setNeedsKey(false);
+                }
+              }}
+              disabled={!draft.trim()}
+              className="btn-primary w-full"
+            >
+              Connect
+            </button>
+
+            <div className="text-center">
+              <a
+                href="#"
+                className="text-xs hover:underline"
+                style={{ color: 'var(--color-primary)' }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  // TODO: link to docs
+                }}
+              >
+                Where do I find my key?
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Product footnotes */}
+        <div
+          className="flex items-center justify-center gap-4 mt-6 text-xs"
+          style={{ color: 'var(--color-muted)' }}
+        >
+          <span>Shadow mode only</span>
+          <span style={{ color: 'var(--color-border)' }}>·</span>
+          <span>Verifiable audit trail</span>
+          <span style={{ color: 'var(--color-border)' }}>·</span>
+          <span>No auto-submission</span>
+        </div>
       </div>
     </div>
   );
@@ -96,14 +185,11 @@ function DemoQueryHandler() {
   return null;
 }
 
-
 function PatientBootstrap() {
   const fetchPatientProfile = useStore((state) => state.fetchPatientProfile);
-
   useEffect(() => {
     fetchPatientProfile('PT-9012');
   }, [fetchPatientProfile]);
-
   return null;
 }
 
@@ -118,7 +204,6 @@ function PatientBootstrap() {
 function App() {
   return (
     <Router>
-      <div className="mesh-background" />
       <ApiKeyPrompt />
       <PatientBootstrap />
       <DemoQueryHandler />

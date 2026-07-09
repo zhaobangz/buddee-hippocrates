@@ -2,91 +2,368 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Base styles
+   ============================================================ */
+
 :root {
+  color-scheme: light;
+  --color-bg: #F6F7F5;
+  --color-surface: #FFFFFF;
+  --color-border: #E3E7E4;
+  --color-fill: #EEF1EF;
+  --color-ink: #15302D;
+  --color-secondary: #4A625E;
+  --color-muted: #6E827F;
+  --color-primary: #0F766E;
+  --color-primary-hover: #115E59;
+}
+
+.dark {
   color-scheme: dark;
+  --color-bg: #0E1B1A;
+  --color-surface: #152423;
+  --color-border: rgba(255, 255, 255, 0.09);
+  --color-fill: rgba(255, 255, 255, 0.04);
+  --color-ink: #E8EFED;
+  --color-secondary: #9FB4B0;
+  --color-muted: #6C8B86;
+  --color-primary: #2DD4BF;
+  --color-primary-hover: #5EEAD4;
 }
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #020617;
-  color: #f8fafc;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* ============================================================
+   Prefers reduced motion
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ============================================================
+   Focus visible
+   ============================================================ */
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Remove default focus for mouse users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ============================================================
+   Typography helpers
+   ============================================================ */
+
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: pretty;
+}
+
+/* ============================================================
+   Custom scrollbar
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* ============================================================
+   Component classes
+   ============================================================ */
+
 @layer components {
-  .glass-panel {
-    @apply bg-brand-card backdrop-blur-md border border-white/10 shadow-xl;
+  .card {
+    @apply rounded-card border bg-[var(--color-surface)] shadow-card;
+    border-color: var(--color-border);
   }
-  
-  .glass-card {
-    @apply bg-white/5 backdrop-blur-sm border border-white/5 hover:border-white/20 transition-all duration-300;
+
+  .dark .card {
+    @apply shadow-card-dark;
   }
-  
-  .medical-gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-medical-400 to-brand-cyan;
+
+  .card-header {
+    @apply px-5 py-4 border-b;
+    border-color: var(--color-border);
   }
-  
+
+  .card-body {
+    @apply p-5;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-control font-medium transition-all duration-150 ease-out;
+    font-size: 14px;
+    line-height: 1;
+    min-height: 40px;
+    padding: 0 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .btn-primary {
-    @apply px-4 py-2 bg-gradient-to-r from-medical-600 to-medical-500 hover:from-medical-500 hover:to-medical-400 text-white rounded-lg font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-medical-500/20;
+    @apply btn text-white;
+    background-color: var(--color-primary);
   }
-  
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+  }
+
   .btn-secondary {
-    @apply px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition-all duration-200 active:scale-95 border border-white/10;
+    @apply btn;
+    color: var(--color-ink);
+    background-color: transparent;
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-fill);
+  }
+
+  .btn-ghost {
+    @apply btn;
+    color: var(--color-secondary);
+    background-color: transparent;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--color-fill);
+    color: var(--color-ink);
+  }
+
+  .btn-sm {
+    font-size: 13px;
+    min-height: 32px;
+    padding: 0 12px;
+  }
+
+  .btn-xs {
+    font-size: 12px;
+    min-height: 28px;
+    padding: 0 10px;
+  }
+
+  .input {
+    @apply w-full rounded-control border bg-[var(--color-surface)] px-3 py-2 text-sm transition-colors duration-150 ease-out;
+    border-color: var(--color-border);
+    color: var(--color-ink);
+  }
+
+  .input::placeholder {
+    color: var(--color-muted);
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+  }
+
+  .label {
+    @apply block text-sm font-medium mb-1.5;
+    color: var(--color-secondary);
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .badge-positive {
+    @apply badge;
+    color: #047857;
+    background-color: #ECFDF3;
+  }
+
+  .badge-caution {
+    @apply badge;
+    color: #B45309;
+    background-color: #FEF3E2;
+  }
+
+  .badge-risk {
+    @apply badge;
+    color: #BE123C;
+    background-color: #FDECEF;
+  }
+
+  .badge-info {
+    @apply badge;
+    color: #1D4ED8;
+    background-color: #EFF6FF;
+  }
+
+  .badge-neutral {
+    @apply badge;
+    color: var(--color-secondary);
+    background-color: var(--color-fill);
+  }
+
+  .dark .badge-positive {
+    color: #34D399;
+    background-color: rgba(4, 120, 87, 0.15);
+  }
+
+  .dark .badge-caution {
+    color: #FBBF24;
+    background-color: rgba(180, 83, 9, 0.15);
+  }
+
+  .dark .badge-risk {
+    color: #FB7185;
+    background-color: rgba(190, 18, 60, 0.15);
+  }
+
+  .dark .badge-info {
+    color: #60A5FA;
+    background-color: rgba(29, 78, 216, 0.15);
+  }
+
+  .dark .badge-neutral {
+    color: var(--color-secondary);
+    background-color: var(--color-fill);
   }
 
   .nav-link {
-    @apply flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-400 hover:text-white hover:bg-white/5;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-control text-sm font-medium transition-all duration-150 ease-out;
+    color: var(--color-secondary);
+  }
+
+  .nav-link:hover {
+    background-color: var(--color-fill);
+    color: var(--color-ink);
   }
 
   .nav-link.active {
-    @apply text-medical-400 bg-medical-500/10 border-r-2 border-medical-500;
+    background-color: var(--color-fill);
+    color: var(--color-primary);
   }
-}
 
-@layer utilities {
-  .animate-fade-in {
-    animation: fadeIn 0.4s ease-out forwards;
+  .dark .nav-link.active {
+    color: #2DD4BF;
   }
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: translateY(0); }
+
+  /* Status indicator dot */
+  .status-dot {
+    @apply inline-block w-2 h-2 rounded-full;
   }
-}
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #0f172a;
-}
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
+  .status-dot-positive {
+    @apply status-dot;
+    background-color: #047857;
+  }
 
-.mesh-background {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(20, 184, 166, 0.08) 0, transparent 50%),
-    radial-gradient(at 50% 0%, rgba(34, 211, 238, 0.05) 0, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.05) 0, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(20, 184, 166, 0.05) 0, transparent 50%),
-    radial-gradient(at 0% 100%, rgba(99, 102, 241, 0.05) 0, transparent 50%);
-  background-color: #020617;
-}
+  .status-dot-caution {
+    @apply status-dot;
+    background-color: #B45309;
+  }
 
-.orb-glow {
-  filter: blur(40px);
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(45, 212, 191, 0.4) 0%, transparent 70%);
+  .status-dot-risk {
+    @apply status-dot;
+    background-color: #BE123C;
+  }
+
+  .status-dot-neutral {
+    @apply status-dot;
+    background-color: var(--color-muted);
+  }
+
+  .dark .status-dot-positive {
+    background-color: #34D399;
+  }
+
+  .dark .status-dot-caution {
+    background-color: #FBBF24;
+  }
+
+  .dark .status-dot-risk {
+    background-color: #FB7185;
+  }
+
+  /* Trust bar */
+  .trust-bar {
+    @apply flex items-center gap-4 px-6 py-2 text-sm border-b;
+    background-color: var(--color-fill);
+    border-color: var(--color-border);
+    color: var(--color-secondary);
+  }
+
+  /* Keyboard shortcut hint */
+  .kbd {
+    @apply inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-mono;
+    background-color: var(--color-fill);
+    color: var(--color-muted);
+    border: 1px solid var(--color-border);
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  /* Code/mono text block */
+  .code-block {
+    @apply rounded p-2 text-sm font-mono overflow-x-auto;
+    background-color: var(--color-fill);
+    color: var(--color-ink);
+    border: 1px solid var(--color-border);
+  }
+
+  /* Section heading */
+  .section-title {
+    @apply text-sm font-semibold;
+    color: var(--color-secondary);
+  }
+
+  /* Queue row in shadow page */
+  .queue-row {
+    @apply flex items-center gap-4 px-4 py-3 cursor-pointer transition-colors duration-150 ease-out border-b;
+    border-color: var(--color-border);
+  }
+
+  .queue-row:hover {
+    background-color: var(--color-fill);
+  }
+
+  .queue-row.selected {
+    background-color: var(--color-fill);
+    border-left: 3px solid var(--color-primary);
+  }
+
+  .dark .queue-row.selected {
+    border-left-color: #2DD4BF;
+  }
 }

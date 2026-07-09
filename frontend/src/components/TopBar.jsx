@@ -1,71 +1,153 @@
-import React, { useEffect } from 'react';
-import { Search, Bell, Users, ShieldCheck, Building2 } from 'lucide-react';
-import useStore from '../store/useStore';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Search, Bell, Sun, Moon, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-const TopBar = () => {
-  const currentPatient = useStore((state) => state.currentPatient);
-  const tenantId = useStore((state) => state.tenantId);
-  const fetchTenantContext = useStore((state) => state.fetchTenantContext);
+const TopBar = ({ dark, onToggleTheme }) => {
+  const navigate = useNavigate();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const menuRef = useRef(null);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowUserMenu(false);
+      }
+    };
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClick);
+    }
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showUserMenu]);
+
+  const handleKeyDown = useCallback(
+    (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        document.querySelector('[data-search-input]')?.focus();
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    fetchTenantContext();
-  }, [fetchTenantContext]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   return (
-    <header className="h-16 border-b border-white/5 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between z-10">
-      <div className="flex items-center flex-1 max-w-xl">
+    <header
+      className="h-14 border-b flex items-center justify-between px-6 flex-shrink-0"
+      style={{
+        backgroundColor: 'var(--color-surface)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      {/* Search */}
+      <div className="flex items-center flex-1 max-w-md">
         <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search patients, codes, encounters… (⌘K)"
-            className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-medical-500/50 transition-all"
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2"
+            size={16}
+            style={{ color: 'var(--color-muted)' }}
           />
+          <input
+            data-search-input
+            type="text"
+            placeholder="Search patients, codes, encounters…"
+            className="input pl-10 pr-10"
+          />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+            <span className="kbd">⌘K</span>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center space-x-6">
-        {/* System Health */}
-        <div className="flex items-center space-x-4 px-4 py-1.5 rounded-full bg-white/5 border border-white/5">
-          <div className="flex items-center space-x-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">AI Active</span>
-          </div>
-          <div className="w-[1px] h-3 bg-white/10" />
-          <div className="flex items-center space-x-2">
-            <ShieldCheck className="w-3 h-3 text-teal-400" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-teal-400/80">Shadow Mode On</span>
-          </div>
-          {tenantId && (
-            <>
-              <div className="w-[1px] h-3 bg-white/10" />
-              <div className="flex items-center space-x-2" title="Active tenant (last 8 chars of UUID)">
-                <Building2 className="w-3 h-3 text-slate-400" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 font-mono">
-                  Tenant …{tenantId.slice(-8)}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
+      {/* Right side */}
+      <div className="flex items-center gap-3">
+        {/* Theme toggle */}
+        <button
+          onClick={onToggleTheme}
+          className="btn-ghost btn-sm !min-h-[36px] !min-w-[36px] !p-0 rounded-control"
+          aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {dark ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
 
-        <div className="flex items-center space-x-3">
-          <button className="relative w-10 h-10 rounded-xl hover:bg-white/5 flex items-center justify-center transition-colors">
-            <Bell className="w-5 h-5 text-slate-400" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border border-slate-900" />
+        {/* Notifications */}
+        <button
+          className="btn-ghost btn-sm !min-h-[36px] !min-w-[36px] !p-0 rounded-control relative"
+          aria-label="Notifications"
+        >
+          <Bell size={16} />
+          <span
+            className="absolute top-2 right-2 w-2 h-2 rounded-full"
+            style={{ backgroundColor: '#BE123C' }}
+          />
+        </button>
+
+        {/* User menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="btn-ghost btn-sm !min-h-[36px] !min-w-[36px] !p-0 rounded-control"
+            aria-label="User menu"
+            aria-haspopup="true"
+            aria-expanded={showUserMenu}
+          >
+            <User size={16} />
           </button>
-          
-          <div className="w-[1px] h-6 bg-white/10 mx-2" />
-          
-          <div className="flex items-center space-x-3">
-             <div className="flex flex-col items-end">
-               <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Reviewing</span>
-               <span className="text-sm font-semibold text-medical-400">{currentPatient.name}</span>
-             </div>
-             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-white/10">
-                <Users className="w-5 h-5 text-slate-300" />
-             </div>
-          </div>
+
+          {showUserMenu && (
+            <div
+              className="absolute right-0 top-full mt-2 w-56 rounded-card border py-1 z-50"
+              style={{
+                backgroundColor: 'var(--color-surface)',
+                borderColor: 'var(--color-border)',
+                boxShadow: dark
+                  ? '0 4px 12px rgba(0,0,0,0.35)'
+                  : '0 4px 12px rgba(21,48,45,0.12)',
+              }}
+              role="menu"
+            >
+              <div
+                className="px-4 py-3 border-b"
+                style={{ borderColor: 'var(--color-border)' }}
+              >
+                <p
+                  className="text-sm font-semibold"
+                  style={{ color: 'var(--color-ink)' }}
+                >
+                  Operator
+                </p>
+                <p
+                  className="text-xs"
+                  style={{ color: 'var(--color-muted)' }}
+                >
+                  Coding Specialist
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowUserMenu(false); navigate('/settings'); }}
+                className="w-full text-left px-4 py-2 text-sm transition-colors"
+                style={{ color: 'var(--color-secondary)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-fill)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                role="menuitem"
+              >
+                Settings
+              </button>
+              <button
+                className="w-full text-left px-4 py-2 text-sm transition-colors"
+                style={{ color: 'var(--color-secondary)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-fill)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                role="menuitem"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

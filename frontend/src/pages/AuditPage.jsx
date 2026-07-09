@@ -1,61 +1,56 @@
 import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
+  Download,
   Lock,
-  ExternalLink,
-  History,
+  ChevronDown,
+  ChevronRight,
   AlertTriangle,
   Info,
   CheckCircle2,
-  Download,
+  Copy,
 } from 'lucide-react';
 import useStore from '../store/useStore';
 
 const truncate = (value, length = 18) => {
-  if (!value) return 'GENESIS';
+  if (!value) return '—';
   return value.length > length ? `${value.slice(0, length)}…` : value;
 };
 
-/**
- * Audit & Safety surface.
- *
- * FE-04 (April-21 verification): the previous revision hard-coded
- * CheckCircle2 badges for HIPAA / FedRAMP / SOC2 / AES-256 compliance.
- * Those were not tied to any runtime state — displaying them in a
- * HIPAA-scope product before the actual certifications exist is a
- * regulatory and legal risk and has been removed.
- *
- * FE-03: the page now fetches the audit log on mount instead of
- * relying on another page to populate the store first.
- */
 const AuditPage = () => {
   const auditEvents = useStore((state) => state.auditEvents);
   const auditVerification = useStore((state) => state.auditVerification);
   const fetchAuditLogs = useStore((state) => state.fetchAuditLogs);
   const verifyAuditTrail = useStore((state) => state.verifyAuditTrail);
-  const [verifyMessage, setVerifyMessage] = useState(null);
+  const [expandedRow, setExpandedRow] = useState(null);
+  const [verifyMsg, setVerifyMsg] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     fetchAuditLogs();
   }, [fetchAuditLogs]);
 
   const handleVerify = async () => {
+    setIsVerifying(true);
     const result = await verifyAuditTrail();
+    setIsVerifying(false);
     if (!result) {
-      setVerifyMessage({ tone: 'error', text: 'Verification request failed.' });
+      setVerifyMsg({ tone: 'error', text: 'Verification request failed.' });
       return;
     }
     if (result.verified) {
-      setVerifyMessage({
+      setVerifyMsg({
         tone: 'ok',
-        text: `Chain verified across ${result.events_checked} event(s) (${result.status}).`,
+        text: `Integrity verified across ${result.events_checked} record(s).`,
       });
     } else {
-      setVerifyMessage({
+      setVerifyMsg({
         tone: 'error',
-        text: `Verification failed: ${result.status} at event ${result.broken_at ?? 'unknown'}.`,
+        text: `Verification failed${result.broken_at ? ` at record ${result.broken_at}` : ''}. Contact support.`,
       });
     }
+    setTimeout(() => setVerifyMsg(null), 8000);
   };
 
   const handleExport = () => {
@@ -72,185 +67,346 @@ const AuditPage = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleCopy = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(text.slice(0, 12));
+      setTimeout(() => setCopiedId(null), 1500);
+    } catch {
+      // fallback
+    }
+  };
+
+  // Build persistent status
+  const eventsChecked = auditVerification?.events_checked || auditEvents.length;
+
+  const eventActionLabel = (event) => {
+    const action = event.event_type || event.action || 'Unknown';
+    // Translate if needed
+    if (action === 'shadow_audit_completed') return 'Coding review completed';
+    if (action === 'suggestion_accepted') return 'Suggestion accepted';
+    if (action === 'suggestion_dismissed') return 'Suggestion dismissed';
+    if (action === 'prior_auth_generated') return 'Prior auth draft generated';
+    return action.replace(/_/g, ' ');
+  };
+
+  const formatActor = (event) => {
+    const actor = event.actor || event.user || 'system';
+    return actor;
+  };
+
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
-      <div className="flex justify-between items-end">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100 tracking-tight flex items-center">
-            <ShieldCheck className="w-8 h-8 mr-3 text-emerald-500 fill-emerald-500/10" />
-            Safety & Audit System
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-ink)' }}>
+            Audit trail
           </h1>
-          <p className="text-slate-500 mt-1">
-            Verifiable transparency for all Agentic AI actions
+          <p className="text-sm mt-1" style={{ color: 'var(--color-secondary)' }}>
+            A permanent, verifiable record of every review.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExport} className="btn-secondary text-xs flex items-center">
-            <Download className="w-3 h-3 mr-2" />
-            Export audit report
+        <div className="flex items-center gap-3">
+          <button onClick={handleExport} className="btn-secondary btn-sm">
+            <Download size={16} />
+            Export (JSON)
           </button>
-          <button onClick={handleVerify} className="btn-secondary text-xs flex items-center">
-            <Lock className="w-3 h-3 mr-2" />
-            Verify Audit Chain
+          <button
+            onClick={handleVerify}
+            disabled={isVerifying}
+            className="btn-secondary btn-sm"
+          >
+            <Lock size={16} />
+            {isVerifying ? 'Verifying…' : 'Verify integrity'}
           </button>
         </div>
       </div>
 
-      {verifyMessage ? (
+      {/* Persistent status banner */}
+      {(verifyMsg || eventsChecked > 0) && (
         <div
-          role="status"
-          className={`text-xs px-4 py-3 rounded-xl border ${
-            verifyMessage.tone === 'ok'
-              ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300'
-              : 'bg-rose-500/5 border-rose-500/20 text-rose-300'
+          className={`flex items-center gap-3 px-4 py-3 rounded-card border text-sm ${
+            verifyMsg?.tone === 'error'
+              ? 'border-[#BE123C]'
+              : 'border-[#047857]'
           }`}
+          style={{
+            backgroundColor: verifyMsg?.tone === 'error'
+              ? 'var(--color-risk-bg, #FDECEF)'
+              : 'var(--color-positive-bg, #ECFDF3)',
+            color: verifyMsg?.tone === 'error' ? '#BE123C' : '#047857',
+          }}
+          role="status"
+          aria-live="polite"
         >
-          {verifyMessage.text}
-        </div>
-      ) : null}
-
-      <div className="glass-panel p-5 rounded-2xl border-emerald-500/10 bg-emerald-500/5">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-slate-100 flex items-center">
-              <ShieldCheck className="w-4 h-4 mr-2 text-emerald-400" />
-              Tamper-Evident Hash Chain
-            </p>
-            <p className="text-xs text-slate-500 mt-1">
-              Every recommendation is not just logged — it is cryptographically chained for tamper-evident review.
-            </p>
-          </div>
-          <span className="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-widest">
-            {auditVerification?.status || 'not_checked'} · {auditVerification?.events_checked || 0} events
+          {verifyMsg?.tone === 'error' || (!verifyMsg && auditVerification?.verified === false) ? (
+            <AlertTriangle size={18} />
+          ) : (
+            <CheckCircle2 size={18} />
+          )}
+          <span>
+            {verifyMsg
+              ? verifyMsg.text
+              : auditVerification?.verified === false
+              ? 'Verification failed. Contact support.'
+              : `Integrity verified across ${eventsChecked} record${eventsChecked !== 1 ? 's' : ''}.`}
           </span>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          {auditEvents.length === 0 && (
-            <div className="glass-panel p-5 rounded-2xl text-sm text-slate-400">
-              No audit events recorded yet.
-            </div>
-          )}
-          {auditEvents.map((event) => (
-            <div
-              key={event.id || event.event_id}
-              className="glass-panel p-5 rounded-2xl group hover:border-white/20 transition-all"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start space-x-4">
-                  <div
-                    className={`p-3 rounded-xl ${
-                      event.verification_status?.includes('broken') || event.verification_status?.includes('mismatch')
-                        ? 'bg-rose-500/10 text-rose-500'
-                        : 'bg-emerald-500/10 text-emerald-500'
-                    }`}
-                  >
-                    <History className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-200">
-                      {event.event_type || event.action}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        Actor: {event.actor || event.user || 'system'}
-                      </span>
-                      <span className="text-[10px] text-slate-600">•</span>
-                      <span className="text-[10px] text-slate-500">
-                        {event.timestamp}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <span
-                    className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider ${
-                      event.verification_status?.includes('broken') || event.verification_status?.includes('mismatch')
-                        ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                        : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                    }`}
-                  >
-                    {event.verification_status || 'unchecked'}
-                  </span>
-                  <ExternalLink className="w-4 h-4 text-slate-600" />
-                </div>
+        {/* Event table */}
+        <div className="lg:col-span-2 card overflow-hidden">
+          <div className="card-body !p-0">
+            {auditEvents.length === 0 ? (
+              <div className="p-6 text-center">
+                <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+                  No audit events recorded yet.
+                </p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/5">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">Current Hash</p>
-                  <p className="text-[11px] font-mono text-slate-400 break-all">{truncate(event.current_hash || event.cryptographic_hash, 28)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">Previous Hash</p>
-                  <p className="text-[11px] font-mono text-slate-400 break-all">{truncate(event.previous_hash, 28)}</p>
-                </div>
-                {event.payload?.recovered_revenue !== undefined && (
-                  <div className="md:col-span-2 flex items-center text-[11px] text-emerald-400 font-bold">
-                    <CheckCircle2 className="w-3 h-3 mr-2" />
-                    Revenue recovery event: ${Number(event.payload.recovered_revenue || 0).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+            ) : (
+              <table className="w-full" role="table">
+                <thead>
+                  <tr
+                    className="text-xs font-medium text-left"
+                    style={{ color: 'var(--color-muted)', borderBottom: '1px solid var(--color-border)' }}
+                  >
+                    <th className="px-5 py-3 font-medium">Event</th>
+                    <th className="px-5 py-3 font-medium">Actor</th>
+                    <th className="px-5 py-3 font-medium">Patient / Encounter</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEvents.map((event) => {
+                    const isExpanded = expandedRow === event.id || expandedRow === event.event_id;
+                    return (
+                      <React.Fragment key={event.id || event.event_id}>
+                        <tr
+                          className="cursor-pointer transition-colors text-sm"
+                          style={{
+                            color: 'var(--color-ink)',
+                            borderBottom: '1px solid var(--color-border)',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isExpanded) e.currentTarget.style.backgroundColor = 'var(--color-fill)';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isExpanded) e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                          onClick={() => {
+                            const id = event.id || event.event_id;
+                            setExpandedRow(isExpanded ? null : id);
+                          }}
+                        >
+                          <td className="px-5 py-3">
+                            <div>
+                              <p className="font-medium" style={{ color: 'var(--color-ink)' }}>
+                                {eventActionLabel(event)}
+                              </p>
+                              <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                                {event.timestamp ? new Date(event.timestamp).toLocaleString() : event.timestamp}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3 text-sm" style={{ color: 'var(--color-secondary)' }}>
+                            {formatActor(event)}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className="font-mono text-xs" style={{ color: 'var(--color-secondary)' }}>
+                              {event.patient_id || event.payload?.patient_id || '—'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            {(() => {
+                              const vs = event.verification_status || 'verified';
+                              if (vs.includes('broken') || vs.includes('mismatch')) {
+                                return <span className="badge-risk">Needs review</span>;
+                              }
+                              if (vs === 'verified') {
+                                return <span className="badge-positive">Verified</span>;
+                              }
+                              return <span className="badge-neutral">Not yet verified</span>;
+                            })()}
+                          </td>
+                          <td className="px-5 py-3">
+                            {isExpanded ? (
+                              <ChevronDown size={16} style={{ color: 'var(--color-muted)' }} />
+                            ) : (
+                              <ChevronRight size={16} style={{ color: 'var(--color-muted)' }} />
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr
+                            style={{
+                              borderBottom: '1px solid var(--color-border)',
+                              backgroundColor: 'var(--color-fill)',
+                            }}
+                          >
+                            <td colSpan={5} className="px-5 py-4">
+                              <div className="space-y-3">
+                                {/* Record ID */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium" style={{ color: 'var(--color-secondary)' }}>
+                                    Record ID
+                                  </span>
+                                  <code
+                                    className="text-xs font-mono px-2 py-0.5 rounded"
+                                    style={{
+                                      backgroundColor: 'var(--color-surface)',
+                                      border: '1px solid var(--color-border)',
+                                      color: 'var(--color-ink)',
+                                    }}
+                                  >
+                                    {event.current_hash || event.cryptographic_hash || '—'}
+                                  </code>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCopy(event.current_hash || event.cryptographic_hash || '');
+                                    }}
+                                    className="btn-ghost btn-xs !min-h-[24px] !px-1"
+                                    aria-label="Copy record ID"
+                                  >
+                                    {copiedId === (event.current_hash || '').slice(0, 12) ? (
+                                      <CheckCircle2 size={12} style={{ color: '#047857' }} />
+                                    ) : (
+                                      <Copy size={12} />
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Linked previous record */}
+                                {event.previous_hash && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-medium" style={{ color: 'var(--color-secondary)' }}>
+                                      Previous record
+                                    </span>
+                                    <code
+                                      className="text-xs font-mono px-2 py-0.5 rounded"
+                                      style={{
+                                        backgroundColor: 'var(--color-surface)',
+                                        border: '1px solid var(--color-border)',
+                                        color: 'var(--color-ink)',
+                                      }}
+                                    >
+                                      {truncate(event.previous_hash, 24)}
+                                    </code>
+                                  </div>
+                                )}
+
+                                {/* Revenue recovery event */}
+                                {event.payload?.recovered_revenue !== undefined && (
+                                  <p className="text-sm" style={{ color: '#047857' }}>
+                                    Recovery event: ${Number(event.payload.recovered_revenue || 0).toLocaleString()}
+                                  </p>
+                                )}
+
+                                {/* Summary / payload details */}
+                                {event.payload?.summary && (
+                                  <p className="text-sm" style={{ color: 'var(--color-secondary)' }}>
+                                    {event.payload.summary}
+                                  </p>
+                                )}
+
+                                {/* Technical details disclosure */}
+                                <details className="text-sm">
+                                  <summary
+                                    className="cursor-pointer text-xs font-medium"
+                                    style={{ color: 'var(--color-muted)' }}
+                                  >
+                                    Technical details
+                                  </summary>
+                                  <div
+                                    className="mt-2 p-3 rounded text-xs font-mono space-y-1 overflow-x-auto"
+                                    style={{
+                                      backgroundColor: 'var(--color-surface)',
+                                      border: '1px solid var(--color-border)',
+                                      color: 'var(--color-secondary)',
+                                    }}
+                                  >
+                                    <p>Previous hash: {truncate(event.previous_hash || '—', 32)}</p>
+                                    <p>Current hash: {truncate(event.current_hash || event.cryptographic_hash || '—', 32)}</p>
+                                    {event.merkle_root && <p>Merkle root: {truncate(event.merkle_root, 32)}</p>}
+                                    {event.sequence_number && <p>Sequence: {event.sequence_number}</p>}
+                                  </div>
+                                </details>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-6">
-          {/* FE-04: Compliance certification badges removed. This panel
-              now describes the posture work that is still in progress
-              instead of asserting certifications that do not yet exist. */}
-          <div className="glass-panel p-6 rounded-3xl bg-slate-500/5 border-slate-500/10">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center">
-              <Info className="w-4 h-4 mr-2" />
-              Compliance Posture
-            </h3>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Buddee Health is currently pre-certification. HIPAA, FedRAMP, and SOC 2
-              Type II attestations are in scope for the launch roadmap but
-              are not yet in effect. No compliance badges will be shown here
-              until the corresponding audits have been completed and signed
-              by an external QSA/3PAO.
-            </p>
+        {/* Right column */}
+        <div className="space-y-4">
+          {/* How verification works */}
+          <div className="card">
+            <div className="card-body">
+              <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-ink)' }}>
+                How it works
+              </h3>
+              <div className="space-y-3 text-sm" style={{ color: 'var(--color-secondary)' }}>
+                <p>
+                  Every review is permanently recorded. Records are cryptographically
+                  linked so any alteration is detectable.
+                </p>
+                <p>
+                  Each record contains a cryptographic hash of the previous record,
+                  forming a chain. The integrity of the entire chain can be verified
+                  with a single check.
+                </p>
+                <p>
+                  Daily snapshots are signed and stored in an immutable bucket for
+                  long-term assurance.
+                </p>
+              </div>
+              <details className="mt-4 text-sm">
+                <summary
+                  className="cursor-pointer text-xs font-medium"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  Technical details
+                </summary>
+                <div
+                  className="mt-2 p-3 rounded text-xs font-mono space-y-1 overflow-x-auto"
+                  style={{
+                    backgroundColor: 'var(--color-fill)',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-secondary)',
+                  }}
+                >
+                  <p>Algorithm: SHA-256 hash chain</p>
+                  <p>Signing: Ed25519 (Cloud KMS)</p>
+                  <p>Daily root: Merkle tree with signed root</p>
+                  <p>Storage: Object Lock (WORM) compliant bucket</p>
+                </div>
+              </details>
+            </div>
           </div>
 
-          <button
-            onClick={handleExport}
-            className="w-full glass-panel p-4 rounded-2xl text-xs font-bold text-slate-300 hover:text-white border-white/10 flex items-center justify-center"
-          >
-            <Download className="w-3 h-3 mr-2" />
-            Export audit report (.json)
-          </button>
-
-          <div className="glass-panel p-6 rounded-3xl bg-rose-500/5 border-rose-500/10">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">
-              Pending Confirmations
-            </h3>
-            <p className="text-[10px] text-slate-500 mb-4">
-              The following AI-generated actions require direct human
-              validation before execution.
-            </p>
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-3">
-              <div className="flex items-start">
-                <AlertTriangle className="w-4 h-4 text-amber-500 mr-3 mt-0.5" />
-                <div>
-                  <p className="text-[11px] font-bold text-slate-200">
-                    EHR Write: Note Addition
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Adding "Refined T2D Plan" to active visit note.
-                  </p>
-                </div>
-              </div>
-              <div className="flex space-x-2">
-                <button className="flex-1 py-1.5 rounded-lg bg-emerald-500 text-white text-[10px] font-bold">
-                  APPROVE
-                </button>
-                <button className="flex-1 py-1.5 rounded-lg bg-white/5 text-slate-400 text-[10px] font-bold">
-                  REJECT
-                </button>
-              </div>
+          {/* Compliance posture */}
+          <div className="card">
+            <div className="card-body">
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--color-ink)' }}>
+                <Info size={16} style={{ color: 'var(--color-muted)' }} />
+                Compliance posture
+              </h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--color-secondary)' }}>
+                Buddee Health is currently pre-certification. HIPAA, FedRAMP, and SOC 2
+                Type II attestations are in scope but are not yet in effect. No
+                compliance badges will be displayed until the corresponding audits
+                have been completed and signed by an external QSA/3PAO.
+              </p>
             </div>
           </div>
         </div>

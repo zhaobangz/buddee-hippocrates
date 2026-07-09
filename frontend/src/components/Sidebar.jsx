@@ -1,67 +1,125 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  MessageSquare, 
-  ShieldAlert, 
-  History, 
+import {
+  LayoutDashboard,
+  MessageSquare,
+  ClipboardList,
+  ShieldCheck,
   Settings,
-  BrainCircuit,
-  LogOut
+  LogOut,
 } from 'lucide-react';
+import useStore from '../store/useStore';
 
 const Sidebar = () => {
+  const tenantId = useStore((state) => state.tenantId);
+
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: MessageSquare, label: 'Ask Buddi', path: '/chat' },
-    { icon: BrainCircuit, label: 'Shadow Mode', path: '/shadow' },
-    { icon: ShieldAlert, label: 'Audit Trail', path: '/audit' },
-    { icon: History, label: 'History', path: '/history' },
+    { icon: LayoutDashboard, label: 'Today', path: '/' },
+    { icon: ClipboardList, label: 'Review Queue', path: '/shadow' },
+    { icon: MessageSquare, label: 'Ask Buddee', path: '/chat' },
+    { icon: ShieldCheck, label: 'Audit Trail', path: '/audit' },
   ];
 
   return (
-    <nav className="w-64 border-r border-white/5 bg-slate-950/80 backdrop-blur-2xl flex flex-col pt-6">
-      <div className="px-6 mb-8 flex items-center space-x-3">
-        <img src="/Buddee_Health.png" alt="Buddee Health" className="w-8 h-8 rounded-lg object-contain" />
-        <span className="text-xl font-bold medical-gradient-text tracking-tight">Buddee Health</span>
+    <nav
+      className="w-60 flex flex-col border-r"
+      style={{
+        backgroundColor: 'var(--color-surface)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      {/* Logo + name */}
+      <div className="flex items-center gap-3 px-5 pt-6 pb-6">
+        <img
+          src="/Buddee_Health.png"
+          alt="Buddee Health"
+          className="w-8 h-8 rounded object-contain"
+        />
+        <span className="text-lg font-bold" style={{ color: 'var(--color-ink)' }}>
+          Buddee Health
+        </span>
       </div>
 
-      <div className="flex-1 px-3 space-y-1">
+      {/* Navigation items */}
+      <div className="flex-1 px-3 space-y-0.5">
         {menuItems.map((item) => (
           <NavLink
             key={item.label}
             to={item.path}
             className={({ isActive }) =>
-              `nav-link ${isActive ? 'active' : ''}`
+              `nav-link${isActive ? ' active' : ''}`
             }
           >
             <item.icon className="w-5 h-5" />
-            <span className="font-medium">{item.label}</span>
+            <span>{item.label}</span>
           </NavLink>
         ))}
+
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            `nav-link${isActive ? ' active' : ''}`
+          }
+        >
+          <Settings className="w-5 h-5" />
+          <span>Settings</span>
+        </NavLink>
       </div>
 
-      <div className="px-3 mb-2">
-        <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-teal-500/8 border border-teal-500/15">
-          <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-teal-400/80">Shadow Mode Active</span>
-        </div>
-      </div>
-
-      <div className="p-4 border-t border-white/5">
-        <div className="flex items-center p-2 rounded-xl bg-white/5 mb-4">
-          <div className="w-8 h-8 rounded-full bg-medical-500/20 flex items-center justify-center mr-3 border border-medical-500/30">
-            <span className="text-xs font-bold text-medical-400">OP</span>
+      {/* User profile footer */}
+      <div
+        className="p-4 border-t"
+        style={{ borderColor: 'var(--color-border)' }}
+      >
+        <div
+          className="flex items-center gap-3 p-2 rounded-control mb-3"
+          style={{ backgroundColor: 'var(--color-fill)' }}
+        >
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{
+              backgroundColor: 'var(--color-primary)',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: 600,
+            }}
+          >
+            OP
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate text-slate-200">Operator</p>
-            <p className="text-xs text-slate-500 truncate">Buddi Portal</p>
+            <p
+              className="text-sm font-semibold truncate"
+              style={{ color: 'var(--color-ink)' }}
+            >
+              Operator
+            </p>
+            <p
+              className="text-xs truncate"
+              style={{ color: 'var(--color-muted)' }}
+            >
+              Coding Specialist
+            </p>
           </div>
         </div>
 
-        <button className="w-full flex items-center space-x-3 px-4 py-2 text-slate-400 hover:text-slate-300 transition-colors">
+        {tenantId && (
+          <p
+            className="text-xs mb-3 px-2"
+            style={{ color: 'var(--color-muted)' }}
+            title="Organization ID"
+          >
+            {tenantId.slice(0, 8)}…
+          </p>
+        )}
+
+        <button
+          className="w-full flex items-center gap-3 px-2 py-2 text-sm rounded-control transition-colors duration-150 ease-out"
+          style={{ color: 'var(--color-muted)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-fill)'; e.currentTarget.style.color = 'var(--color-ink)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--color-muted)'; }}
+        >
           <LogOut className="w-4 h-4" />
-          <span className="text-sm font-medium">Sign Out</span>
+          <span>Sign out</span>
         </button>
       </div>
     </nav>

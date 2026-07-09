@@ -1,34 +1,38 @@
 import React, { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ClipboardList,
+  DollarSign,
   TrendingUp,
-  TrendingDown,
-  AlertTriangle,
   CheckCircle2,
-  MoreHorizontal,
-  Info,
-  Zap,
-  FileText,
-  Sparkles,
+  XCircle,
+  Gauge,
+  ChevronDown,
+  ChevronRight,
+  ShieldCheck,
+  Beaker,
+  ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
-import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import SLOPanel from '../components/SLOPanel';
-import PriorAuthModal from '../components/PriorAuthModal';
+
+const formatCurrency = (value) =>
+  Number(value || 0).toLocaleString(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  });
 
 const Dashboard = () => {
-  const { currentPatient: patient } = useStore();
   const navigate = useNavigate();
   const loadDemoPatient = useStore((state) => state.loadDemoPatient);
   const runShadowAudit = useStore((state) => state.runShadowAudit);
   const fetchDashboardMetrics = useStore((state) => state.fetchDashboardMetrics);
   const shadowResult = useStore((state) => state.shadowResult);
-  const [priorAuthOpen, setPriorAuthOpen] = useState(false);
+  const metrics = useStore((state) => state.dashboardMetrics);
+  const auditVerification = useStore((state) => state.auditVerification);
+  const [sloOpen, setSloOpen] = useState(false);
 
-  // Hydrate metrics on first mount so the hero numbers reflect the latest
-  // recovery events without the user having to navigate away and back.
-  // (The SLO panel owns its own /api/metrics/slo fetch + refresh.)
   useEffect(() => {
     fetchDashboardMetrics();
     const intervalId = window.setInterval(fetchDashboardMetrics, 30_000);
@@ -39,7 +43,21 @@ const Dashboard = () => {
     if (shadowResult) fetchDashboardMetrics();
   }, [shadowResult, fetchDashboardMetrics]);
 
-  const handleTrySamplePatient = async () => {
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  })();
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  const handleTrySample = async () => {
     const demoPatient = await loadDemoPatient();
     await runShadowAudit({
       note: demoPatient.clinical_note,
@@ -50,215 +68,197 @@ const Dashboard = () => {
     navigate('/shadow');
   };
 
-  const getColorClass = (color) => {
-    switch (color) {
-      case 'rose': return 'bg-rose-500/10 text-rose-500';
-      case 'amber': return 'bg-amber-500/10 text-amber-500';
-      case 'emerald': return 'bg-emerald-500/10 text-emerald-500';
-      default: return 'bg-slate-500/10 text-slate-500';
-    }
-  };
-
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  })();
-
-  const isFirstLoadPatient = !patient.id || patient.name === 'Marcus Holloway';
-
-  const askBuddiPrompts = [
-    'Which HCC codes are at risk for this patient?',
-    'Draft a prior-auth for the Ophthalmology referral',
-    'Summarize audit exposure for this encounter',
-    'What documentation supports the A1c gap?',
-  ];
-
-  const riskFactors = [
-    { label: 'Hyperkalemia Risk', value: 'High', color: 'rose', trend: 'up', info: 'K+ level 5.4 in last draw' },
-    { label: 'Adherence', value: '98%', color: 'emerald', trend: 'down', info: 'Last fill 14 days ago' },
-    { label: 'BP Control', value: '138/88', color: 'amber', trend: 'up', info: 'Stage 1 Hypertension' },
-    { label: 'A1c Target', value: '7.4', color: 'amber', trend: 'down', info: 'Target < 7.0' }
-  ];
+  const queueCount = metrics.missed_codes_found || shadowResult?.identified_codes?.length || 0;
+  const revenue = metrics.total_recovered_revenue || 0;
+  const acceptedRate = metrics.accepted_rate || 0;
+  const rejectedRate = metrics.rejected_rate || 0;
+  const auditStatus = auditVerification?.status || metrics.audit_integrity_status || 'not_verified';
+  const eventsChecked = auditVerification?.events_checked || 0;
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight medical-gradient-text">
-            {greeting} — let's find the revenue you've already earned.
-          </h1>
-          <p className="text-slate-500 mt-1">Buddi is watching in the background. Every suggestion is yours to approve.</p>
-        </div>
-        <div className="flex flex-col items-end">
-          <div className="flex gap-3">
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-ink)' }}>
+          {greeting}, Operator
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--color-secondary)' }}>
+          {today}
+        </p>
+      </div>
+
+      {/* Primary: Your queue */}
+      <div className="card">
+        <div className="card-body">
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div
+                className="p-3 rounded-control"
+                style={{ backgroundColor: 'var(--color-fill)' }}
+              >
+                <ClipboardList
+                  size={24}
+                  style={{ color: 'var(--color-primary)' }}
+                />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--color-ink)' }}>
+                  Your queue
+                </h2>
+                <p className="text-sm mt-1" style={{ color: 'var(--color-secondary)' }}>
+                  {queueCount > 0
+                    ? `${queueCount} encounter${queueCount !== 1 ? 's' : ''} awaiting review`
+                    : 'No encounters currently pending review'}
+                </p>
+              </div>
+            </div>
             <button
-              onClick={() => setPriorAuthOpen(true)}
-              className="btn-secondary px-4 py-3 rounded-xl text-xs font-bold flex items-center"
+              onClick={() => navigate('/shadow')}
+              className="btn-primary btn-sm flex-shrink-0"
             >
-              <FileText className="w-4 h-4 mr-2" />
-              Generate Prior-Auth
-            </button>
-            <button onClick={handleTrySamplePatient} className="btn-primary px-5 py-3 rounded-xl text-xs font-bold flex items-center">
-              <Zap className="w-4 h-4 mr-2" />
-              Run a Live Demo
+              Open review queue
+              <ArrowRight size={16} />
             </button>
           </div>
-          <p className="text-[10px] text-slate-500 text-right mt-1">No patient data is submitted. Demo only.</p>
         </div>
       </div>
 
-      <PriorAuthModal open={priorAuthOpen} onClose={() => setPriorAuthOpen(false)} />
-
-      <AnimatePresence>
-        {isFirstLoadPatient && (
-          <motion.div
-            key="welcome-banner"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3 }}
-            className="glass-panel rounded-2xl p-5 border-l-4 border-teal-500/50 flex items-start gap-4"
-          >
-            <div className="p-2 rounded-xl bg-teal-500/10 border border-teal-500/20">
-              <Sparkles className="w-5 h-5 text-teal-400" />
+      {/* Metric cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Revenue MTD */}
+        <div className="card">
+          <div className="card-body">
+            <div className="flex items-center gap-2 mb-3">
+              <DollarSign size={16} style={{ color: 'var(--color-primary)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--color-secondary)' }}>
+                Identified revenue (MTD)
+              </span>
             </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-bold text-slate-100">Welcome to Buddi</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                You're in shadow mode — Buddi audits every encounter and surfaces missed HCC codes and prior-auth opportunities.
-                Nothing is submitted without your approval.
-              </p>
-              <button
-                onClick={handleTrySamplePatient}
-                className="text-xs font-bold text-teal-400 hover:text-teal-300 mt-3 transition-colors"
-              >
-                Run a Live Demo →
-              </button>
+            <p className="text-2xl font-bold" style={{ color: 'var(--color-ink)' }}>
+              {formatCurrency(revenue)}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+              Pending your team's review
+            </p>
+          </div>
+        </div>
+
+        {/* Suggestions accepted vs dismissed */}
+        <div className="card">
+          <div className="card-body">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp size={16} style={{ color: 'var(--color-ink)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--color-secondary)' }}>
+                Suggestions (this week)
+              </span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnalyticsDashboard />
-
-      {/* PROMPT_07 Task 3: PHI-safe operator SLO panel. */}
-      <SLOPanel />
-
-      <div className="pt-8 border-t border-white/5">
-        <h2 className="text-xl font-bold text-slate-100 mb-6 tracking-tight flex items-center gap-3">
-          <span>Active Patient — {patient.name}</span>
-          <span className="bg-teal-500/15 text-teal-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-500/20">
-            Shadow Mode On
-          </span>
-        </h2>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {riskFactors.map((risk, index) => (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            key={risk.label}
-            className={`glass-card p-5 rounded-2xl border-l-4 ${
-              risk.color === 'rose' ? 'border-l-rose-500' : 
-              risk.color === 'amber' ? 'border-l-amber-500' : 
-              'border-l-emerald-500'
-            }`}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{risk.label}</span>
-              <div className={`p-1 rounded ${getColorClass(risk.color)}`}>
-                <Info className="w-3 h-3" />
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 size={16} style={{ color: '#047857' }} />
+                <span className="text-lg font-bold" style={{ color: 'var(--color-ink)' }}>
+                  {Math.round(acceptedRate * 100)}%
+                </span>
+                <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                  accepted
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <XCircle size={16} style={{ color: '#BE123C' }} />
+                <span className="text-lg font-bold" style={{ color: 'var(--color-ink)' }}>
+                  {Math.round(rejectedRate * 100)}%
+                </span>
+                <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                  dismissed
+                </span>
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className={`text-xl font-bold ${
-                risk.color === 'rose' ? 'text-rose-400' : 
-                risk.color === 'amber' ? 'text-amber-400' : 
-                'text-emerald-400'
-              }`}>{risk.value}</span>
-              {risk.trend === 'up' && <TrendingUp className="w-4 h-4 text-rose-500" />}
-              {risk.trend === 'down' && <TrendingDown className="w-4 h-4 text-emerald-500" />}
+          </div>
+        </div>
+
+        {/* Audit trail status */}
+        <div className="card">
+          <div className="card-body">
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldCheck size={16} style={{ color: '#047857' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--color-secondary)' }}>
+                Audit trail status
+              </span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-3 italic">{risk.info}</p>
-          </motion.div>
-        ))}
+            <div className="flex items-center gap-2">
+              <span className="status-dot-positive" />
+              <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+                {auditStatus === 'verified'
+                  ? 'Verified'
+                  : auditStatus === 'failed'
+                  ? 'Verification failed'
+                  : 'Not yet verified'}
+              </span>
+            </div>
+            <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+              {eventsChecked > 0 ? `${eventsChecked.toLocaleString()} records` : 'No records yet'}
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 glass-panel rounded-3xl p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-5">
-            <ActivityIcon className="w-48 h-48" />
+      {/* Sandbox card */}
+      <div
+        className="card border-2 border-dashed"
+        style={{ borderColor: 'var(--color-border)' }}
+      >
+        <div className="card-body flex items-start gap-4">
+          <div
+            className="p-3 rounded-control flex-shrink-0"
+            style={{ backgroundColor: 'var(--color-fill)' }}
+          >
+            <Beaker size={20} style={{ color: 'var(--color-secondary)' }} />
           </div>
-          
-          <h3 className="text-lg font-bold text-slate-100 mb-6 flex items-center flex-wrap">
-            <Sparkles className="w-5 h-5 mr-3 text-indigo-400" />
-            Buddi's Suggestions
-            <span className="text-[10px] text-slate-500 ml-2 font-normal normal-case tracking-normal">
-              Review and approve before any action is taken
+          <div className="flex-1">
+            <h3 className="text-base font-semibold" style={{ color: 'var(--color-ink)' }}>
+              Sandbox
+            </h3>
+            <p className="text-sm mt-1" style={{ color: 'var(--color-secondary)' }}>
+              Try Buddee on a synthetic patient. No PHI, nothing is recorded against your organization.
+            </p>
+            <button
+              onClick={handleTrySample}
+              className="btn-secondary btn-sm mt-3"
+            >
+              Try sample patient
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* System status — collapsed for IT admins */}
+      <div
+        className="card"
+        style={{ backgroundColor: 'var(--color-fill)' }}
+      >
+        <button
+          onClick={() => setSloOpen(!sloOpen)}
+          className="card-body w-full flex items-center justify-between text-left"
+        >
+          <div className="flex items-center gap-2">
+            <Gauge size={16} style={{ color: 'var(--color-muted)' }} />
+            <span className="text-sm font-medium" style={{ color: 'var(--color-secondary)' }}>
+              System status
             </span>
-          </h3>
-
-          <div className="space-y-4">
-            <div className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-200">Lab Discrepancy Detected</h4>
-                  <p className="text-xs text-slate-500 mt-1 max-w-md">Patient reported fatigue but last CBC (Feb) was normal. Suggested action: Repeat iron studies and ferritin.</p>
-                </div>
-                <button className="text-[10px] font-bold text-indigo-400 hover:underline">ORDER NOW</button>
-              </div>
-            </div>
-            
-            <div className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-200">Medication Interaction Check</h4>
-                  <p className="text-xs text-slate-500 mt-1 max-w-md">Lisinopril x Atorvastatin: No contraindications found. Patient adherence is high (98%).</p>
-                </div>
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-rose-500/5 border border-rose-500/10">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-rose-400">Missing Care Element</h4>
-                  <p className="text-xs text-slate-500 mt-1 max-w-md">Annual Diabetic Retinal Exam is overdue by 3 months. Recommend referral to Opthalmology.</p>
-                </div>
-                <AlertTriangle className="w-4 h-4 text-rose-500" />
-              </div>
-            </div>
           </div>
-        </div>
-
-        <div className="glass-panel rounded-3xl p-6 bg-indigo-500/5 border-indigo-500/10">
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Ask Buddi</h3>
-          <div className="space-y-3">
-            {askBuddiPrompts.map((q) => (
-              <button
-                key={q}
-                onClick={() => navigate('/chat')}
-                className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all flex items-center group"
-              >
-                <span className="text-xs text-slate-400 group-hover:text-slate-200 flex-1">{q}</span>
-                <MoreHorizontal className="w-4 h-4 text-slate-600" />
-              </button>
-            ))}
+          {sloOpen ? (
+            <ChevronDown size={16} style={{ color: 'var(--color-muted)' }} />
+          ) : (
+            <ChevronRight size={16} style={{ color: 'var(--color-muted)' }} />
+          )}
+        </button>
+        {sloOpen && (
+          <div className="px-5 pb-5">
+            <SLOPanel />
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
 };
-
-const ActivityIcon = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-  </svg>
-);
 
 export default Dashboard;
