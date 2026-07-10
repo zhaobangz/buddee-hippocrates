@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The AI agent landscape — July 2026</title>
+<style>
+  :root{
+    --bg: #080B14;
+    --bg2: #0D1220;
+    --panel: #10152470;
+    --border: rgba(255,255,255,.08);
+    --border-strong: rgba(255,255,255,.16);
+    --text: #E8EAF4;
+    --text2: #9AA1B8;
+    --text3: #6C7288;
+    --gold: #FBBF24;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1100px 600px at 18% -10%, #141c33 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 10%, #1a1330 0%, transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+  }
+  header{
+    padding:28px 36px 18px;
+    border-bottom:1px solid var(--border);
+  }
+  header h1{
+    margin:0 0 6px;
+    font-size:22px;
+    font-weight:600;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    margin:0 0 14px;
+    font-size:14px;
+    color:var(--text2);
+    max-width:720px;
+    line-height:1.5;
+  }
+  .stats{display:flex;gap:8px;flex-wrap:wrap;}
+  .stat-chip{
+    font-size:12px;
+    color:var(--text2);
+    background:rgba(255,255,255,.04);
+    border:1px solid var(--border);
+    padding:5px 11px;
+    border-radius:100px;
+  }
+  .stat-chip b{color:var(--text);font-weight:600;}
+  .stat-chip.gap-chip{color:var(--gold);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.08);}
+
+  .toolbar{
+    position:sticky; top:0; z-index:20;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:12px 36px;
+    background:rgba(8,11,20,.85);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border);
+  }
+  #search{
+    background:rgba(255,255,255,.05);
+    border:1px solid var(--border-strong);
+    color:var(--text);
+    padding:7px 12px;
+    border-radius:8px;
+    font-size:13px;
+    width:200px;
+    outline:none;
+  }
+  #search::placeholder{color:var(--text3);}
+  #search:focus{border-color:rgba(255,255,255,.35);}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;flex:1;}
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--text2);
+    background:rgba(255,255,255,.04);
+    border:1px solid var(--border);
+    padding:5px 10px 5px 8px;
+    border-radius:100px;
+    cursor:pointer;
+    user-select:none;
+    transition:opacity .15s, border-color .15s;
+  }
+  .chip .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .chip.off{opacity:.35;}
+  .chip:hover{border-color:var(--border-strong);}
+  #resetBtn{
+    font-size:12px; color:var(--text2);
+    background:transparent;
+    border:1px solid var(--border-strong);
+    padding:6px 12px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  #resetBtn:hover{color:var(--text); border-color:rgba(255,255,255,.35);}
+
+  main{
+    display:flex;
+    align-items:stretch;
+  }
+  .graph-wrap{
+    flex:1 1 68%;
+    position:relative;
+    min-width:0;
+  }
+  svg{display:block;width:100%;height:calc(100vh - 152px); min-height:560px;}
+  .panel{
+    flex:0 0 340px;
+    border-left:1px solid var(--border);
+    padding:22px 22px 40px;
+    max-height:calc(100vh - 152px);
+    min-height:560px;
+    overflow-y:auto;
+  }
+  @media (max-width:880px){
+    main{flex-direction:column;}
+    .panel{flex:none; border-left:none; border-top:1px solid var(--border); max-height:420px;}
+    svg{height:70vh;}
+  }
+
+  .badge{
+    display:inline-block;
+    font-size:11px; font-weight:600; letter-spacing:.02em;
+    padding:4px 10px;
+    border-radius:100px;
+    border:1px solid;
+    margin-bottom:12px;
+  }
+  .tag{
+    display:inline-block;
+    font-size:11px; font-weight:600;
+    color:#0B0F1A;
+    background:var(--gold);
+    padding:3px 9px;
+    border-radius:100px;
+    margin:0 0 12px 6px;
+  }
+  .panel h2{
+    margin:2px 0 10px;
+    font-size:19px;
+    font-weight:600;
+    line-height:1.3;
+  }
+  .panel-desc{
+    font-size:14px;
+    line-height:1.6;
+    color:var(--text2);
+    margin:0 0 8px;
+  }
+  .panel .hint{
+    font-size:12.5px;
+    color:var(--text3);
+    line-height:1.6;
+    margin-top:22px;
+    padding-top:16px;
+    border-top:1px solid var(--border);
+  }
+  .gap-detail p{
+    font-size:13.5px;
+    line-height:1.65;
+    color:var(--text2);
+    margin:0 0 14px;
+  }
+  .gap-detail strong{color:var(--text);font-weight:600;}
+  .empty-panel{color:var(--text3); font-size:13.5px; line-height:1.6; padding-top:8px;}
+
+  footer{
+    padding:16px 36px 28px;
+    border-top:1px solid var(--border);
+    font-size:12px;
+    color:var(--text3);
+    line-height:1.7;
+    max-width:1000px;
+  }
+
+  .tooltip{
+    position:fixed;
+    pointer-events:none;
+    background:#161B2C;
+    border:1px solid var(--border-strong);
+    color:var(--text);
+    font-size:12.5px;
+    padding:7px 10px;
+    border-radius:7px;
+    max-width:230px;
+    line-height:1.4;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+    opacity:0;
+    transition:opacity .1s;
+    z-index:50;
+  }
+  .tooltip b{display:block;font-size:13px;margin-bottom:2px;}
+
+  .node-group{cursor:pointer;}
+  .cat-label{
+    font-size:11px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    fill:var(--text3);
+    font-weight:600;
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The AI agent landscape — July 2026</h1>
+  <p>A map of companies building agents that complete tasks, clustered by category — built to spot the white space for a general agent a non-technical person could run on their own laptop. Drag nodes, scroll to zoom, click any company for detail.</p>
+  <div class="stats" id="statsRow"></div>
+</header>
+
+<div class="toolbar">
+  <input id="search" type="text" placeholder="Search companies…">
+  <div class="chips" id="chipRow"></div>
+  <button id="resetBtn">Reset view</button>
+</div>
+
+<main>
+  <div class="graph-wrap">
+    <svg id="svg"></svg>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+  <div class="panel" id="panel"></div>
+</main>
+
+<footer id="footerNote"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+
+  // ---------- Data ----------
+
+  const categories = [
+    { id:'general',     label:'General-purpose agents',        color:'#A78BFA', angle:-90  },
+    { id:'foundation',  label:'Foundation model labs',          color:'#5B8DEF', angle:-50  },
+    { id:'computeruse', label:'Computer-use / browser agents',  color:'#2DD4BF', angle:-10  },
+    { id:'coding',      label:'Coding agents',                  color:'#FBBF24', angle:30   },
+    { id:'infra',       label:'Agent infrastructure',           color:'#818CF8', angle:70   },
+    { id:'enterprise',  label:'Enterprise automation / RPA',    color:'#34D399', angle:110  },
+    { id:'vertical',    label:'Vertical / industry agents',     color:'#F472B6', angle:150  },
+    { id:'hardware',    label:'Consumer AI hardware',           color:'#94A3B8', angle:190  },
+    { id:'local',       label:'On-device / local AI',           color:'#FB7185', angle:230  },
+  ];
+
+  const companies = [
+    // Foundation model labs
+    { id:'openai', name:'OpenAI', cat:'foundation', tier:3, desc:'GPT-5.6 family (Sol, Terra, Luna) is now the default ChatGPT model as of July 9, 2026; valued around $850B after its March 2026 round.' },
+    { id:'anthropic', name:'Anthropic', cat:'foundation', tier:3, desc:'Shipped Claude Sonnet 5 on June 30, 2026; its frontier Claude Mythos Preview is restricted to roughly 50 trusted organizations. Valued around $380B.' },
+    { id:'googledm', name:'Google DeepMind', cat:'foundation', tier:3, desc:'Gemini 3.1 Pro leads most 2026 benchmarks and powers the Gemini app, Workspace, and Android.' },
+    { id:'metaai', name:'Meta AI', cat:'foundation', tier:2, desc:'Open-weight Llama line plus new Muse Spark models, with Muse Spark 1.1 shipping July 9, 2026.' },
+    { id:'xai', name:'xAI', cat:'foundation', tier:2, desc:'Launched Grok 4.5 on July 8, 2026 as a low-cost coding model; closed a $20B round led by Nvidia in January 2026.' },
+    { id:'mistral', name:'Mistral AI', cat:'foundation', tier:2, desc:'Europe’s leading frontier lab, mixing open-weight releases with commercial APIs.' },
+    { id:'deepseek', name:'DeepSeek', cat:'foundation', tier:2, desc:'Chinese lab shipping low-cost, high-performance open-weight models, now on V4.' },
+    { id:'amazon', name:'Amazon', cat:'foundation', tier:2, desc:'Nova model family underlies Alexa+ and AWS Bedrock.' },
+    { id:'cohere', name:'Cohere', cat:'foundation', tier:1, desc:'Enterprise-focused LLMs delivered through its North workspace platform.' },
+
+    // General-purpose agents
+    { id:'chatgpt', name:'ChatGPT', cat:'general', tier:3, desc:'900 million weekly users; Agent mode plans and executes multi-step tasks with tool use.' },
+    { id:'claude', name:'Claude', cat:'general', tier:3, desc:'Computer Use controls the desktop, Cowork manages background tasks, and Dispatch assigns work from a phone.' },
+    { id:'gemini', name:'Gemini', cat:'general', tier:3, desc:'Deep Workspace and Android integration; agent mode is powered by Project Mariner.' },
+    { id:'copilot', name:'Microsoft Copilot', cat:'general', tier:2, desc:'Enterprise-first assistant — 2026 reviews score it lowest on "agenticness" among the majors, closer to a reactive tool.' },
+    { id:'perpcomputer', name:'Perplexity Computer', cat:'general', tier:2, desc:'Top-ranked general agent in 2026 reviews. Orchestrates 19 models across cloud microVMs with 400+ integrations — behind a $200/month tier.' },
+    { id:'manus', name:'Manus', cat:'general', tier:2, desc:'Butterfly Effect’s long-running autonomous agent. Meta’s roughly $2B acquisition was blocked by Chinese regulators in April 2026.' },
+    { id:'openclaw', name:'OpenClaw', cat:'general', tier:2, desc:'Open-source, self-hosted agent you message like a coworker across 29 channels; passed 247,000 GitHub stars by March 2026 — but you run the server.' },
+    { id:'hermesagent', name:'Hermes Agent', cat:'general', tier:1, desc:'Nous Research’s open-source agent that runs on your own server and keeps context over time.' },
+    { id:'autogpt', name:'AutoGPT', cat:'general', tier:1, desc:'Early open-source autonomous-agent framework — still aimed at developers, not end users.' },
+
+    // Computer-use / browser agents
+    { id:'atlas', name:'OpenAI Atlas / Operator', cat:'computeruse', tier:2, desc:'Operator’s browser agent now ships as its own browser, Atlas, with autonomous Agent Mode.' },
+    { id:'geminicu', name:'Gemini Computer Use', cat:'computeruse', tier:2, desc:'Grew out of Project Mariner; automates via DOM and accessibility tree rather than raw pixels.' },
+    { id:'claudecu', name:'Anthropic Computer Use', cat:'computeruse', tier:2, desc:'Controls the full desktop — any application a human could use, not just the browser.' },
+    { id:'comet', name:'Perplexity Comet', cat:'computeruse', tier:2, desc:'Free, research-first agentic browser that executes tasks across authenticated sessions.' },
+    { id:'dia', name:'Dia (The Browser Company)', cat:'computeruse', tier:1, desc:'"Chat with your tabs" — your open browsing context becomes a workspace.' },
+    { id:'operaneon', name:'Opera Neon', cat:'computeruse', tier:1, desc:'Generative, agentic browser built around the Aria assistant.' },
+    { id:'braveleo', name:'Brave Leo', cat:'computeruse', tier:1, desc:'Privacy-first browser assistant with emerging agent features.' },
+
+    // Coding agents
+    { id:'cursor', name:'Cursor (Anysphere)', cat:'coding', tier:3, desc:'AI-native IDE; its in-house Composer 2.5 model matches frontier labs on benchmarks.' },
+    { id:'devin', name:'Devin / Devin Desktop (Cognition)', cat:'coding', tier:2, desc:'Cognition retired the Windsurf brand and cut Devin’s entry price from $500 to $20/month.' },
+    { id:'claudecode', name:'Claude Code', cat:'coding', tier:2, desc:'Terminal-native agent with direct file-system and shell access.' },
+    { id:'ghcopilot', name:'GitHub Copilot', cat:'coding', tier:3, desc:'Largest install base of any IDE copilot, backed by Microsoft.' },
+    { id:'replitagent', name:'Replit Agent', cat:'coding', tier:2, desc:'Browser-based app builder — scaffolds, writes, and runs code with zero local setup.' },
+    { id:'codexcli', name:'OpenAI Codex CLI', cat:'coding', tier:1, desc:'Terminal coding agent counterpart to ChatGPT.' },
+
+    // Vertical / industry agents
+    { id:'harvey', name:'Harvey', cat:'vertical', tier:2, desc:'Legal research, drafting, and due diligence — closed Q2 2026 at $300M ARR and an $11B valuation.' },
+    { id:'sierra', name:'Sierra', cat:'vertical', tier:2, desc:'Customer-service agents; crossed $150M ARR and a $15.8B valuation by May 2026.' },
+    { id:'decagon', name:'Decagon', cat:'vertical', tier:2, desc:'Enterprise support agents that resolve 70-90% of tickets, with a human-oversight console.' },
+    { id:'hippocratic', name:'Hippocratic AI', cat:'vertical', tier:2, desc:'Non-diagnostic, patient-facing healthcare agents — over 180 million logged clinical interactions.' },
+    { id:'abridge', name:'Abridge', cat:'vertical', tier:1, desc:'Ambient clinical documentation that drafts notes during doctor visits.' },
+    { id:'evenup', name:'EvenUp', cat:'vertical', tier:1, desc:'Agent that builds personal-injury legal claims from case files.' },
+    { id:'buddee', name:'Buddee Health', cat:'vertical', tier:1, tag:'Your project', desc:'Health AI agent venture — the active project in this workspace, sitting inside the same vertical-agent wave as Hippocratic AI and Abridge.' },
+
+    // Enterprise automation / RPA
+    { id:'uipath', name:'UiPath', cat:'enterprise', tier:2, desc:'Large-scale enterprise RPA with an agentic layer and document understanding on top.' },
+    { id:'autoanywhere', name:'Automation Anywhere', cat:'enterprise', tier:2, desc:'"Agentic RPA" turns a plain-language process description into a bot plus a reasoning agent.' },
+    { id:'blueprism', name:'SS&C Blue Prism', cat:'enterprise', tier:1, desc:'Legacy RPA vendor layering agent orchestration onto existing bots.' },
+    { id:'servicenow', name:'ServiceNow', cat:'enterprise', tier:3, desc:'Autonomous Workforce expanded in May 2026 to span IT, HR, finance, legal, and procurement.' },
+    { id:'agentforce', name:'Salesforce Agentforce', cat:'enterprise', tier:2, desc:'Passed $500M ARR with 330% growth as of 2026.' },
+    { id:'agent365', name:'Microsoft Agent 365', cat:'enterprise', tier:2, desc:'Centralized governance and management layer for enterprise AI agents, generally available May 1, 2026.' },
+    { id:'orby', name:'Orby AI', cat:'enterprise', tier:1, desc:'AI-native agent builder for enterprise workflows, competing with legacy RPA.' },
+
+    // Agent infrastructure
+    { id:'langchain', name:'LangChain', cat:'infra', tier:2, desc:'The most widely used agent-orchestration framework, despite persistent complexity criticism.' },
+    { id:'huggingface', name:'Hugging Face', cat:'infra', tier:3, desc:'Hosts 500,000+ open models — the default distribution hub for open weights.' },
+    { id:'coreweave', name:'CoreWeave', cat:'infra', tier:2, desc:'Dominant GPU cloud; went public in March 2026 with Q1 revenue up 112% year over year.' },
+    { id:'togetherai', name:'Together AI', cat:'infra', tier:2, desc:'Open-model inference at scale, competing on price and flexibility.' },
+    { id:'fireworks', name:'Fireworks AI', cat:'infra', tier:1, desc:'Fast inference-serving layer that production agents route through.' },
+    { id:'groq', name:'Groq', cat:'infra', tier:2, desc:'Custom LPU chips built for low-latency inference.' },
+    { id:'modal', name:'Modal', cat:'infra', tier:1, desc:'Serverless compute built for AI workloads.' },
+    { id:'openrouter', name:'OpenRouter', cat:'infra', tier:1, desc:'Unified API routing across dozens of model providers.' },
+
+    // On-device / local AI
+    { id:'ollama', name:'Ollama', cat:'local', tier:2, desc:'The most popular way to pull and run open models locally.' },
+    { id:'lmstudio', name:'LM Studio', cat:'local', tier:1, desc:'Desktop GUI for running local LLMs — no command line required, but still model management.' },
+    { id:'rtxspark', name:'Nvidia RTX Spark / DGX Spark', cat:'local', tier:3, desc:'Consumer chip running 120B-parameter models fully on-device with a 1M-token context; laptops ship holiday 2026.' },
+    { id:'appleintel', name:'Apple Intelligence', cat:'local', tier:2, desc:'On-device models built directly into macOS and iOS.' },
+    { id:'msscout', name:'Microsoft Scout & Aion', cat:'local', tier:2, desc:'Local, on-device models Microsoft shipped alongside Windows in May 2026.' },
+    { id:'hermesdesktop', name:'Hermes Desktop (Nous Research)', cat:'local', tier:1, desc:'Local desktop agent released in the same late-May 2026 wave as RTX Spark.' },
+    { id:'thoth', name:'Thoth', cat:'local', tier:1, desc:'Open-source, fully offline local-first assistant with no accounts or telemetry.' },
+
+    // Consumer AI hardware
+    { id:'humane', name:'Humane (AI Pin)', cat:'hardware', tier:1, desc:'Shut down — HP acquired the assets for $116M after Humane raised $230M and shipped under 10,000 units.' },
+    { id:'rabbit', name:'Rabbit (R1)', cat:'hardware', tier:1, desc:'Mass returns after launch; pivoted to an "AI agent assistant" framing and is teasing a 2026 sequel device.' },
+    { id:'oems', name:'PC makers (RTX Spark devices)', cat:'hardware', tier:1, desc:'ASUS, Dell, HP, Lenovo, Microsoft Surface, and MSI are shipping RTX Spark laptops and mini-PCs for holiday 2026.' },
+  ];
+
+  const gapDetailHTML = `
+    <p>Every category on this map reaches toward the center from a different angle. None of them occupy it.</p>
+    <p><strong>General-purpose agents</strong> (Perplexity Computer, ChatGPT, Claude) are the most capable pound-for-pound — but the strongest one runs tasks in a cloud microVM, not on your laptop, and its full autonomy sits behind a $200/month tier.</p>
+    <p><strong>Open-source agents</strong> (OpenClaw, Hermes Agent, AutoGPT) get closest to "do anything on my machine," but assume you can self-host a server, manage API keys, or run a command line — exactly the technical knowledge a non-technical consumer doesn’t have.</p>
+    <p><strong>Computer-use agents</strong> (Atlas, Comet, Gemini Computer Use, Claude Computer Use) can drive a real screen, but most stay scoped to the browser — full desktop control still ships as a developer-facing permission, not a consumer feature.</p>
+    <p><strong>On-device AI</strong> (Ollama, LM Studio, RTX Spark) solves privacy and cost, but assumes you already know what a model, a context window, or a GPU is.</p>
+    <p><strong>Consumer hardware</strong> (Rabbit, Humane) tried to sidestep all of it with a new device — and both lost billions in value within a year.</p>
+    <p>The opening: an agent that installs like a normal app, asks nothing about models or keys, runs on the laptop already on the desk, and takes literally any task from someone who has never heard the word "API."</p>
+  `;
+
+  const gapEdges = ['general','computeruse','local','hardware'];
+
+  // ---------- Layout ----------
+
+  const W = 1200, H = 820, CX = W/2, CY = H/2, R = 250, RL = 340;
+
+  categories.forEach(c=>{
+    const rad = c.angle * Math.PI/180;
+    c.tx = CX + R*Math.cos(rad);
+    c.ty = CY + R*Math.sin(rad);
+    c.lx = CX + RL*Math.cos(rad);
+    c.ly = CY + RL*Math.sin(rad);
+  });
+  const catById = Object.fromEntries(categories.map(c=>[c.id,c]));
+
+  const tierR = {3:9, 2:6.5, 1:5};
+  const nodes = companies.map(c => Object.assign({}, c, {
+    r: tierR[c.tier] || 6,
+    x: catById[c.cat].tx + (Math.random()-0.5)*30,
+    y: catById[c.cat].ty + (Math.random()-0.5)*30,
+  }));
+
+  const gapNode = { id:'gap', name:'The zero-setup general laptop agent', cat:'gap', r:22, isGap:true,
+    desc:'The empty center of this map — no product yet lets a non-technical person install one app on the laptop they already own and hand it literally any task.',
+    x:CX, y:CY, fx:CX, fy:CY };
+  nodes.push(gapNode);
+
+  // ---------- Chrome: stats + chips + footer ----------
+
+  document.getElementById('statsRow').innerHTML =
+    `<span class="stat-chip"><b>${companies.length}</b> companies</span>` +
+    `<span class="stat-chip"><b>${categories.length}</b> categories</span>` +
+    `<span class="stat-chip gap-chip">1 gap: the non-technical local general agent</span>`;
+
+  const activeCats = new Set(categories.map(c=>c.id));
+  const chipRow = document.getElementById('chipRow');
+  categories.forEach(c=>{
+    const n = companies.filter(x=>x.cat===c.id).length;
+    const el = document.createElement('div');
+    el.className = 'chip';
+    el.innerHTML = `<span class="dot" style="background:${c.color}"></span>${c.label} (${n})`;
+    el.addEventListener('click', ()=>{
+      if (activeCats.has(c.id)) { activeCats.delete(c.id); el.classList.add('off'); }
+      else { activeCats.add(c.id); el.classList.remove('off'); }
+      applyFilters();
+    });
+    chipRow.appendChild(el);
+  });
+
+  document.getElementById('footerNote').innerHTML =
+    'Scoped to companies building agents that complete tasks — foundation models, general/computer-use/coding/vertical agents, enterprise automation, agent infrastructure, on-device AI, and consumer hardware. Pure generative-media AI (image, video, audio) is out of scope. Figures are approximate, drawn from public reporting as of July 2026 and will move. Built as a starting map, not an exhaustive registry.';
+
+  // ---------- SVG setup ----------
+
+  const svg = d3.select('#svg').attr('viewBox', `0 0 ${W} ${H}`);
+  const root = svg.append('g');
+  const linkLayer = root.append('g');
+  const labelLayer = root.append('g');
+  const nodeLayer = root.append('g');
+  const tooltip = document.getElementById('tooltip');
+  const panel = document.getElementById('panel');
+
+  const zoom = d3.zoom().scaleExtent([0.5,4]).on('zoom', (ev)=> root.attr('transform', ev.transform));
+  svg.call(zoom).on('dblclick.zoom', null);
+
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+    document.getElementById('search').value = '';
+    activeCats.clear();
+    categories.forEach(c=>activeCats.add(c.id));
+    document.querySelectorAll('.chip').forEach(el=>el.classList.remove('off'));
+    applyFilters();
+    selectNode(gapNode);
+  });
+
+  // dashed gap connectors (static — gap node is pinned)
+  gapEdges.forEach(id=>{
+    const c = catById[id];
+    linkLayer.append('line')
+      .attr('x1', CX).attr('y1', CY).attr('x2', c.tx).attr('y2', c.ty)
+      .attr('stroke', '#FBBF24').attr('stroke-opacity', 0.35)
+      .attr('stroke-width', 1.4).attr('stroke-dasharray', '3,4');
+  });
+
+  // category labels
+  categories.forEach(c=>{
+    const anchor = Math.cos(c.angle*Math.PI/180) > 0.15 ? 'start' : (Math.cos(c.angle*Math.PI/180) < -0.15 ? 'end' : 'middle');
+    const words = c.label.split(' ');
+    const t = labelLayer.append('text')
+      .attr('class','cat-label')
+      .attr('x', c.lx).attr('y', c.ly)
+      .attr('text-anchor', anchor);
+    // wrap into up to 2 lines
+    let line1 = c.label, line2 = '';
+    if (c.label.length > 16) {
+      const mid = Math.ceil(words.length/2);
+      line1 = words.slice(0,mid).join(' ');
+      line2 = words.slice(mid).join(' ');
+    }
+    t.append('tspan').attr('x', c.lx).attr('dy', 0).text(line1);
+    if (line2) t.append('tspan').attr('x', c.lx).attr('dy', 13).text(line2);
+  });
+
+  // gap pulse rings (behind main node)
+  const pulseWrap = nodeLayer.append('g').attr('transform', `translate(${CX},${CY})`);
+  for (let i=0;i<2;i++){
+    pulseWrap.append('circle')
+      .attr('r', gapNode.r)
+      .attr('fill', 'none')
+      .attr('stroke', '#FBBF24')
+      .attr('stroke-width', 1.5)
+      .style('transform-box','fill-box').style('transform-origin','center')
+      .style('animation', `pulse 2.6s ease-out ${i*1.3}s infinite`);
+  }
+  const styleTag = document.createElement('style');
+  styleTag.textContent = `@keyframes pulse{0%{transform:scale(1);opacity:.6}75%{transform:scale(2.4);opacity:0}100%{transform:scale(2.4);opacity:0}}`;
+  document.head.appendChild(styleTag);
+
+  // node groups
+  const nodeSel = nodeLayer.selectAll('g.node-group')
+    .data(nodes, d=>d.id)
+    .join('g')
+      .attr('class','node-group')
+      .attr('transform', d=>`translate(${d.x},${d.y})`)
+      .call(drag(()=>simulation));
+
+  nodeSel.append('circle')
+    .attr('class','ring')
+    .attr('r', d=> d.r + 4)
+    .attr('fill','none')
+    .attr('stroke', d=> d.isGap ? '#FBBF24' : '#FFFFFF')
+    .attr('stroke-width', 0);
+
+  nodeSel.append('circle')
+    .attr('class','main')
+    .attr('r', d=>d.r)
+    .attr('fill', d=> d.isGap ? 'rgba(251,191,36,0.12)' : catById[d.cat].color)
+    .attr('fill-opacity', d=> d.isGap ? 1 : 0.88)
+    .attr('stroke', d=> d.isGap ? '#FBBF24' : 'rgba(0,0,0,.35)')
+    .attr('stroke-width', d=> d.isGap ? 1.6 : 1)
+    .attr('stroke-dasharray', d=> d.isGap ? '3,3' : null);
+
+  nodeSel
+    .on('mouseenter', function(ev,d){
+      d3.select(this).select('circle.main').attr('stroke-width', d.isGap ? 2.2 : 2).attr('stroke', d.isGap? '#FBBF24' : '#fff');
+      tooltip.style.opacity = 1;
+      tooltip.innerHTML = `<b>${d.name}</b>${d.isGap ? 'The gap in the map' : catById[d.cat].label}`;
+    })
+    .on('mousemove', function(ev){
+      tooltip.style.left = (ev.clientX + 16) + 'px';
+      tooltip.style.top = (ev.clientY + 12) + 'px';
+    })
+    .on('mouseleave', function(ev,d){
+      d3.select(this).select('circle.main').attr('stroke-width', d.isGap?1.6:1).attr('stroke', d.isGap ? '#FBBF24' : 'rgba(0,0,0,.35)');
+      tooltip.style.opacity = 0;
+    })
+    .on('click', function(ev,d){ ev.stopPropagation(); selectNode(d); });
+
+  svg.on('click', ()=> selectNode(gapNode));
+
+  // ---------- Simulation ----------
+
+  const simulation = d3.forceSimulation(nodes)
+    .force('charge', d3.forceManyBody().strength(d=> d.isGap ? -300 : -26))
+    .force('collide', d3.forceCollide().radius(d=>d.r+3).iterations(2))
+    .force('x', d3.forceX(d=> d.isGap ? CX : catById[d.cat].tx).strength(d=> d.isGap ? 1 : 0.11))
+    .force('y', d3.forceY(d=> d.isGap ? CY : catById[d.cat].ty).strength(d=> d.isGap ? 1 : 0.11))
+    .on('tick', ()=>{
+      nodeSel.attr('transform', d=>`translate(${d.x},${d.y})`);
+    });
+
+  function drag(simAccessor){
+    function started(ev,d){ if(!ev.active) simAccessor().alphaTarget(0.12).restart(); d.fx=d.x; d.fy=d.y; }
+    function dragged(ev,d){ d.fx=ev.x; d.fy=ev.y; }
+    function ended(ev,d){ if(!ev.active) simAccessor().alphaTarget(0); if(!d.isGap){ d.fx=null; d.fy=null; } }
+    return d3.drag().on('start',started).on('drag',dragged).on('end',ended);
+  }
+
+  // ---------- Filtering ----------
+
+  function applyFilters(){
+    const q = document.getElementById('search').value.trim().toLowerCase();
+    nodeSel.each(function(d){
+      const sel = d3.select(this);
+      if (d.isGap){ sel.style('display', null).style('opacity', 1); return; }
+      const catOk = activeCats.has(d.cat);
+      const searchOk = !q || d.name.toLowerCase().includes(q);
+      sel.style('display', catOk ? null : 'none');
+      sel.style('opacity', (catOk && searchOk) ? 1 : (catOk ? 0.15 : 0));
+    });
+  }
+  document.getElementById('search').addEventListener('input', applyFilters);
+
+  // ---------- Panel ----------
+
+  let selectedId = null;
+  function selectNode(d){
+    selectedId = d.id;
+    nodeSel.select('circle.ring').attr('stroke-width', n=> n.id===selectedId ? 2.5 : 0);
+    if (d.isGap){
+      panel.innerHTML = `
+        <div class="badge" style="color:#FBBF24;border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)">The gap</div>
+        <h2>${d.name}</h2>
+        <div class="gap-detail">${gapDetailHTML}</div>
+      `;
+      return;
+    }
+    const c = catById[d.cat];
+    panel.innerHTML = `
+      <div class="badge" style="color:${c.color};border-color:${c.color}66;background:${c.color}1a">${c.label}</div>
+      ${d.tag ? `<span class="tag">${d.tag}</span>` : ''}
+      <h2>${d.name}</h2>
+      <p class="panel-desc">${d.desc}</p>
+      <div class="hint">Click the glowing gold node at the center of the map to see why none of these fill the gap.</div>
+    `;
+  }
+
+  selectNode(gapNode);
+})();
+</script>
+</body>
+</html>
