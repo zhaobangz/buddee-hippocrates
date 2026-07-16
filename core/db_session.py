@@ -38,6 +38,7 @@ import uuid
 from typing import Any, Generator, Optional
 
 from fastapi import Request
+from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
@@ -97,6 +98,68 @@ def set_worker_context(db: Session, enabled: bool) -> None:
         )
 
 
+class GucStamper:
+    """Re-stamp the RLS GUCs at the start of *every* transaction on a session.
+
+    ``set_config(..., true)`` is **transaction**-scoped: the first
+    ``COMMIT``/``ROLLBACK`` on the session silently clears ``app.tenant_id``.
+    Any handler that commits mid-request (the audit logger does, on nearly
+    every route) would leave the remainder of the request running with an
+    empty GUC — under ``FORCE ROW LEVEL SECURITY`` that means every later
+    SELECT returns zero rows and every later INSERT/UPDATE fails its
+    ``WITH CHECK``. Tests never see this because they run on SQLite.
+
+    The fix is the canonical multi-tenant RLS pattern: hook the session's
+    ``after_begin`` event and re-issue the transaction-local ``set_config``
+    each time a new transaction begins. This preserves the fail-closed
+    default (a pooled connection carries no GUC between requests) while
+    surviving any number of mid-request commits.
+    """
+
+    def __init__(self, tenant_id: Optional[uuid.UUID] = None, worker_mode: bool = False):
+        self.tenant_id = tenant_id
+        self.worker_mode = worker_mode
+
+    # -- listener --------------------------------------------------------
+    def _after_begin(self, session: Session, transaction, connection) -> None:
+        # Savepoints (nested transactions) inherit the enclosing
+        # transaction's GUCs — only stamp real top-level transactions.
+        if getattr(transaction, "nested", False):
+            return
+        if connection.dialect.name != "postgresql":
+            return  # SQLite/tests: RLS does not exist; nothing to stamp.
+        try:
+            connection.execute(
+                text("SELECT set_config('app.tenant_id', :val, true)"),
+                {"val": "" if self.tenant_id is None else str(self.tenant_id)},
+            )
+            connection.execute(
+                text("SELECT set_config('app.worker_mode', :val, true)"),
+                {"val": "1" if self.worker_mode else ""},
+            )
+        except SQLAlchemyError as e:
+            logger.warning("GUC re-stamp failed (RLS defense-in-depth degraded): %s", e)
+
+    # -- lifecycle -------------------------------------------------------
+    def install(self, db: Session) -> None:
+        event.listen(db, "after_begin", self._after_begin)
+        # Stamp the current/first transaction immediately as well.
+        set_tenant_context(db, self.tenant_id)
+        set_worker_context(db, self.worker_mode)
+
+    def remove(self, db: Session) -> None:
+        try:
+            event.remove(db, "after_begin", self._after_begin)
+        except Exception:  # listener may already be gone on teardown paths
+            pass
+
+    def set_tenant(self, db: Session, tenant_id: Optional[uuid.UUID]) -> None:
+        """Switch the stamped tenant (worker loop reuses one session per job)."""
+
+        self.tenant_id = tenant_id
+        set_tenant_context(db, tenant_id)
+
+
 def tenant_scoped_session(request: Request) -> Generator[Session, None, None]:
     """FastAPI dependency that yields an RLS-scoped DB session.
 
@@ -104,14 +167,20 @@ def tenant_scoped_session(request: Request) -> Generator[Session, None, None]:
     populated by :func:`backend.auth.require_api_client`. Routes that
     bypass auth (``/health``) still depend on this, and for those the
     GUC is explicitly cleared.
+
+    The GUC is (re-)stamped at every transaction start via
+    :class:`GucStamper`, so mid-request commits cannot strip the RLS
+    context from the remainder of the request.
     """
 
     tenant_id = _coerce_tenant_id(getattr(request.state, "tenant_id", None))
     db = SessionLocal()
+    stamper = GucStamper(tenant_id=tenant_id, worker_mode=False)
     try:
-        set_tenant_context(db, tenant_id)
+        stamper.install(db)
         yield db
     finally:
+        stamper.remove(db)
         try:
             # Clear the GUC on the connection before returning it to the
             # pool so a subsequent borrow cannot accidentally inherit a
@@ -123,4 +192,9 @@ def tenant_scoped_session(request: Request) -> Generator[Session, None, None]:
         db.close()
 
 
-__all__ = ["set_tenant_context", "set_worker_context", "tenant_scoped_session"]
+__all__ = [
+    "GucStamper",
+    "set_tenant_context",
+    "set_worker_context",
+    "tenant_scoped_session",
+]

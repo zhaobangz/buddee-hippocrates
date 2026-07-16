@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -733,6 +734,7 @@ def _verify_audit_chain(
     query = db.query(models.AuditEvent)
     if tenant_id is not None:
         query = query.filter(models.AuditEvent.tenant_id == tenant_id)
+    previous_hash = None
     if day is not None:
         # Build-out B7.2: scope the re-walk to a single day so Postgres can
         # partition-prune the monthly audit_events partitions instead of
@@ -742,8 +744,16 @@ def _verify_audit_chain(
             models.AuditEvent.timestamp >= start,
             models.AuditEvent.timestamp < start + timedelta(days=1),
         )
+        # Seed the walk with the chain tip from *before* the window.
+        # Starting a day-scoped walk from None used to flag the first event
+        # of every day (whose previous_hash correctly points at the prior
+        # day's tip) as "chain_broken" — a false tamper alarm.
+        seed_query = db.query(models.AuditEvent).filter(models.AuditEvent.timestamp < start)
+        if tenant_id is not None:
+            seed_query = seed_query.filter(models.AuditEvent.tenant_id == tenant_id)
+        seed_event = seed_query.order_by(models.AuditEvent.event_id.desc()).first()
+        previous_hash = seed_event.cryptographic_hash if seed_event else None
     events = query.order_by(models.AuditEvent.event_id.asc()).all()
-    previous_hash = None
     event_statuses: Dict[int, str] = {}
     recomputed = 0
     for event in events:
@@ -790,6 +800,25 @@ def _verify_audit_chain(
     }
 
 
+# Serialize the (read chain tip -> insert -> commit) critical section of the
+# audit logger. Without this, two concurrent writers read the same tip and
+# both chain onto it — a fork that _verify_audit_chain later reports as
+# "chain_broken" (a false tamper alarm on the product's flagship guarantee).
+#
+#   * Postgres: a transaction-scoped advisory lock keyed per tenant chain.
+#     Auto-released at COMMIT/ROLLBACK, cross-process and cross-instance safe.
+#   * Other dialects (SQLite in tests): a process-level mutex. SQLite
+#     serializes writers anyway; the mutex closes the in-process window.
+_AUDIT_CHAIN_FALLBACK_LOCK = threading.Lock()
+
+
+def _audit_chain_lock_key(tenant_id: str | None) -> int:
+    """Stable signed-64-bit advisory-lock key for a tenant's audit chain."""
+
+    digest = hashlib.sha256(f"buddi-audit-chain:{tenant_id or 'global'}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big", signed=True)
+
+
 def log_audit_event_postgres(
     db: Session,
     event_type: str,
@@ -798,7 +827,16 @@ def log_audit_event_postgres(
     tenant_id: str | None = None,
     request_id: str | None = None,
 ) -> str | None:
-    """Append-only audit logger with cryptographic chaining."""
+    """Append-only audit logger with cryptographic chaining.
+
+    The tip-read → hash → insert → commit section is serialized per tenant
+    (advisory lock on Postgres, process mutex elsewhere) so concurrent
+    requests/workers cannot fork the hash chain.
+    """
+    is_postgres = bool(getattr(db.bind, "dialect", None)) and db.bind.dialect.name == "postgresql"
+    fallback_lock = _AUDIT_CHAIN_FALLBACK_LOCK if not is_postgres else None
+    if fallback_lock is not None:
+        fallback_lock.acquire()
     try:
         event_timestamp = datetime.now(timezone.utc)
         hash_input_timestamp = event_timestamp.isoformat()
@@ -811,6 +849,13 @@ def log_audit_event_postgres(
                 "request_id": request_id,
             },
         }
+        if is_postgres:
+            # Held until the COMMIT below (or the ROLLBACK in the except
+            # branch), covering exactly the tip-read + insert window.
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"),
+                {"key": _audit_chain_lock_key(tenant_id)},
+            )
         last_event_query = db.query(models.AuditEvent)
         if tenant_id:
             last_event_query = last_event_query.filter(models.AuditEvent.tenant_id == _uuid_or_none(tenant_id))
@@ -847,6 +892,9 @@ def log_audit_event_postgres(
         logger.error("Audit log failed (DB likely offline): %s", e)
         db.rollback()
         return None
+    finally:
+        if fallback_lock is not None:
+            fallback_lock.release()
 
 
 # --- Routes --------------------------------------------------------------
@@ -1683,6 +1731,10 @@ async def _fire_webhook(
         logger.warning("Webhook dispatch (%s) failed: %s", event_type, redact_for_logs(str(e)))
 
 
+# Strong refs for fire-and-forget webhook tasks (see _maybe_schedule_audit_flagged).
+_FIRE_AND_FORGET_TASKS: set = set()
+
+
 async def _dispatch_audit_flagged(tenant_id_str: str, payload: Dict[str, Any]) -> None:
     """Fire audit_event.flagged on its own short-lived session (background task)."""
 
@@ -1717,12 +1769,17 @@ def _maybe_schedule_audit_flagged(
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return  # no event loop (sync context, e.g. CLI) — skip best-effort delivery
-    loop.create_task(
+    task = loop.create_task(
         _dispatch_audit_flagged(
             tenant_id_str,
             {"event_type": event_type, "audit_hash": audit_hash, "risk": risk},
         )
     )
+    # Hold a strong reference until completion: the event loop only keeps
+    # weak refs to tasks, so an un-referenced fire-and-forget task can be
+    # garbage-collected mid-flight and never deliver (asyncio docs warning).
+    _FIRE_AND_FORGET_TASKS.add(task)
+    task.add_done_callback(_FIRE_AND_FORGET_TASKS.discard)
 
 
 @app.post("/api/webhooks", status_code=201)
@@ -2899,6 +2956,19 @@ async def seal_audit_root_now(
             target = date.fromisoformat(day)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=f"Invalid day: {e}") from e
+        # A Merkle root is defined over a *complete* UTC day. Sealing today
+        # (or a future day) would sign a partial set of events; the next
+        # verification pass would then recompute a different root and report
+        # the day as tampered — and the Object Lock mirror of the premature
+        # envelope cannot be deleted. Refuse rather than poison the trail.
+        if target >= datetime.now(timezone.utc).date():
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Cannot seal {target.isoformat()}: the UTC day is not complete. "
+                    "Only past days can be sealed."
+                ),
+            )
     else:
         target = None
     tenant_id = _require_tenant_id(request)
