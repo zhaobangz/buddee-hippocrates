@@ -55,6 +55,8 @@ def add_business_days(start: date, days: int) -> date:
 
 def org_short(org: str) -> str:
     """Compact org name for the 300-char LinkedIn budget."""
+    # Drop parenthetical aliases like "(fka Apollo ...)" — history, not the brand.
+    org = re.sub(r"\s*\([^)]*\)", "", org).strip()
     cut = re.split(r",| LLC| Inc| Medical Group| Physicians| Management", org)[0].strip()
     return cut if len(cut) >= 4 else org.strip()
 
