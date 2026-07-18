@@ -205,4 +205,4 @@ docs/        operational and setup guides
 - `docs/FRONTEND_BACKEND_CONNECTION.md`
 - `docs/WEB_SETUP_GUIDE.md`
 - `docs/CLOUD_DEPLOYMENT_GUIDE.md`
-- `docs/TRACING_SETUP.md`
+- `docs/TRACING_SETUP.md`# buddee-hippocrates
