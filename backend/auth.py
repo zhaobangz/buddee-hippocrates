@@ -181,5 +181,6 @@ def require_scope(required_scope: str):
                 detail=f"Scope '{required_scope}' is required for this endpoint.",
             )
         return client
-
     return _check
+
+# this is very important for the security of the system, as it ensures that only clients with the appropriate scopes can access certain endpoints.
