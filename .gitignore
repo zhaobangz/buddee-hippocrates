@@ -77,3 +77,9 @@ storage/**
 !storage/**/
 !storage/**/README.md
 .serena/
+
+# Growth outreach — generated artifacts contain rendered contact PII
+growth/outbox/
+
+# Pitch deck — binary with strategy/financial detail
+docs/*.pptx

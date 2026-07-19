@@ -12,7 +12,7 @@ Placeholders use str.format-style fields:
 FOUNDER = {
     "founder_name": "Zhao",
     "founder_title": "Founder, Buddee",
-    "founder_email": "zhuzhaobang70@gmail.com",
+    "founder_email": "[email]",
     "founder_phone": "[phone]",
     "demo_link": "[demo link]",
 }

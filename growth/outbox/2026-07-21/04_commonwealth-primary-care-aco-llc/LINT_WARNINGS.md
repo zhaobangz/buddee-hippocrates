@@ -1,4 +1,0 @@
-- unresolved placeholder [First name] — personalize before sending
-- unresolved placeholder [First name] — personalize before sending
-- unresolved placeholder [First name] — personalize before sending
-- unresolved placeholder [First name] — personalize before sending
