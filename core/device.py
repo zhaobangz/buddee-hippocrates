@@ -2,17 +2,22 @@
 
 Provides a small, safe API for deciding whether to use CUDA / MPS or CPU.
 """
+import logging
+from contextlib import suppress
 from typing import Tuple
 
+logger = logging.getLogger(__name__)
+
 try:
-    import torch  # type: ignore
-except Exception:
+    import torch  # type: ignore[import-not-found]
+except ImportError:
     torch = None
 
 try:
     # newer PyTorch exposes mps availability
     has_mps = torch is not None and getattr(torch.backends, 'mps', None) is not None and torch.backends.mps.is_available()
 except Exception:
+    logger.debug("PyTorch MPS backend check failed", exc_info=True)
     has_mps = False
 
 
@@ -40,11 +45,9 @@ def get_torch_device(preferred: str = 'auto', force_cpu: bool = False) -> Tuple[
 
     # auto-detect
     if torch is not None:
-        try:
+        with suppress(Exception):
             if torch.cuda.is_available():
                 return 'cuda', 0
-        except Exception:
-            pass
     if has_mps:
         return 'mps', -1
     return 'cpu', -1

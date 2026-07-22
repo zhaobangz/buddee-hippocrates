@@ -91,7 +91,8 @@ clinician review confirms the new behaviour is desired.
 ## Growing the golden set
 
 The seed set is ten cases (one per major HCC bucket the manual's
-primary ICP cares about — diabetes complications, CHF, COPD, CKD).
+primary ICP cares about — diabetes complications, CHF, COPD, CKD,
+hypertension, dementia, depression, CAD, sepsis, anemia).
 Hire #1's first deliverable (§5.2) is to grow this to 100, with two
 constraints:
 

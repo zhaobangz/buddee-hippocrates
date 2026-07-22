@@ -45,7 +45,7 @@ os.environ.setdefault("BUDDI_RATE_LIMIT_DISABLED", "1")
 os.environ.setdefault("BUDDI_DISABLE_JOB_WORKER", "1")
 # Point the signed-roots export at a per-run temp dir so tests don't write
 # into the developer's checked-in storage/audit_roots/.
-import tempfile  # noqa: E402
+import tempfile
 os.environ.setdefault(
     "BUDDI_AUDIT_ROOTS_DIR",
     os.path.join(tempfile.gettempdir(), "buddi-test-audit-roots"),
@@ -60,8 +60,8 @@ os.environ.setdefault(
     "postgresql://postgres:postgres@localhost:5433/buddi",
 )
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(scope="session")
@@ -131,7 +131,7 @@ def tenant_api_key():
             db.add(key)
             db.commit()
             created.append((tenant.id, key.id))
-        except Exception as exc:  # noqa: BLE001 - any DB failure => skip, not fail
+        except Exception as exc:
             db.rollback()
             pytest.skip(f"test Postgres unavailable; real TenantApiKey required: {exc}")
         finally:
@@ -147,7 +147,7 @@ def tenant_api_key():
                 db.query(models.TenantApiKey).filter(models.TenantApiKey.id == key_id).delete()
                 db.query(models.Tenant).filter(models.Tenant.id == tenant_id).delete()
             db.commit()
-        except Exception:  # noqa: BLE001 - best-effort cleanup
+        except Exception:
             db.rollback()
         finally:
             db.close()

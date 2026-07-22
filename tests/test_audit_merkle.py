@@ -34,7 +34,7 @@ class _FakeQuery:
     def __init__(self, rows):
         self._rows = rows
 
-    def filter(self, *args, **kwargs):  # noqa: D401 - chainable no-op
+    def filter(self, *args, **kwargs):
         return self
 
     def order_by(self, *args, **kwargs):
@@ -326,7 +326,7 @@ class _FakeAwsKms:
         self._priv = private_key
         self._pub = private_key.public_key()
 
-    def get_public_key(self, KeyId):  # noqa: N803 - boto3 kwarg casing
+    def get_public_key(self, KeyId):
         from cryptography.hazmat.primitives import serialization
 
         der = self._pub.public_bytes(
@@ -335,7 +335,7 @@ class _FakeAwsKms:
         )
         return {"PublicKey": der, "KeySpec": "ECC_NIST_P256", "SigningAlgorithms": ["ECDSA_SHA_256"]}
 
-    def sign(self, KeyId, Message, MessageType, SigningAlgorithm):  # noqa: N803
+    def sign(self, KeyId, Message, MessageType, SigningAlgorithm):
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.asymmetric import ec
 

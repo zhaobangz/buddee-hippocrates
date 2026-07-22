@@ -14,6 +14,7 @@ import logging
 import uuid
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.database import SessionLocal
 from core.models import RecoveryEvent
@@ -42,7 +43,7 @@ def log_financial_recovery(audit_hash: str, pt_id: str, amount: float) -> Recove
         db.refresh(event)
         logger.info("Logged RecoveryEvent: %s with revenue $%s", event.id, amount)
         return event
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error("Failed to log recovery: %s", e)
         db.rollback()
         return None

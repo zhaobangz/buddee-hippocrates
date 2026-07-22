@@ -59,7 +59,7 @@ def fake_redis(monkeypatch):
 
     server = fakeredis.FakeServer()
 
-    def _from_url(url, *args, **kwargs):  # noqa: ARG001 — slowapi/limits-driven signature
+    def _from_url(url, *args, **kwargs):
         return fakeredis.FakeStrictRedis(server=server, decode_responses=False)
 
     monkeypatch.setattr(redis.Redis, "from_url", classmethod(lambda cls, url, **kw: _from_url(url, **kw)))
@@ -68,7 +68,7 @@ def fake_redis(monkeypatch):
 
 
 def _build_app(config: RateLimitConfig) -> Starlette:
-    async def ok(request: Request) -> JSONResponse:  # noqa: ARG001
+    async def ok(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
     app = Starlette(routes=[Route("/echo", ok)])
@@ -138,7 +138,7 @@ def test_exempt_paths_skip_the_limiter(fake_redis):
         storage_uri="redis://fake:6379/0",
     )
 
-    async def health(request: Request) -> JSONResponse:  # noqa: ARG001
+    async def health(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
     app = Starlette(routes=[Route("/health", health)])
@@ -172,7 +172,7 @@ def test_authenticated_tenant_gets_isolated_bucket(fake_redis):
         storage_uri="redis://fake:6379/0",
     )
 
-    async def ok(request: Request) -> JSONResponse:  # noqa: ARG001
+    async def ok(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
     class StampTenant:

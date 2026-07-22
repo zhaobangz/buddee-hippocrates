@@ -1,7 +1,16 @@
+# Buddi Worker — Cloud Run service (Tier 2, PHI‑capable).
+#
+# Same image as buddi-api, CMD overridden to run the job worker.
+# Scales to zero when the queue is idle ($0 when not in use).
+#
+# Deploy with:
+#   gcloud run services replace infra/cloud-run-worker.yaml --region=$REGION
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: buddi-worker
+  annotations:
+    run.googleapis.com/launch-stage: GA
 spec:
   template:
     metadata:
@@ -10,9 +19,14 @@ spec:
         autoscaling.knative.dev/maxScale: "10"
         run.googleapis.com/vpc-access-connector: projects/PROJECT_ID/locations/REGION/connectors/buddi-vpc
         run.googleapis.com/vpc-access-egress: private-ranges-only
+        run.googleapis.com/secrets: |
+          buddi-database-url=/secrets/database-url:latest
+          buddi-secret-key=/secrets/secret-key:latest
+          buddi-storage-key=/secrets/storage-key:latest
+          buddi-anthropic-key=/secrets/anthropic-key:latest
     spec:
       containerConcurrency: 4
-      timeoutSeconds: 300   # LLM calls can take up to 5 min on large bundles
+      timeoutSeconds: 300
       serviceAccountName: buddi-worker@PROJECT_ID.iam.gserviceaccount.com
       containers:
         - image: REGION-docker.pkg.dev/PROJECT_ID/buddi/buddi-api:IMAGE_TAG
@@ -25,4 +39,10 @@ spec:
             - name: ENVIRONMENT
               value: production
             - name: BUDDI_DISABLE_MERKLE_TASK
-              value: "1"    # merkle task runs in api only
+              value: "1"
+            - name: BUDDI_BAA_CONFIRMED
+              value: "0"
+            - name: LLM_PROVIDER
+              value: anthropic
+            - name: SECRETS_DIR
+              value: /secrets

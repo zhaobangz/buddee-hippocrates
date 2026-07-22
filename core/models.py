@@ -34,7 +34,7 @@ from sqlalchemy import (
     text as sa_text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, JSONB, UUID as PG_UUID
-from sqlalchemy.orm import declarative_base, relationship  # noqa: F401  (relationship re-exported for future models)
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 

@@ -21,7 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 try:  # pragma: no cover - exercised indirectly when dependency is installed
     from argon2 import PasswordHasher
     from argon2.exceptions import VerifyMismatchError, VerificationError
-except Exception:  # pragma: no cover - keeps test-mode fallback importable
+except ImportError:  # pragma: no cover - keeps test-mode fallback importable
     PasswordHasher = None  # type: ignore[assignment]
     VerifyMismatchError = VerificationError = Exception  # type: ignore[misc,assignment]
 
@@ -78,7 +78,7 @@ def verify_api_key_hash(api_key: str, hashed_key: str) -> bool:
         return False
     try:
         return bool(_password_hasher.verify(hashed_key, api_key))
-    except (VerifyMismatchError, VerificationError, Exception):
+    except (VerifyMismatchError, VerificationError):
         return False
 
 

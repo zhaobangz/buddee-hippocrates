@@ -139,7 +139,7 @@ async def dispatch_webhook(
             )
             .all()
         )
-    except Exception as e:  # noqa: BLE001 - DB offline must not break the request
+    except Exception as e:
         logger.warning("Webhook endpoint lookup failed: %s", e)
         return []
 
@@ -175,7 +175,7 @@ async def dispatch_webhook(
                 )
                 status_code = resp.status_code
                 ok = 200 <= resp.status_code < 300
-            except Exception as e:  # noqa: BLE001 - any delivery failure is non-fatal
+            except Exception as e:
                 logger.warning("Webhook delivery to %s failed: %s", ep.url, e)
 
             if audit_logger is not None:
@@ -191,7 +191,7 @@ async def dispatch_webhook(
                         },
                         tenant_id=str(tenant_id),
                     )
-                except Exception as e:  # noqa: BLE001 - audit failure is non-fatal here
+                except Exception as e:
                     logger.warning("Webhook audit log failed: %s", e)
 
             results.append({"webhook_id": str(ep.id), "ok": ok, "status_code": status_code})

@@ -241,8 +241,8 @@ def log_audit_event(
             if logs and isinstance(logs, list):
                 last_event = logs[-1]
                 previous_hash = last_event.get("current_hash", "UNKNOWN")
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Audit log read failed (GENESIS used): {exc}")
 
     event: Dict[str, Any] = {
         "timestamp": datetime.now(timezone.utc).isoformat(),  # Security: audit timestamps must be unambiguous UTC instants.

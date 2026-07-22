@@ -45,6 +45,22 @@ logger = logging.getLogger("evals.run_eval")
 
 
 def _load_cases(cases_dir: Path) -> List[Dict[str, Any]]:
+    """Load golden cases from a directory.
+
+    When ``cases_dir`` is ``evals/golden`` (the default), the loader
+    checks for an ``evals/golden/v1/`` subdirectory first — this is where
+    ``scripts/ingest_golden_labels.py`` writes validated cases from the
+    MD advisor's spreadsheet. If ``v1/`` exists and contains at least one
+    ``case_*.json`` file it is used; otherwise the seed set in
+    ``evals/golden/`` is the fallback.
+    """
+    # P‑B1: auto‑select v1/ when present.
+    v1_dir = cases_dir / "v1"
+    if cases_dir.name == "golden" and v1_dir.is_dir():
+        v1_cases = sorted(v1_dir.glob("case_*.json"))
+        if v1_cases:
+            cases_dir = v1_dir
+
     cases: List[Dict[str, Any]] = []
     for path in sorted(cases_dir.glob("case_*.json")):
         try:
@@ -96,6 +112,7 @@ def _shadow_result_for_case(case: Dict[str, Any], *, offline: bool) -> Dict[str,
 
 
 def _extract_codes(result: Dict[str, Any]) -> tuple[List[str], List[str]]:
+    """Extract surfaced + abstained code strings from a shadow result."""
     surfaced = [
         item.get("code", "")
         for item in result.get("identified_codes", [])
@@ -107,6 +124,17 @@ def _extract_codes(result: Dict[str, Any]) -> tuple[List[str], List[str]]:
         if isinstance(item, dict)
     ]
     return surfaced, abstained
+
+
+def _extract_suggestions(
+    result: Dict[str, Any],
+) -> list[Dict[str, Any]]:
+    """Extract the full suggestion dicts (with justification) for citation metrics."""
+    return [
+        item
+        for item in result.get("identified_codes", [])
+        if isinstance(item, dict) and item.get("code")
+    ]
 
 
 def _load_baseline(path: Path) -> Dict[str, float]:
@@ -190,6 +218,7 @@ def main(argv: List[str] | None = None) -> int:
     for case in cases:
         result = _shadow_result_for_case(case, offline=args.offline)
         surfaced, abstained = _extract_codes(result)
+        suggestions = _extract_suggestions(result)
         scores.append(
             score_case(
                 case_id=case.get("case_id", "unknown"),
@@ -197,6 +226,9 @@ def main(argv: List[str] | None = None) -> int:
                 abstained_codes=abstained,
                 expected_codes=case.get("expected_codes", []),
                 must_abstain_codes=case.get("must_abstain_codes", []),
+                # P‑B2: citation metrics.
+                note=case.get("note", ""),
+                surfaced_suggestions=suggestions,
             )
         )
 

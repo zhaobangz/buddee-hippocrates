@@ -1,8 +1,8 @@
 # Buddee MVP Completion Plan
 
 **Anchored to:** Strategic Founders Operating Manual 2nd Edition (June 2026)
-**Codebase baseline:** v4.1 (pre-launch/foundation branch)
-**Generated:** June 26, 2026
+**Codebase baseline:** v4.1 (current main branch)
+**Generated:** June 26, 2026 · Last updated: July 20, 2026
 
 ---
 
@@ -29,49 +29,59 @@
 | 2 | OpenAI BAA confirmed; Anthropic BAA opened | ✅ SHIPPED | `BUDDI_BAA_CONFIRMED` env var, BAA tripwire in `llm_manager.py` |
 | 3 | Anthropic-primary LLM cutover; LangChain stripped | ✅ SHIPPED | `core/llm_manager.py` uses Anthropic SDK; `core/rag_engine.py` uses OpenAI SDK directly |
 | 4 | Postgres RLS policies via Alembic migration | ✅ SHIPPED | `core/db_session.py`, RLS migration in `alembic/versions/` |
-| 5 | 100-encounter eval harness + CI regression gate | 🔶 IN PROGRESS | `EVAL_PRECISION_FLOOR`, `EVAL_RECALL_FLOOR` env vars exist; golden set labeling needed |
+| 5 | 100-encounter eval harness + CI regression gate | 🔶 IN PROGRESS | 10-case seed set committed to `evals/golden/`; CI gate wired; full 100-case set needs clinical advisor labeling |
 | 6 | TrustAnchor copy reconciled; SOC 2 claims removed | ✅ SHIPPED | Manual confirms "resolved in v2.0" |
-| 7 | Synthea integration (25 synthetic bundles) + demo.buddi.health | 🔶 IN PROGRESS | `evals/synthea/bundles/`, `/api/demo/synthea` routes exist |
+| 7 | Synthea integration (25 synthetic bundles) + demo.buddi.health | ✅ SHIPPED | `evals/synthea/bundles/` (25 bundles), `/api/demo/synthea` routes, `?demo=true` frontend flow |
 | 8 | First design-partner LOI (risk-bearing physician group) | ❌ CARRIED FORWARD | **Human task — see §7** |
 
 ### What the codebase actually has (v4.1 inventory)
 
 **Backend (strong):**
-- FastAPI v4.1 with auth-gated routes on every endpoint
-- 16 SQLAlchemy tables with Alembic migrations
+- FastAPI v4.1 with auth-gated routes on every endpoint (31 routes)
+- 18 SQLAlchemy models with 8 Alembic migrations
 - SHA-256 hash-chained `audit_events` table (range-partitioned by month)
 - Daily KMS-signed Merkle root export to GCS/S3 Object Lock
+- Per-tenant audit chain isolation via Postgres advisory locks
+- Day-scoped chain verification (walks from prior day's tip)
 - Anthropic-primary LLM manager (`claude-opus-4-8` reasoning, `claude-sonnet-4-6` coding)
 - Tier-based model routing with adaptive thinking for reasoning tier
 - Prompt caching via Anthropic `cache_control`
 - OpenAI embeddings-only guard (`_EmbeddingsOnlyOpenAI` proxy)
-- pgvector-backed RAG engine with pluggable `Retriever` protocol
+- pgvector-backed RAG engine with pluggable `Retriever` protocol + HNSW index
 - LLM-as-judge second pass for uncertain-band HCC suggestions
 - Confidence floor + mandatory evidence quote safety gates
 - BAA tripwire (fail-closed PHI guard)
 - PHI redaction in logs and OpenTelemetry spans
 - Prompt-injection mitigation (XML-style `<clinical_note>` delimiters)
-- Async job queue (`jobs` table) with idempotency keys
+- Async job queue (`jobs` table) with idempotency keys + SSE progress streaming
 - Worker loop (in-process or standalone Cloud Run service)
 - Stripe billing (Checkout, portal, webhook)
-- Webhooks with HMAC-signed delivery
-- SMART-on-FHIR EHR connector (launch + callback)
+- Webhooks with HMAC-signed delivery (4 event types)
+- SMART-on-FHIR EHR connector (OAuth2 PKCE launch + callback)
 - SLO metrics endpoint (p95 latency, approval rates)
-- Tenant-scoped DB sessions with Postgres RLS
+- Tenant-scoped DB sessions with Postgres RLS + `GucStamper` for mid-request commits
 - CORS allow-listing (no wildcards)
 - Rate limiting middleware (in-process; Redis swap annotated)
+- Request ID propagation middleware
 - Dockerfile (non-root user, HEALTHCHECK, explicit COPYs)
 - `render.yaml` for Render Blueprint deploy
+- `docker-compose.yml` with api, worker, db (pgvector), otel-collector
+- GCP Cloud Run deployment manifests (`infra/cloud-run-*.yaml`)
 
-**Frontend (dev-grade):**
-- React 18 + Vite + Tailwind + Zustand
-- Dashboard, Shadow, Audit, Chat pages
-- API key in memory only (never localStorage)
+**Frontend (dev/demo grade):**
+- React 19 + Vite 8 + Tailwind 3.4 + Zustand 5
+- Dashboard, Review Queue (Shadow), Chat, Audit Trail pages
+- Prior-auth modal, SLO panel, analytics dashboard components
+- Dark/light theme toggle, API key in memory only (never localStorage)
+- Demo mode via `?demo=true` loads synthetic patient PT-9012
 
 **Tests & QA:**
-- pytest suite for API/auth/audit/integration paths
-- Eval harness env vars wired but golden set pending
-- Red-team suite env vars wired (`ALERT_EMAIL`, `BUDDI_RED_TEAM_BASE_URL`)
+- 18 test files covering API, auth, audit/Merkle, billing, jobs, rate limiting,
+  FHIR/SMART, webhooks, red-team, migrations, partitioning, PHI security, RAG
+  retrieval, agent safety, SLO metrics, LLM provider
+- Eval harness with 10-case golden set + CI regression gate
+- Red-team suite with 50+ adversarial prompts + nightly CI run
+- Migration smoke test with round-trip (upgrade + downgrade + upgrade)
 
 ### What the manual says must happen next (priority order)
 

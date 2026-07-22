@@ -96,7 +96,7 @@ def _wait_for_server(admin_url: str, attempts: int = 20, delay: float = 1.0) -> 
                 with eng.connect() as conn:
                     conn.execute(text("SELECT 1"))
                 return True
-            except Exception as exc:  # noqa: BLE001 — surface only after retries
+            except Exception as exc:
                 if i == attempts - 1:
                     print(f"[migrate_smoke] server unreachable: {exc}", file=sys.stderr)
                     return False
@@ -237,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
                         text(f'DROP DATABASE IF EXISTS "{scratch_db}" WITH (FORCE)')
                     )
                 print(f"[migrate_smoke] dropped scratch database {scratch_db}")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(f"[migrate_smoke] WARN: could not drop {scratch_db}: {exc}", file=sys.stderr)
         admin_eng.dispose()
     return rc

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buddi.health/evals/golden-case.schema.json",
+  "title": "Buddi Golden Eval Case",
+  "description": "A single clinician-labeled golden case for the HCC suggestion eval harness. Every case must be reviewed by a board-certified clinician (clinician_id is required and must not be a placeholder outside of the seed set).",
+  "type": "object",
+  "required": [
+    "case_id",
+    "clinician_id",
+    "labeled_at",
+    "condition_category",
+    "note",
+    "billed_codes",
+    "expected_codes"
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string",
+      "description": "Unique case identifier, e.g. 'case_001_diabetic_ckd'. Must be stable across re-labels so the eval harness can track per-case deltas.",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "clinician_id": {
+      "type": "string",
+      "description": "Identifier of the board-certified clinician who labeled this case. Must not be a placeholder — real labels require a real clinician_id. Format: 'advisor:dr-lastname' or institutional ID.",
+      "pattern": "^[a-z0-9_:-]+$"
+    },
+    "labeled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of when this label was created or last reviewed."
+    },
+    "specialty": {
+      "type": "string",
+      "description": "Clinical specialty of the labeling clinician, e.g. 'primary_care', 'cardiology', 'nephrology', 'pulmonology', 'internal_medicine'.",
+      "enum": [
+        "primary_care",
+        "cardiology",
+        "nephrology",
+        "pulmonology",
+        "internal_medicine",
+        "endocrinology",
+        "neurology",
+        "psychiatry",
+        "oncology",
+        "geriatrics",
+        "other"
+      ]
+    },
+    "tenant_id_hint": {
+      "type": "string",
+      "description": "Always 'synthetic' for committed golden cases. Real tenant IDs only appear in the gitignored golden_set/ directory.",
+      "default": "synthetic"
+    },
+    "condition_category": {
+      "type": "string",
+      "description": "Primary HCC condition category for coverage tracking. The 100-case set targets ~20 cases each across 5 categories.",
+      "enum": [
+        "diabetes",
+        "chf",
+        "copd",
+        "ckd",
+        "hypertension",
+        "dementia",
+        "depression",
+        "cad",
+        "sepsis",
+        "anemia",
+        "obesity",
+        "cancer",
+        "vascular",
+        "other"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "description": "Synthetic or Safe-Harbor de-identified clinical note text. Must not contain real PHI in committed files.",
+      "minLength": 20,
+      "maxLength": 10000
+    },
+    "billed_codes": {
+      "type": "array",
+      "description": "ICD-10-CM codes that were originally billed for this encounter.",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "expected_codes": {
+      "type": "array",
+      "description": "ICD-10-CM codes a careful clinician would surface for this encounter. These count in precision/recall.",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "acceptable_alternatives": {
+      "type": "array",
+      "description": "Alternative ICD-10-CM codes that are also clinically reasonable for this encounter. Surfacing one of these is NOT a false positive — it counts as a true positive for the acceptable-alternative variant of precision.",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "must_abstain_codes": {
+      "type": "array",
+      "description": "ICD-10-CM codes the agent must NOT surface for this encounter. Any surfaced must-abstain code is a hard eval-gate failure.",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "evidence_spans": {
+      "type": "object",
+      "description": "Map from expected/acceptable code to a verbatim substring of the note that justifies it. Used for the citation-accuracy metric (P-B2). Example: {\"E11.22\": \"type 2 diabetes mellitus complicated by chronic kidney disease stage 3a\"}.",
+      "additionalProperties": { "type": "string" },
+      "default": {}
+    },
+    "edge_notes": {
+      "type": "string",
+      "description": "Clinician notes about edge cases: why a code is borderline, why an alternative is acceptable, or what makes this case difficult.",
+      "default": ""
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text human-readable notes about this case (not used by the harness, surfaced in reports).",
+      "default": ""
+    },
+    "guideline_refs": {
+      "type": "object",
+      "description": "Optional references to clinical guidelines supporting the expected codes. Map from code to a guideline citation. Example: {\"E11.22\": \"ADA Standards of Care 2026: CKD risk stratification in diabetes\"}.",
+      "additionalProperties": { "type": "string" },
+      "default": {}
+    }
+  }
+}

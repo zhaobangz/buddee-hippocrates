@@ -159,7 +159,7 @@ class SMARTFHIRLauncher:
                     allowed_hosts=_allowed_smart_hosts(),
                 ),
             )
-        except Exception as e:  # noqa: BLE001 - discovery is best-effort
+        except Exception as e:
             logger.warning("SMART discovery failed (%s); using sandbox defaults", e)
             base = self.fhir_base_url.rsplit("/fhir", 1)[0]
             return SMARTEndpoints(
@@ -293,7 +293,12 @@ class SMARTFHIRLauncher:
         for candidate in rows:
             try:
                 data = self._decrypt(candidate.auth_credentials_encrypted)
-            except Exception:  # noqa: BLE001 - skip undecryptable rows
+            except Exception as exc:
+                logger.warning(
+                    "Skipping undecryptable SMART auth row %s: %s",
+                    candidate.id,
+                    exc,
+                )
                 continue
             if secrets.compare_digest(str(data.get("state", "")), state):
                 row, pending = candidate, data

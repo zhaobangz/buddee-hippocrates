@@ -19,7 +19,7 @@ import sys
 from typing import NoReturn
 
 
-DEFAULT_HOST = "0.0.0.0"
+DEFAULT_HOST = "0.0.0.0"  # Container ingress / platform-managed network, not public
 DEFAULT_PORT = 8001
 
 

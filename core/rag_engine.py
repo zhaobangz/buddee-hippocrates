@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, runtime_checkable
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.database import SessionLocal
 from core.models import DocumentChunk
@@ -157,7 +158,7 @@ class RAGEngine:
             return
         try:
             self._client = OpenAIEmbeddingClient(api_key=key, model=self._embed_model)
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.warning("OpenAI embedding client failed to initialize: %s", e)
             self._client = None
 
@@ -179,7 +180,7 @@ class RAGEngine:
             return 0
         try:
             embeddings = self._client.embed_documents(contents)
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.error("RAG embedding call failed: %s", e)
             return 0
 
@@ -196,7 +197,7 @@ class RAGEngine:
                     )
                     written += 1
                 db.commit()
-            except Exception as e:
+            except SQLAlchemyError as e:
                 db.rollback()
                 logger.error("RAG persistence failed: %s", e)
                 return 0

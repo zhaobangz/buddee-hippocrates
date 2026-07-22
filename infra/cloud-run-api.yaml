@@ -1,6 +1,13 @@
+# Buddi API — Cloud Run service (Tier 2, PHI‑capable).
+#
+# Apply after provisioning (infra/provision_gcp.sh) and filling
+# infra/env.tier2. Substitute env vars before applying:
+#   PROJECT_ID  — GCP project ID
+#   REGION      — GCP region (e.g. us-central1)
+#   IMAGE_TAG   — Container image tag (e.g. prod-abc123)
+#
 # Deploy with:
 #   gcloud run services replace infra/cloud-run-api.yaml --region=$REGION
-# Substitute PROJECT_ID, REGION, IMAGE_TAG before applying.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -15,6 +22,13 @@ spec:
         autoscaling.knative.dev/maxScale: "20"
         run.googleapis.com/vpc-access-connector: projects/PROJECT_ID/locations/REGION/connectors/buddi-vpc
         run.googleapis.com/vpc-access-egress: private-ranges-only
+        # Inject secrets as files mounted under /secrets/.
+        run.googleapis.com/secrets: |
+          buddi-database-url=/secrets/database-url:latest
+          buddi-secret-key=/secrets/secret-key:latest
+          buddi-storage-key=/secrets/storage-key:latest
+          buddi-api-key=/secrets/api-key:latest
+          buddi-anthropic-key=/secrets/anthropic-key:latest
     spec:
       containerConcurrency: 80
       timeoutSeconds: 60
@@ -30,17 +44,28 @@ spec:
           env:
             - name: ENVIRONMENT
               value: production
+            - name: PORT
+              value: "8001"
             - name: BUDDI_DISABLE_WORKER
-              value: "0"    # worker runs in-process for single-service deploys; set "1" when using buddi-worker
-          envFrom: []       # secrets injected via Secret Manager volume mounts (see below)
-          volumeMounts:
-            - name: secrets
-              mountPath: /secrets
-              readOnly: true
-      volumes:
-        - name: secrets
-          secret:
-            secretName: buddi-api-secrets
-            # In production: use individual secret references per env var
-            # via run.googleapis.com/secrets annotation, not a volume mount.
-            # This YAML is a template — adjust to match your Secret Manager layout.
+              value: "0"
+            - name: BUDDI_DISABLE_MERKLE_TASK
+              value: "0"
+            - name: BUDDI_BAA_CONFIRMED
+              value: "0"   # ⛔  Flip to "1" ONLY after counsel confirms BAAs.
+            - name: LLM_PROVIDER
+              value: anthropic
+            # Secrets are mounted as files by the annotation above.
+            # The app reads /secrets/<name> via its SECRETS_DIR convention.
+            - name: SECRETS_DIR
+              value: /secrets
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 15

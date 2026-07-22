@@ -2,7 +2,7 @@
 
 **Anchored to:** Strategic Founders Operating Manual, 2nd Edition (June 2026)
 **Codebase baseline:** v4.1 (this repo)
-**Generated:** July 5, 2026
+**Generated:** July 5, 2026 · Last updated: July 20, 2026
 
 > This is the distilled "what do I actually do next" list, ordered by dependency and
 > leverage. It complements the fuller `docs/MVP_COMPLETION_PLAN.md`. Where a task is a
@@ -20,11 +20,19 @@
 Per `docs/MVP_COMPLETION_PLAN.md` §1, these are **SHIPPED in code**:
 - ✅ Daily KMS-signed Merkle root → Object Lock (`core/merkle.py`) — *the moat*
 - ✅ Anthropic-primary LLM cutover; LangChain stripped; BAA tripwire (`core/llm_manager.py`)
-- ✅ Postgres RLS + tenant scoping (`core/db_session.py`)
-- ✅ SMART-on-FHIR, webhooks, Stripe, async jobs — all implemented (need config/verification, not building)
+- ✅ Postgres RLS + tenant scoping with `GucStamper` for mid-request commits (`core/db_session.py`)
+- ✅ SMART-on-FHIR, webhooks, Stripe, async jobs, SSE streaming — all implemented
+- ✅ Prompt caching via Anthropic `cache_control`
+- ✅ HNSW index on `document_chunks.embedding`
+- ✅ Red-team adversarial prompt suite with nightly CI
+- ✅ 10-case golden eval set committed; CI regression gate wired
+- ✅ Docker + docker-compose + Cloud Run manifests + render.yaml
+- ✅ Frontend demo mode (`?demo=true`) with deterministic shadow audit flow
 
-**What's left is: (1) stand up a live demo, (2) finish 3 in-flight items, (3) do the
-human legal/sales work, (4) provision the paid PHI tier.** In that order.
+**What's left is: (1) deploy the live demo (Phase 0), (2) finish 3 in-flight items
+(Phase 1), (3) do the human legal/sales work (Phase 2), (4) provision the paid PHI
+tier (Phase 3).** In that order. The code for all technical items is written;
+remaining work is deployment, verification, and human actions.
 
 ---
 
@@ -82,30 +90,24 @@ conversation (Manual §3.2 Channel 1). Follow `docs/DEPLOY_CHEAP.md` Tier 0.
 
 Do NOT add new features until these close (Manual headline judgment #2).
 
-### 1A. Finish the synthetic FHIR bundle library  🔶 IN PROGRESS
-- You have `evals/synthea/bundles/bundle_001…024`. Generate the **25th** and confirm
-  the 5-condition committed fixtures in `evals/synthea/fixtures/` (diabetes, CHF,
-  COPD, CKD, sepsis).
-  ```bash
-  bash scripts/generate_synthea_bundles.sh
-  ```
-- Verify each validates against `FHIRBundle`, then wire the hosted synthetic demo
-  behind a soft access code.
+### 1A. Finish the synthetic FHIR bundle library  ✅ DONE
+- 25 bundles generated (`evals/synthea/bundles/bundle_001…025`). 5-condition committed
+  fixtures in `evals/synthea/fixtures/` (diabetes, CHF, COPD, CKD, sepsis).
+- All validate against `FHIRBundle`. Demo routes live at `/api/demo/synthea/*`.
 
 ### 1B. Finish the eval harness + CI gate  🔶 IN PROGRESS (blocked on clinical advisor)
-- Wire the 100-encounter golden set into `evals/run_eval.py`; add the CI gate that
-  fails on >5% precision/recall regression vs `evals/baseline.json`.
-- Set `EVAL_PRECISION_FLOOR=0.60`, `EVAL_RECALL_FLOOR=0.60`.
-- **[HUMAN — H29]** The clinical advisor must **label the golden set** — this is the
-  hard blocker. It's why the manual says *hire the MD before the engineer* (§5.2).
+- 10-case seed set committed to `evals/golden/`. CI gate wired in `.github/workflows/main.yml`.
+- `EVAL_PRECISION_FLOOR=0.60`, `EVAL_RECALL_FLOOR=0.60` configured.
+- **[HUMAN — H29]** The clinical advisor must **grow the golden set from 10 to 100**
+  cases — this is the hard blocker.
 - **[HUMAN — H30]** Tune `BUDDI_HCC_CONFIDENCE_FLOOR` (placeholder 0.70) from eval results.
 
-### 1C. Verify the Anthropic cutover + Merkle job end-to-end
-- Confirm `llm_manager.py` works with a real Anthropic key; the OpenAI
-  embeddings-only guard rejects non-embedding calls; the BAA tripwire refuses
-  PHI-shaped prompts while `BUDDI_BAA_CONFIRMED=0`.
-- Confirm the daily Merkle-root job exports to Object Lock with no gaps.
-- Confirm `grep -ri langchain` returns nothing in the prompt path.
+### 1C. Verify the Anthropic cutover + Merkle job end-to-end  ✅ CODE COMPLETE
+- `llm_manager.py` uses Anthropic SDK directly; OpenAI embeddings-only guard active;
+  BAA tripwire refuses PHI-shaped prompts while `BUDDI_BAA_CONFIRMED=0`.
+- Daily Merkle-root job code path complete (`core/merkle.py`); needs cloud KMS key +
+  Object Lock bucket provisioned for production verification.
+- `grep -ri langchain` returns nothing in the prompt path. LangChain fully stripped.
 
 ---
 

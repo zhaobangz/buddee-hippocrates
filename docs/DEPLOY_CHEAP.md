@@ -28,6 +28,126 @@ upgrade outline.
 
 ---
 
+## 🚀 Deploy runbook delta — exact env vars per tier
+
+This is the ordered, copy-paste checklist. Work top-to-bottom through one tier.
+
+### Tier 0: Neon → Render → Vercel ($0/mo)
+
+**A. Neon (Postgres 16 + pgvector)**
+
+| Key | Value | Where |
+|-----|-------|-------|
+| `DATABASE_URL` | `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require` | Neon dashboard → Connect |
+
+Run in Neon SQL editor before deploying:
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+**B. Render Blueprint (render.yaml at repo root)**
+
+Render → New → Blueprint → select this repo. Fill in these `sync: false` secrets:
+
+| Key | Value | Notes |
+|-----|-------|-------|
+| `DATABASE_URL` | (from Neon step A) | |
+| `SECRET_KEY` | `python3 -c "import secrets;print(secrets.token_hex(32))"` | ≥32 chars |
+| `BUDDI_STORAGE_KEY` | `python3 -c "import secrets;print(secrets.token_hex(16))"` | ≥16 chars |
+| `API_KEY` | `python3 -c "import secrets;print(secrets.token_hex(32))"` | shared with Vercel |
+| `CORS_ORIGINS` | `https://<vercel-app>.vercel.app` | set after step C |
+| `BUDDI_BAA_CONFIRMED` | `0` | **hardcoded in render.yaml** — fail-closed |
+| `ANTHROPIC_API_KEY` | _(leave empty)_ | $0 demo = deterministic stub |
+
+These are **already set** in render.yaml and need no input:
+- `BUDDI_BAA_CONFIRMED=0` (enforced)
+- `LLM_PROVIDER=anthropic` (default, no key = stub)
+- `PORT=8001`
+- `PYTHONUNBUFFERED=1`
+
+**C. Vercel (frontend)**
+
+Import repo → Root Directory = `frontend` → Build: `npm run build`, Output: `dist`.
+
+| Key | Value | Notes |
+|-----|-------|-------|
+| `VITE_API_BASE` | `https://<render-service>.onrender.com/api` | or your custom domain |
+| `VITE_API_KEY` | (same `API_KEY` from step B) | injected at build time |
+
+After deploy, copy the Vercel URL and set `CORS_ORIGINS` on Render (step B).
+
+**C.alt Fly.io alternative (instead of Render)**
+
+```bash
+fly launch --no-deploy
+fly secrets set \
+  SECRET_KEY=$(python3 -c "import secrets;print(secrets.token_hex(32))") \
+  BUDDI_STORAGE_KEY=$(python3 -c "import secrets;print(secrets.token_hex(16))") \
+  API_KEY=$(python3 -c "import secrets;print(secrets.token_hex(32))") \
+  DATABASE_URL='postgresql://…neon.tech/neondb?sslmode=require' \
+  CORS_ORIGINS='https://<vercel-app>.vercel.app' \
+  BUDDI_BAA_CONFIRMED=0
+fly deploy
+fly ssh console -C "alembic upgrade head"
+```
+
+Frontend env vars are the same as step C, pointing at the Fly host.
+
+### Tier 1: always-on (~$7–15/mo)
+
+Same env vars as Tier 0. Only change: upgrade Render to **Starter ($7/mo)** or Fly to a small machine. If you add a real LLM key for synthetic live output:
+
+| Key | Value | Notes |
+|-----|-------|-------|
+| `ANTHROPIC_API_KEY` | `sk-ant-...` | Render sync:false secret |
+| `BUDDI_BAA_CONFIRMED` | `0` | **STILL 0** — synthetic data only |
+
+### Tier 2: compliant pilot with real PHI
+
+Only when BAAs are signed. See the full Tier 2 section below.
+
+| Key | Value | Notes |
+|-----|-------|-------|
+| `BUDDI_BAA_CONFIRMED` | `1` | **only** after counsel confirms signed BAAs |
+| `ANTHROPIC_API_KEY` | `sk-ant-...` | Anthropic BAA must be in place |
+| `DATABASE_URL` | Cloud SQL (CMEK) | GCP private IP |
+| `BUDDI_AUDIT_KMS_PROVIDER` | `gcp` or `aws` | HSM-backed signing key |
+| `BUDDI_AUDIT_KMS_KEY` | `projects/…/cryptoKeys/…` | KMS key path |
+| `BUDDI_AUDIT_ROOTS_BUCKET` | `gs://…` or `s3://…` | WORM Object Lock |
+
+### Post-deploy verification (all tiers)
+
+```bash
+# Set BUDDI_API_KEY to the same API_KEY from Render/Fly
+BUDDI_BASE_URL=https://<backend-host> \
+BUDDI_API_KEY=<API_KEY> \
+  python scripts/verify_system.py --demo
+
+# Shorter smoke test (skip PT-9012 flow):
+BUDDI_BASE_URL=https://<backend-host> \
+BUDDI_API_KEY=<API_KEY> \
+  python scripts/verify_system.py
+```
+
+Expected output:
+```
+🔎  Buddi smoke-test → https://<backend-host>
+  ✅ GET /health (no auth)
+  ✅ GET /api/health
+  ✅ POST /ingest/fhir
+  ✅ GET /audit/query
+  ✅ GET /api/audit/verify
+  ✅ POST /api/shadow/audit (PT-9012 demo)  —  HTTP 200 in 2.1s codes=3 …
+  ✅ GET /api/demo/sample-patient
+✅  All smoke checks passed.
+```
+
+Then open `https://<vercel-app>.vercel.app/?demo=true` — the PT-9012 (Marcus
+Holloway) synthetic patient loads and runs a deterministic shadow-mode audit
+with no LLM key required.
+
+---
+
 ## Required environment variables (all tiers)
 
 From `core/config.py` / `docs/CLOUD_DEPLOYMENT_GUIDE.md`:

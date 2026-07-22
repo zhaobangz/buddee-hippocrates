@@ -1,0 +1,104 @@
+{
+  "alert_policies": [
+    {
+      "display_name": "Buddi — Audit Chain Integrity (Sev‑1)",
+      "documentation": {
+        "content": "Audit chain verification returned verified=false or partially_verified. This is an integrity breach — page immediately. Runbook: docs/runbooks/audit_chain.md",
+        "mimeType": "text/markdown"
+      },
+      "severity": "CRITICAL",
+      "combiner": "OR",
+      "conditions": [
+        {
+          "display_name": "Verify rate < 100%",
+          "condition_threshold": {
+            "filter": "metric.type=\"logging.googleapis.com/user/buddi_audit_verify\" metric.label.status!=\"verified\"",
+            "comparison": "COMPARISON_GT",
+            "threshold_value": 0,
+            "duration": "0s",
+            "aggregations": [
+              {"alignment_period": "300s", "per_series_aligner": "ALIGN_COUNT"}
+            ]
+          }
+        }
+      ],
+      "notification_channels": ["projects/PROJECT_ID/notificationChannels/PAGERDUTY_CHANNEL_ID"],
+      "user_labels": {"severity": "p1", "team": "buddi-engineering"}
+    },
+    {
+      "display_name": "Buddi — Error Rate Spike (Sev‑2)",
+      "documentation": {
+        "content": "Error rate exceeded 2% over 5 minutes. May indicate a bad deploy, Cloud SQL outage, or LLM provider issue. Runbook: docs/runbooks/error_rate.md",
+        "mimeType": "text/markdown"
+      },
+      "severity": "WARNING",
+      "combiner": "OR",
+      "conditions": [
+        {
+          "display_name": "5xx rate > 2%",
+          "condition_threshold": {
+            "filter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.label.service_name=\"buddi-api\" metric.label.response_code_class=\"5xx\"",
+            "comparison": "COMPARISON_GT",
+            "threshold_value": 0.02,
+            "duration": "300s",
+            "aggregations": [
+              {"alignment_period": "300s", "per_series_aligner": "ALIGN_RATE"}
+            ]
+          }
+        }
+      ],
+      "notification_channels": ["projects/PROJECT_ID/notificationChannels/PAGERDUTY_CHANNEL_ID"],
+      "user_labels": {"severity": "p2", "team": "buddi-engineering"}
+    },
+    {
+      "display_name": "Buddi — LLM Provider Errors (Sev‑3)",
+      "documentation": {
+        "content": "LLM provider error/429 rate exceeded 10% over 10 minutes. May indicate Anthropic API degradation, quota exhaustion, or rate‑limit misconfiguration. Runbook: docs/runbooks/llm_errors.md",
+        "mimeType": "text/markdown"
+      },
+      "severity": "CRITICAL",
+      "combiner": "OR",
+      "conditions": [
+        {
+          "display_name": "LLM error rate > 10%",
+          "condition_threshold": {
+            "filter": "metric.type=\"logging.googleapis.com/user/buddi_llm_request\" metric.label.outcome=monitoring.regexFullMatch(\"(error|429)\")",
+            "comparison": "COMPARISON_GT",
+            "threshold_value": 0.10,
+            "duration": "600s",
+            "aggregations": [
+              {"alignment_period": "600s", "per_series_aligner": "ALIGN_RATE"}
+            ]
+          }
+        }
+      ],
+      "notification_channels": ["projects/PROJECT_ID/notificationChannels/PAGERDUTY_CHANNEL_ID"],
+      "user_labels": {"severity": "p3", "team": "buddi-engineering"}
+    },
+    {
+      "display_name": "Buddi — Grounding Failure Rate (Sev‑2)",
+      "documentation": {
+        "content": "Grounding (citation) failure rate exceeded 5%. Suggestions are surfacing without evidence quotes. Check the agent prompt path and LLM output parsing. Runbook: docs/runbooks/grounding_failure.md",
+        "mimeType": "text/markdown"
+      },
+      "severity": "WARNING",
+      "combiner": "OR",
+      "conditions": [
+        {
+          "display_name": "Grounding failure > 5%",
+          "condition_threshold": {
+            "filter": "metric.type=\"logging.googleapis.com/user/buddi_grounding_check\" metric.label.has_evidence=\"false\"",
+            "comparison": "COMPARISON_GT",
+            "threshold_value": 0.05,
+            "duration": "600s",
+            "aggregations": [
+              {"alignment_period": "600s", "per_series_aligner": "ALIGN_RATE"}
+            ]
+          }
+        }
+      ],
+      "notification_channels": ["projects/PROJECT_ID/notificationChannels/PAGERDUTY_CHANNEL_ID"],
+      "user_labels": {"severity": "p2", "team": "buddi-engineering"}
+    }
+  ]
+}

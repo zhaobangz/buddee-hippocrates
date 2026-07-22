@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from core import models
+
+logger = logging.getLogger(__name__)
 
 
 class PHIProcessingNotAllowed(RuntimeError):
@@ -34,7 +38,12 @@ def tenant_baa_confirmed(db: Session, tenant_id: uuid.UUID) -> bool:
             .filter(models.Tenant.id == tenant_id)
             .scalar()
         )
-    except Exception:
+    except SQLAlchemyError:
+        logger.error(
+            "DB error checking tenant BAA status for %s — failing closed",
+            tenant_id,
+            exc_info=True,
+        )
         return False
 
 

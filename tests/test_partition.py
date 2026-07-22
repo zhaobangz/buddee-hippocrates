@@ -18,7 +18,7 @@ def _db_or_skip():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         db.close()
         pytest.skip(f"test Postgres unavailable: {exc}")
     return db

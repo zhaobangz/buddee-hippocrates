@@ -350,7 +350,7 @@ class MerkleSigner:
             return hmac.compare_digest(expected, signature_bytes)
         try:
             return bool(self._verifier(message, signature_bytes))
-        except Exception:
+        except (ValueError, TypeError):
             return False
 
     @staticmethod
@@ -630,7 +630,7 @@ def verify_envelope(
     message = MerkleSigner._canonical_message(day, merkle_root, event_count, tenant)
     try:
         signature = base64.b64decode(sig_b64)
-    except Exception:
+    except (ValueError, TypeError):
         return False
 
     if algorithm == "hmac-sha256-dev":

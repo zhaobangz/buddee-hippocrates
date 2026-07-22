@@ -2,9 +2,12 @@
 
 **Version:** 5.0 (June 2026)
 **Branch:** `pre-launch/foundation`
-**Codebase baseline:** d39da77 ("version 4")
+**Codebase baseline:** v4.1
 **Audience:** Solo founder (Zhao), future engineers, clinical advisor
-**Status:** Living document — review every Friday
+**Status:** Sprint 1–2 items are largely shipped in the current codebase. Sprint 3–4
+items are the remaining path to pilot-ready. See `docs/MVP_COMPLETION_PLAN.md` for the
+authoritative status tracker. Model references updated to reflect current defaults
+(Claude Opus 4.8 for reasoning, Sonnet 4.6 for coding).
 
 ---
 

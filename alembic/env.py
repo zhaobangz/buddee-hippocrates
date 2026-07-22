@@ -21,8 +21,8 @@ from alembic import context
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from core.database import DATABASE_URL  # noqa: E402
-from core.models import Base  # noqa: E402
+from core.database import DATABASE_URL
+from core.models import Base
 
 config = context.config
 
@@ -38,9 +38,9 @@ config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", DATABASE_URL)
 
 # Register pgvector so autogenerate understands ``Vector(1536)`` columns.
 try:
-    from pgvector.sqlalchemy import Vector  # noqa: F401
-except Exception:  # pragma: no cover
-    Vector = None  # type: ignore
+    from pgvector.sqlalchemy import Vector
+except ImportError:  # pragma: no cover - pgvector may not be installed in migration environments
+    Vector = None
 
 
 def render_item(type_, obj, autogen_context):

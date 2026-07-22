@@ -29,7 +29,7 @@ try:
 
     _OTEL_AVAILABLE = True
     _OTEL_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # ImportError, or AttributeError on version skew
+except (ImportError, AttributeError) as exc:  # version skew
     trace = None  # type: ignore[assignment]
     _OTEL_AVAILABLE = False
     _OTEL_IMPORT_ERROR = exc
@@ -103,7 +103,7 @@ def setup_tracing(service_name: str = "buddi-clinical-agent") -> None:
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    except Exception as exc:
+    except ImportError as exc:
         logger.warning("OpenTelemetry SDK unavailable (%s); tracing disabled.", exc)
         _tracer_initialized = True
         return
@@ -123,7 +123,7 @@ def setup_tracing(service_name: str = "buddi-clinical-agent") -> None:
 
             otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
             provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
-        except Exception as exc:
+        except (ImportError, ValueError) as exc:
             logger.warning("Tracing: OTLP exporter failed to initialize: %s", exc)
 
     trace.set_tracer_provider(provider)
@@ -141,7 +141,7 @@ def get_tracer(name: str):
         return _NOOP_TRACER
     try:
         return trace.get_tracer(name)
-    except Exception as exc:  # extreme defensiveness against runtime skew
+    except (ValueError, AttributeError) as exc:
         logger.warning("get_tracer(%s) failed (%s); using no-op tracer.", name, exc)
         return _NOOP_TRACER
 

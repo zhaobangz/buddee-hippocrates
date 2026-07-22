@@ -4,6 +4,7 @@
         "."
     ],
     "git.ignoreLimitWarning": true,
-    "python.terminal.activateEnvironment": false
-
+    "python.terminal.activateEnvironment": false,
+    "context7.apiKey": "sctx7sk-87bf1a26-3528-47aa-be31-1f3b12f25ce8"
+    
 }

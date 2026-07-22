@@ -18,6 +18,7 @@ from core.database import SessionLocal
 from core.db_session import GucStamper, set_tenant_context, set_worker_context
 from core.models import Job
 from core.phi_guard import assert_phi_processing_allowed, payload_is_synthetic
+from core.safety import redact_for_logs
 
 logger = logging.getLogger(__name__)
 POLL_INTERVAL_SECONDS = float(os.getenv("BUDDI_WORKER_POLL_INTERVAL", "2"))
@@ -76,7 +77,7 @@ async def worker_loop(agent: Agent, stop_event: asyncio.Event | None = None) -> 
                 job_store.mark_completed(db, job, result)
                 db.commit()
                 logger.info("Job completed id=%s", job.id)
-            except Exception as e:  # noqa: BLE001 - record failure, keep draining
+            except Exception as e:
                 db.rollback()
                 db2 = SessionLocal()
                 failure_stamper = GucStamper(tenant_id=None, worker_mode=True)
@@ -89,7 +90,7 @@ async def worker_loop(agent: Agent, stop_event: asyncio.Event | None = None) -> 
                 finally:
                     failure_stamper.remove(db2)
                     db2.close()
-                logger.exception("Job failed id=%s: %s", job.id, e)
+                logger.exception("Job failed id=%s: %s", job.id, redact_for_logs(str(e)))
         except asyncio.CancelledError:
             stamper.remove(db)
             db.close()
@@ -102,12 +103,12 @@ async def worker_loop(agent: Agent, stop_event: asyncio.Event | None = None) -> 
             try:
                 set_tenant_context(db, None)
                 set_worker_context(db, False)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to clear GUC in worker cleanup: %s", exc)
             try:
                 db.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to close DB in worker cleanup: %s", exc)
 
 
 if __name__ == "__main__":

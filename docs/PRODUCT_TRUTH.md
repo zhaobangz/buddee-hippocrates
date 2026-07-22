@@ -2,7 +2,7 @@
 
 **Owner:** Founder (Zhao)
 **Cadence:** Updated every Friday during retrospective. Manual §7.2 Risk #3.
-**Last reviewed:** 2026-06-13
+**Last reviewed:** 2026-07-20
 
 This is the brutal-honest counterweight to the marketing site. The
 manual prescribes reading this document *at the start of every sales
@@ -11,8 +11,9 @@ on this list but is on the marketing site instead is a counsel risk.
 
 ## What Buddi delivers, end-to-end, today
 
-* **Authenticated FastAPI backend** with per-tenant API keys and
-  row-level security policies on every clinical table.
+* **Authenticated FastAPI backend** with per-tenant API keys (Argon2 hashing +
+  SHA-256 lookup), scope-based authorization, and row-level security policies
+  on every clinical table.
 * **Shadow-mode HCC suggestion path** with a confidence floor (0.70),
   a mandatory evidence quote, and an **LLM-as-judge second pass** that
   independently re-checks every uncertain-band suggestion (confidence
@@ -20,14 +21,28 @@ on this list but is on the marketing site instead is a counsel risk.
   that fails any gate — or that the judge will not affirm — is abstained
   (fail-closed) and recorded in the audit chain.
 * **Hash-chained `audit_events` table** with a daily Merkle root
-  signed by a configured Ed25519 key (HMAC fallback in dev).
-* **FHIR R4 bundle ingest** with size-cap, schema validation, and a
+  signed by a configured Ed25519 key (HMAC fallback in dev). Per-tenant
+  chain isolation via Postgres advisory locks. Day-scoped verification
+  walks from the prior day's tip.
+* **FHIR R4 bundle ingest** with size-cap (2 MB), schema validation, and a
   BAA precondition that refuses bundles for unconfirmed tenants.
-* **OpenTelemetry tracing**, PII-redacted logging, and a verifiable
-  audit log endpoint.
-* **Hosted synthetic-FHIR sandbox** (25 Safe-Harbor bundles, no PHI).
+* **Async job queue** (`jobs` table) with idempotency keys, worker loop,
+  and SSE progress streaming (`GET /api/jobs/{id}/stream`).
+* **SMART-on-FHIR EHR connector** with OAuth2 PKCE standalone launch flow
+  and encrypted token storage.
+* **Webhooks** with HMAC-SHA256 signed delivery for 4 event types
+  (`hcc_suggestion.created`, `hcc_suggestion.approved`,
+  `prior_auth.state_changed`, `audit_event.flagged`).
+* **Stripe billing** — Checkout, Customer Portal, and webhook handling.
+* **OpenTelemetry tracing**, PII-redacted logging, rate limiting, and
+  request-ID propagation.
+* **Hosted synthetic-FHIR sandbox** (25 Safe-Harbor Synthea bundles, no PHI).
 * **Eval regression gate in CI** with precision / recall / abstain
   metrics computed against a 10-case clinician-labeled seed set.
+* **Red-team adversarial prompt suite** (50+ prompts) with nightly CI run.
+* **React 19 + Vite operator UI** with dashboard, review queue, chat,
+  and audit trail pages. `?demo=true` loads a deterministic synthetic
+  patient workflow.
 
 ## What Buddi does NOT deliver today (and may be implied by marketing)
 
@@ -42,7 +57,7 @@ on this list but is on the marketing site instead is a counsel risk.
 | "Tamper-proof audit log"                                       | Hash-chained + daily Merkle root, signed via Cloud KMS (GCP/AWS) and mirrored to an Object Lock bucket. Code path is live; awaiting cloud key + bucket provisioning. |
 | "Fine-tuned on physician data"                                 | Anthropic Claude + pgvector RAG. No customer data used for training.                     |
 
-## What is in flight (Weeks 1–4 sprint)
+## What is in flight (current sprint)
 
 Per `Buddi_Strategic_Founders_Operating_Manual.pdf` §2.2 and the
 30-day action tracker:
@@ -59,26 +74,40 @@ Per `Buddi_Strategic_Founders_Operating_Manual.pdf` §2.2 and the
 - [x] Audit-chain moat test coverage (`tests/test_audit_merkle.py` — build / sign / verify / **tamper detection**).
 - [x] Eval harness with CI gate (`evals/`).
 - [x] 25 Synthea synthetic FHIR bundles + hosted demo route.
+- [x] Prompt caching via Anthropic `cache_control` (`core/llm_manager.py`).
+- [x] SMART-on-FHIR EHR connector with PKCE flow (`backend/smart_fhir.py`).
+- [x] Async job queue with idempotency keys + SSE progress streaming (`core/jobs.py`, `core/worker.py`).
+- [x] Webhooks with HMAC-signed delivery for 4 event types (`core/webhooks.py`).
+- [x] Stripe billing integration — Checkout, Portal, webhook (`backend/billing.py`).
+- [x] Rate limiting middleware + Request ID propagation (`backend/middleware.py`).
+- [x] Red-team adversarial prompt suite with nightly CI run (`evals/red_team/`).
+- [x] 10-case clinician-labeled golden eval set committed to `evals/golden/`.
+- [x] Docker multi-stage build with non-root user + HEALTHCHECK (`Dockerfile`).
+- [x] `render.yaml` for $0 Render Blueprint synthetic demo deploy.
+- [x] GCP Cloud Run deployment manifests for API + worker (`infra/cloud-run-*.yaml`).
+- [x] OpenTelemetry tracing wired throughout (`core/tracing.py`).
 - [ ] OpenAI BAA filed and confirmed (founder action, week 1).
 - [ ] Anthropic BAA filed and confirmed (founder action, week 1).
-- [ ] Cloud KMS signing key (EC P-256) + Object Lock bucket provisioned and `BUDDI_AUDIT_KMS_*` / `BUDDI_AUDIT_ROOTS_BUCKET` set (code path ready; founder/infra action, week 1).
-- [ ] Clinical advisor hired and named on the marketing site (week 2).
-- [ ] Counsel review of TrustAnchor copy on `buddi-web` (week 3).
-- [ ] First design-partner LOI signed (week 5 stretch).
+- [ ] Cloud KMS signing key (EC P-256) + Object Lock bucket provisioned and `BUDDI_AUDIT_KMS_*` / `BUDDI_AUDIT_ROOTS_BUCKET` set (code path ready; founder/infra action).
+- [ ] Clinical advisor hired and named on the marketing site.
+- [ ] Counsel review of TrustAnchor copy on `buddi-web`.
+- [ ] First design-partner LOI signed.
+- [ ] Redis-backed rate limiter (Memorystore provision + slowapi swap).
+- [ ] Grow golden eval set from 10 to 100 clinician-labeled cases.
 
 ## Numbers the team can defensibly cite today
 
 * **Audit chain verification rate:** 100% in CI (`GET /api/audit/verify`).
-* **Eval offline precision:** 1.0 on the seed set (10 cases). Note:
-  this is a wiring test, not a real precision number — the LLM-on
-  eval lands once the BAA is confirmed.
-* **Eval offline recall:** 0.10 (only the diabetic-CKD case fires
-  the demo pattern matcher). Clinician advisor's first deliverable
-  is to grow this.
-* **Synthetic bundle count:** 25 (generated by
-  `evals/synthea/generate.py`).
-* **Routes registered:** 31 (`/health`, `/api/*`, `/ingest/fhir`,
-  `/api/demo/synthea/*`).
+* **Routes registered:** 31 (`/health`, `/internal/health`, plus 29 `/api/*` routes
+  across health, shadow-audit, prior-auth, jobs, demo, EHR, webhooks, audit-chain,
+  billing, metrics, chat, and patient categories).
+* **Synthetic bundle count:** 25 (generated by `evals/synthea/generate.py`).
+* **Golden eval cases:** 10 clinician-labeled seed cases in `evals/golden/`.
+* **Test coverage:** 18 test files covering API, auth, audit/Merkle, billing,
+  jobs, rate limiting, FHIR/SMART, webhooks, red-team, migrations, partitioning,
+  PHI security, RAG retrieval, agent safety, SLO metrics, and LLM provider.
+* **Red-team prompts:** 50+ adversarial prompts across injection, PHI leakage,
+  jailbreak, and confidence-inflation categories.
 
 ## Numbers the team must NOT cite today
 
@@ -87,11 +116,11 @@ Per `Buddi_Strategic_Founders_Operating_Manual.pdf` §2.2 and the
   the LLM-on eval is in place.
 * "$82,000 / physician / year." This is a model output, not a
   measured pilot result. Cite it as "modeled" and link to the
-  methodology PDF (TODO).
+  methodology.
 * "4.2% capture-rate lift." Industry-standard reference number;
   cite the source, never claim it as Buddi's measured number.
 
 ## Next update
 
-Friday 2026-05-15 — append the week's deltas above the prior entry
+Friday 2026-07-25 — append the week's deltas above the prior entry
 and update the "Last reviewed" header.

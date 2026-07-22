@@ -1,5 +1,10 @@
 # Buddee Codebase Audit — July 16, 2026
 
+> **Current status (July 20, 2026):** All four critical/high findings fixed in this
+> pass are deployed in the current codebase. The "Reported, not changed" recommendations
+> remain open as design decisions to revisit before pilot scale. Full test suite after
+> fixes: 101 passed, 18 skipped (require live Postgres), 0 failed; ruff clean.
+
 Scope: full pass over `backend/` (~4.3k LOC), `core/` (~9.1k LOC), `frontend/src` (~3.3k LOC), Alembic migrations, and Docker/config. Methods: bandit + ruff + secret/anti-pattern scans, manual review of every security-critical path (auth, tenant isolation/RLS, audit chain, SSRF, PHI gates, Stripe/SMART OAuth, path traversal), plus targeted concurrency regression tests. Full test suite after fixes: **101 passed, 18 skipped (require live Postgres), 0 failed; ruff clean.**
 
 Overall: this codebase is in far better shape than typical pre-pilot startups — prior hardening passes (SEC-01…10, CQ-07, Issues 7/8) clearly paid off. Auth (Argon2 + constant-time lookup, scoped keys), CORS, SSRF validation, Stripe signature verification, SMART/PKCE flow, path-traversal guards, and secret handling are all solid. The critical findings below were concentrated in the newest multi-tenancy and audit-chain code, and all four fixable ones are now fixed.

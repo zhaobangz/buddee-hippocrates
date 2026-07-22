@@ -1,0 +1,138 @@
+# LLM‑on eval regression gate (manual §2.2 Sprint B, §4.4).
+#
+# Runs the eval harness with real LLM keys against the labeled golden set.
+# NOT on every PR — this costs money and uses a clinical‑accuracy LLM path.
+# Scheduled nightly + manually dispatchable.
+#
+# The existing deterministic eval in main.yml runs on every PR and stays
+# unchanged. This job is the "real accuracy number" that gates clinical
+# prompt‑path changes.
+#
+# Secrets required (set in GitHub → Settings → Secrets → Actions):
+#   ANTHROPIC_API_KEY   — Anthropic API key for the suggester (Opus 4.8)
+#   OPENAI_API_KEY      — optional; if set, judge runs on a different family
+#   BUDDI_API_KEY       — API key for the deployed backend (if using remote)
+#   EVAL_SLACK_WEBHOOK  — optional; posts a summary on failure
+
+name: Eval — LLM‑on regression gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      cases_dir:
+        description: 'Path to golden cases directory'
+        required: false
+        default: 'evals/golden'
+      tolerance:
+        description: 'Allowed precision/recall drop vs baseline'
+        required: false
+        default: '0.05'
+  schedule:
+    # 07:00 UTC = 02:00 ET / 23:00 PT — off‑peak, results ready by morning.
+    - cron: '37 7 * * *'
+
+jobs:
+  llm-on-eval:
+    runs-on: ubuntu-latest
+    # Never run on forks — secrets aren't available and the job would fail
+    # confusingly.
+    if: github.repository == 'buddee-health/buddee-health-hippocrates'
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: buddi
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      BUDDI_TEST_MODE: "1"
+      BUDDI_RATE_LIMIT_DISABLED: "1"
+      BUDDI_DISABLE_MERKLE_TASK: "1"
+      BUDDI_DISABLE_JOB_WORKER: "1"
+      SECRET_KEY: "ci-test-secret-key-0123456789abcdef0123456789abcdef"
+      BUDDI_STORAGE_KEY: "ci-test-storage-key-not-for-prod"
+      API_KEY: "ci-test-api-key-abcdef1234567890"
+      CORS_ORIGINS: "http://localhost:5173"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/buddi"
+      # Absolute floors for the real‑LLM run (manual §2.2 week 3).
+      EVAL_PRECISION_FLOOR: "0.60"
+      EVAL_RECALL_FLOOR: "0.60"
+      # Provider config (secrets injected below).
+      LLM_PROVIDER: "anthropic"
+      # BAA must be set to 1 for realistic‑sized notes to pass the guard
+      # (the golden cases have full clinical notes > 200 bytes).
+      BUDDI_BAA_CONFIRMED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run migrations
+        run: python -m alembic upgrade head
+
+      - name: Eval — LLM‑on regression gate
+        id: eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
+        run: |
+          set -e
+          CASES="${{ github.event.inputs.cases_dir || 'evals/golden' }}"
+          TOL="${{ github.event.inputs.tolerance || '0.05' }}"
+
+          echo "=== LLM‑on eval gate ==="
+          echo "Cases dir : $CASES"
+          echo "Tolerance : $TOL"
+          echo "Suggester : ${ANTHROPIC_ROUTING_MODEL:-claude-opus-4-8}"
+          echo "Judge     : ${ANTHROPIC_CODING_MODEL:-claude-sonnet-4-6}"
+          echo ""
+
+          python -m evals.run_eval \
+            --cases "$CASES" \
+            --baseline evals/baseline.json \
+            --tolerance "$TOL" \
+            --output evals/results/llm_on_$(date +%Y-%m-%d).json
+
+      - name: Record model IDs (manual §4.4)
+        if: always()
+        run: |
+          echo "## Model IDs" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Suggester:** ${ANTHROPIC_ROUTING_MODEL:-claude-opus-4-8}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Judge:**     ${ANTHROPIC_CODING_MODEL:-claude-sonnet-4-6}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Run:**       ${{ github.run_id }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload eval artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-llm-on-${{ github.run_id }}
+          path: evals/results/
+          retention-days: 90
+
+      - name: Notify on failure (Slack webhook)
+        if: failure() && env.EVAL_SLACK_WEBHOOK != ''
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.EVAL_SLACK_WEBHOOK }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "⚠️  LLM‑on eval gate FAILED for buddee-health-hippocrates\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }

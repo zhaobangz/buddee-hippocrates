@@ -96,8 +96,8 @@ class SecureStorage:
             with open(file_path, "wb") as f:
                 f.write(self._encrypt(json_data))
             return True
-        except Exception as e:  # pragma: no cover - defensive I/O path
-            print(f"SecureStorage Error (Save): {e}")
+        except (OSError, json.JSONDecodeError, TypeError) as e:
+            logger.error("SecureStorage save_json failed for %s: %s", file_path, e)
             return False
 
     def load_json(self, file_path: str) -> Optional[Any]:
@@ -116,7 +116,7 @@ class SecureStorage:
                 )  # Security: operators must know when unencrypted legacy data is read.
                 try:
                     return json.loads(blob.decode("utf-8"))
-                except Exception:
+                except (json.JSONDecodeError, UnicodeDecodeError):
                     if b"\n" in stripped:
                         return [
                             json.loads(line)
@@ -125,8 +125,8 @@ class SecureStorage:
                         ]
             decrypted = self._decrypt(blob)
             return json.loads(decrypted.decode("utf-8"))
-        except Exception as e:
-            print(f"SecureStorage Error (Load): {e}")
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as e:
+            logger.error("SecureStorage load_json failed for %s: %s", file_path, e)
             return None
 
     # ------------------------------------------------------------------
@@ -137,8 +137,8 @@ class SecureStorage:
             with open(file_path, "wb") as f:
                 f.write(self._encrypt(text.encode("utf-8")))
             return True
-        except Exception as e:  # pragma: no cover
-            print(f"SecureStorage Error (SaveText): {e}")
+        except OSError as e:
+            logger.error("SecureStorage save_text failed for %s: %s", file_path, e)
             return False
 
     def load_text(self, file_path: str) -> Optional[str]:
@@ -147,8 +147,8 @@ class SecureStorage:
         try:
             with open(file_path, "rb") as f:
                 return self._decrypt(f.read()).decode("utf-8")
-        except Exception as e:
-            print(f"SecureStorage Error (LoadText): {e}")
+        except (OSError, ValueError) as e:
+            logger.error("SecureStorage load_text failed for %s: %s", file_path, e)
             return None
 
     # ------------------------------------------------------------------
@@ -167,6 +167,6 @@ class SecureStorage:
             return True
         except FileNotFoundError:
             return False
-        except Exception as e:  # pragma: no cover
-            print(f"SecureStorage Error (Delete): {e}")
+        except OSError as e:
+            logger.error("SecureStorage delete failed for %s: %s", file_path, e)
             return False

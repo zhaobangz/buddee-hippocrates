@@ -21,9 +21,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Inline minimal DB setup to avoid importing the full FastAPI app
-from core.database import SessionLocal  # noqa: E402
-from core.models import Tenant, TenantApiKey  # noqa: E402
-from backend.auth import hash_api_key, api_key_lookup_hash  # noqa: E402
+from core.database import SessionLocal
+from core.models import Tenant, TenantApiKey
+from backend.auth import hash_api_key, api_key_lookup_hash
 
 def provision(slug: str, name: str, physician_count: int, scopes: list[str]) -> str:
     db = SessionLocal()

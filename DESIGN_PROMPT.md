@@ -1,5 +1,11 @@
 # Design Prompt for Claude Code — Buddee Health Portal UX Redesign
 
+> **Status (July 2026):** This design spec has been partially implemented. The frontend
+> at `frontend/` reflects the light-theme tokens, two-pane review queue layout, trust
+> bar, and terminology map described below. Some items (accessibility audit, full
+> WCAG 2.1 AA pass) remain in progress. Retained as the canonical design reference
+> for ongoing frontend work.
+
 Paste this entire document into Claude Code, run from the repo root (`buddee-health-hippocrates/`).
 
 ---

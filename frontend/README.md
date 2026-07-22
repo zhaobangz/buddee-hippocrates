@@ -1,18 +1,23 @@
 # Buddi Frontend (Vite + React)
 
-This directory contains Buddi's optional web UI for local development/demo flows.
+Operator UI for the Buddi RCM platform. React 19 + Vite 8 + Tailwind CSS 3.4 +
+Zustand 5 + Chart.js.
 
 ## Current status
 
-- The backend (`backend.api:app`) is the canonical production surface.
-- This frontend is actively runnable for dev, but not all UI actions are fully aligned with the current backend route set.
-- API base URL is configured via `VITE_API_BASE` (see `.env.example`).
+- Four pages: Dashboard (`/`), Review Queue (`/shadow`), Ask Buddee (`/chat`),
+  Audit Trail (`/audit`)
+- Demo mode via `?demo=true` loads synthetic patient PT-9012 (Marcus Holloway) and
+  runs a deterministic shadow audit — no backend or LLM key required
+- Dark/light theme persisted in localStorage
+- API key in memory only (never localStorage/sessionStorage)
+- SSE streaming for async job progress
 
 ## Prerequisites
 
 - Node.js 20+
 - npm 10+
-- Backend running on `http://localhost:8001` (or another URL you set in `VITE_API_BASE`)
+- Backend running on `http://localhost:8001` (or another URL set in `VITE_API_BASE` / `VITE_API_BASE_URL`)
 
 ## Setup
 
@@ -26,6 +31,7 @@ Default local env:
 
 ```env
 VITE_API_BASE=http://localhost:8001/api
+VITE_API_KEY=your_api_key_here
 ```
 
 ## Run
@@ -50,8 +56,25 @@ npm run build
 npm run preview
 ```
 
-## Integration notes (important)
+## API contract
 
-`src/store/useStore.js` currently includes some legacy calls (for example `/chat/chat`, `/patient/:id`, `/audit/`) that do not map 1:1 to the backend v4.1 routes. The backend routes currently available are documented in the root `README.md` and `docs/FRONTEND_BACKEND_CONNECTION.md`.
+`src/store/useStore.js` is the Zustand store that manages all API calls via a shared
+Axios instance. Backend routes are documented in the root `README.md`. Key endpoints
+used by the frontend:
 
-When wiring production UI behavior, use the canonical backend endpoints (e.g. `/api/health`, `/ingest/fhir`, `/audit/query`, `/prior-auth/generate`).
+- `GET /api/health` — validate API key, get tenant info
+- `GET /api/dashboard/metrics` — revenue recovery aggregates
+- `POST /api/shadow/audit` — run shadow-mode HCC audit
+- `GET /api/audit/query` — fetch audit trail entries
+- `GET /api/audit/verify` — verify cryptographic chain integrity
+- `POST /api/prior-auth/generate` — generate prior-auth draft
+- `POST /api/chat/chat` — chat with agent
+- `GET /api/jobs/{id}/stream` — SSE job progress
+
+## Integration notes
+
+- The frontend proxies `/api` to the backend in dev (`vite.config.js`)
+- Production: set `VITE_API_BASE` (or `VITE_API_BASE_URL`) to the deployed backend URL
+- Demo mode (`?demo=true`) uses deterministic canned responses — no backend required
+- All async operations have loading, error, and empty states
+- Error boundaries wrap each route for graceful degradation

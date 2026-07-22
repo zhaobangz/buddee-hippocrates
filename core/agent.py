@@ -131,7 +131,7 @@ class Agent:
         )
         try:
             parsed = json.loads(raw)
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             parsed = {"summary": raw, "identified_codes": [], "recovered_revenue": 0.0}
         if parsed.get("error"):
             parsed.setdefault("recovered_revenue", 0.0)
@@ -175,7 +175,7 @@ class Agent:
         )
         try:
             parsed = json.loads(raw)
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             parsed = {"error": "non_json_agent_response", "raw": raw[:400]}
         if parsed.get("error") or "draft_letter" not in parsed:
             parsed = {
@@ -495,7 +495,7 @@ trails.
         with tracer.start_as_current_span("prior_auth_draft") as span:
             try:
                 data = json.loads(payload)
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 data = {"clinical_context": payload}
 
             note = data.get("clinical_context") or data.get("note") or ""

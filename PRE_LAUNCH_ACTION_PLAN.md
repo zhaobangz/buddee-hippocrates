@@ -1,8 +1,14 @@
 # Buddi — Founder Pre-Launch Action Plan
 
+> **Status (July 2026):** Phases 1–3 are largely complete. The backend boots reliably,
+> frontend/backend contracts are aligned, and a working demo workflow exists.
+> Remaining items from Phase 4–5 (compliance basics, production deployment) are
+> tracked in `docs/MVP_COMPLETION_PLAN.md`. Retained as a historical reference for the
+> launch sequence that got us here.
+
 **Purpose:** This is the practical execution checklist to get Buddi from “runs locally with issues” to a credible web launch / pilot demo.
 
-**Context:** This plan is based on the terminal analysis from launching the current frontend and backend. The frontend starts cleanly, but the backend currently fails on missing Python dependencies and environment configuration. The UI also calls several backend endpoints that do not exist yet.
+**Context:** This plan is based on the terminal analysis from launching the current frontend and backend.
 
 ---
 

@@ -45,7 +45,7 @@ from backend.middleware import (
 )
 from core.agent import Agent
 from core.config import settings
-from core.database import SessionLocal, engine  # noqa: F401 (engine re-exported for callers)
+from core.database import SessionLocal, engine
 from core.db_session import set_tenant_context, tenant_scoped_session
 from core import jobs as job_queue
 from core.webhooks import (
@@ -78,7 +78,8 @@ logging.basicConfig(level=logging.INFO)
 try:
     setup_tracing(service_name="buddi-rcm-api")
     tracer = get_tracer(__name__)
-except Exception:
+except Exception as exc:
+    logger.warning("OpenTelemetry tracing failed to bootstrap — using no-op tracer: %s", exc)
     import opentelemetry.trace as trace
 
     tracer = trace.get_tracer(__name__)
@@ -167,8 +168,8 @@ def _seal_merkle_root_for_yesterday(
     finally:
         try:
             set_tenant_context(db, None)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to clear tenant GUC in _seal cleanup: %s", exc)
         db.close()
 
 
@@ -258,14 +259,14 @@ async def lifespan(app: FastAPI):
                 _task.cancel()
                 try:
                     await _task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError:
                     pass
         _merkle_root_task = None
         _worker_task = None
         try:
             shutdown_tracing()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Tracing shutdown failed: %s", exc)
 
 
 
@@ -511,7 +512,8 @@ def _fixture_note(bundle_name: str) -> str:
     try:
         with open(path, "r", encoding="utf-8") as f:
             bundle = json.load(f)
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        logger.debug("Could not load demo fixture %s: %s", path, exc)
         return ""
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
@@ -523,7 +525,8 @@ def _fixture_note(bundle_name: str) -> str:
                 continue
             try:
                 return base64.b64decode(data).decode("utf-8")
-            except Exception:
+            except (ValueError, UnicodeDecodeError):
+                logger.debug("Failed to decode base64 note data in fixture %s", path)
                 return ""
     return ""
 
@@ -922,8 +925,8 @@ async def internal_health(db: Session = Depends(tenant_scoped_session)):
     try:
         db.execute(text("SELECT 1"))
         db_status = "online"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Health check DB ping failed: %s", exc)
     http_status = 200 if db_status == "online" else 503
     return JSONResponse(
         status_code=http_status,
@@ -946,8 +949,8 @@ async def health(
     try:
         db.execute(text("SELECT 1"))
         db_status = "online"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Health check DB ping failed: %s", exc)
     # Build-out B6.2: surface the tenant UUID so the operator UI can show a
     # tenant-scoping indicator (last 8 chars). Not PHI; never the API key.
     tenant_id = getattr(request.state, "tenant_id", None)
@@ -975,8 +978,8 @@ async def readiness(client: str = AUTH, db: Session = Depends(tenant_scoped_sess
     try:
         db.execute(text("SELECT 1"))
         db_status = "online"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Readiness check DB ping failed: %s", exc)
 
     ready = db_status == "online" and agent is not None
     return JSONResponse(
@@ -1727,7 +1730,7 @@ async def _fire_webhook(
         await dispatch_webhook(
             db, tenant_id, event_type, payload, audit_logger=log_audit_event_postgres
         )
-    except Exception as e:  # noqa: BLE001 - delivery must never fail the request
+    except Exception as e:
         logger.warning("Webhook dispatch (%s) failed: %s", event_type, redact_for_logs(str(e)))
 
 
@@ -1747,7 +1750,7 @@ async def _dispatch_audit_flagged(tenant_id_str: str, payload: Dict[str, Any]) -
         await dispatch_webhook(
             db, tid, EVENT_AUDIT_FLAGGED, payload, audit_logger=log_audit_event_postgres
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("audit_event.flagged dispatch failed: %s", redact_for_logs(str(e)))
     finally:
         set_tenant_context(db, None)
@@ -2989,8 +2992,8 @@ async def seal_audit_root_now(
     finally:
         try:
             set_tenant_context(audit_db, None)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to clear tenant GUC in _log_audit cleanup: %s", exc)
         audit_db.close()
 
 

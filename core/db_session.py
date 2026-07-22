@@ -150,8 +150,8 @@ class GucStamper:
     def remove(self, db: Session) -> None:
         try:
             event.remove(db, "after_begin", self._after_begin)
-        except Exception:  # listener may already be gone on teardown paths
-            pass
+        except ValueError:  # listener may already be gone on teardown paths
+            logger.debug("GUC listener already removed (expected on teardown)")
 
     def set_tenant(self, db: Session, tenant_id: Optional[uuid.UUID]) -> None:
         """Switch the stamped tenant (worker loop reuses one session per job)."""
@@ -187,8 +187,8 @@ def tenant_scoped_session(request: Request) -> Generator[Session, None, None]:
             # stale tenant context.
             set_tenant_context(db, None)
             set_worker_context(db, False)
-        except Exception:
-            pass
+        except SQLAlchemyError:
+            logger.warning("Failed to clear GUC before returning connection to pool")
         db.close()
 
 

@@ -23,8 +23,8 @@ if not DATABASE_URL:
 # E402 is intentional here — the runtime DATABASE_URL validation above must
 # fail loudly *before* SQLAlchemy is imported so misconfigured production
 # starts surface as a clear error rather than a deferred ImportError.
-from sqlalchemy import create_engine  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # SEC-04: refuse to start with the dev-default credential outside of an
 # explicit test-mode context. Alembic migrations set DATABASE_URL explicitly,

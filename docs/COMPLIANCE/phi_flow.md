@@ -1,14 +1,14 @@
 # PHI Flow Diagram
 
 **Owner:** Founder (Zhao) + Lead Engineer (Hire #2 when onboarded)
-**Last reviewed:** *fill in at every retrospective*
+**Last reviewed:** 2026-07-20
 
 This document is the canonical "where does PHI enter / live / leave"
 diagram referenced by `Buddi_Strategic_Founders_Operating_Manual.pdf`
 §7.2 Risk #1 mitigation step #6. It is the artifact compliance
 counsel will ask for during a HIPAA security risk assessment.
 
-## Data-flow diagram (current state, May 2026)
+## Data-flow diagram (current state, July 2026)
 
 ```
                          ┌─────────────────────┐
@@ -42,10 +42,10 @@ counsel will ask for during a HIPAA security risk assessment.
                        ▼              ▼
        ┌────────────────────┐   ┌────────────────────────┐
        │ Anthropic API      │   │ Cloud SQL: Postgres 16 │
-       │ (Claude Opus 4.6)  │   │   • pgvector embeddings│
-       │ TLS 1.3 + BAA      │   │   • RLS policies       │
-       └────────────────────┘   │   • CMEK encryption    │
-                                │   • Private IP only    │
+       │ (Claude Opus 4.8 / │   │   • pgvector embeddings│
+       │  Sonnet 4.6)       │   │   • RLS policies       │
+       │ TLS 1.3 + BAA      │   │   • CMEK encryption    │
+       └────────────────────┘   │   • Private IP only    │
                                 └────────────┬───────────┘
                                              │
                                              ▼

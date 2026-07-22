@@ -5,15 +5,18 @@ import axios from 'axios';
  * API base URL.
  *
  * Track 1 / Step 1 (FE-01, CFG-01): the canonical backend is
- * `backend.api:app` on port 8001. The base is now injected at build time via
- * Vite's `VITE_API_BASE` env var so dev, staging, and production can each
- * target their own deployment without code changes.
+ * `backend.api:app` on port 8001. The base is injected at build time via
+ * Vite's `VITE_API_BASE` (or `VITE_API_BASE_URL`) env var so dev, staging,
+ * and production can each target their own deployment without code changes.
+ *
+ * Safe default: localhost:8001/api (dev). In production (Vercel), set
+ * `VITE_API_BASE` to your deployed backend URL at build time.
  *
  * Example `frontend/.env.local`:
  *   VITE_API_BASE=http://localhost:8001/api
  */
 const API_BASE =
-  (import.meta.env && import.meta.env.VITE_API_BASE) ||
+  (import.meta.env && (import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_BASE_URL)) ||
   'http://localhost:8001/api';
 const API_KEY_ENV = import.meta.env && import.meta.env.VITE_API_KEY;
 

@@ -2,7 +2,9 @@
 **Version:** 1.0 (April 2026)
 **Audience:** Solo founder / small founding team
 **Document owner:** Zhao
-**Status:** Living document — review weekly during MVP, monthly thereafter
+**Status:** Historical reference — most items planned here are now implemented in the
+v4.1 codebase. See `docs/MVP_COMPLETION_PLAN.md` and `docs/PRODUCT_TRUTH.md` for
+current status. Retained for architecture decisions and the original design rationale.
 
 ---
 

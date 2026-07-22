@@ -76,7 +76,7 @@ def db_tenant():
         db.add(tenant)
         db.commit()
         tenant_id = tenant.id
-    except Exception as exc:  # noqa: BLE001 - any DB failure => skip, not fail
+    except Exception as exc:
         db.rollback()
         db.close()
         pytest.skip(f"test Postgres unavailable: {exc}")
@@ -88,7 +88,7 @@ def db_tenant():
             db.rollback()
             db.query(models.Tenant).filter(models.Tenant.id == tenant_id).delete()
             db.commit()
-        except Exception:  # noqa: BLE001 - best-effort cleanup
+        except Exception:
             db.rollback()
         finally:
             db.close()

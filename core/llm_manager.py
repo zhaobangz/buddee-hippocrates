@@ -442,7 +442,7 @@ class LLMManager:
 
         try:
             return await self._call_provider(prompt, structured=False, model_tier=model_tier)
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             logger.warning("LLM provider call failed: %s", e)
             return f"Clinical LLM Connection Error: {str(e)}"
 
