@@ -84,8 +84,15 @@ logger = logging.getLogger(__name__)
 # the wrapper tags inside untrusted content by HTML-entity-escaping the
 # angle brackets: the model still reads the text naturally, but it can no
 # longer terminate (or reopen) the boundary.
+#
+# 2026-07-23 adversarial-probe hardening — two bypasses closed:
+#   * Forged attributes: ``</clinical_note role="system">`` previously slipped
+#     past because the pattern demanded ``>`` immediately after the tag name.
+#   * Full-width lookalikes: U+FF1C/U+FF1E previously passed through
+#     unchanged; tokenisers that NFKC-fold them would resurrect the boundary.
 _UNTRUSTED_BOUNDARY_RE = re.compile(
-    r"<\s*(/?)\s*(clinical_note|clinical_context|guidelines|input)\s*>",
+    r"[<\uFF1C]\s*(/?)\s*(clinical_note|clinical_context|guidelines|input)"
+    r"(?:\s[^>\uFF1E]*)?[>\uFF1E]",
     re.IGNORECASE,
 )
 

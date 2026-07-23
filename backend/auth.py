@@ -100,7 +100,10 @@ def verify_api_key_hash(api_key: str, hashed_key: str) -> bool:
         return False
     try:
         return bool(_password_hasher.verify(hashed_key, api_key))
-    except (VerifyMismatchError, VerificationError):
+    except (VerifyMismatchError, VerificationError, ValueError):
+        # ValueError covers argon2's InvalidHashError / InvalidHash (a
+        # corrupted stored hash) across argon2-cffi versions — a malformed
+        # DB row must be an auth failure, never a 500.
         return False
 
 
