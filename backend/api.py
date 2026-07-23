@@ -63,7 +63,11 @@ from core.merkle import (
     list_signed_root_days,
     verify_signed_roots_against_db,
 )
-from core.phi_guard import PHIProcessingNotAllowed, assert_phi_processing_allowed
+from core.phi_guard import (
+    PHIProcessingNotAllowed,
+    assert_phi_processing_allowed,
+    breakglass_active,
+)
 from core.schemas import MAX_FHIR_BUNDLE_BYTES, FHIRBundle, PriorAuthDraft, ShadowModeResponse
 from core.safety import redact_for_logs, sanitize_response
 from core.secure_fields import encrypt_json_value, encrypt_text_value
@@ -217,6 +221,14 @@ async def lifespan(app: FastAPI):
         # Logs the resolved set and raises in non-development environments when
         # it parses to zero networks, rather than silently disabling XFF trust.
         validate_trusted_proxy_cidrs()
+        # C-2/QW-4: alarm at boot if the PHI/BAA break-glass is active.
+        # phi_guard logs CRITICAL on first activation; probing here forces
+        # that check before the first request so the alert is never missed.
+        if breakglass_active():
+            logger.critical(
+                "PHI/BAA enforcement break-glass is ACTIVE at startup — "
+                "clinical processing is ungated until BUDDI_BREAKGLASS_UNTIL."
+            )
         try:
             agent = Agent()
         except Exception as e:
@@ -2275,9 +2287,13 @@ def _enforce_baa_precondition(
     reaches LLM/RAG processing.
 
     The check is **strict by default**: any error reading the flag is
-    treated as "not confirmed". An ops escape hatch
-    (``BUDDI_BAA_INGEST_ENFORCEMENT=disabled``) exists for emergency
-    incident response but should never be set under normal operation.
+    treated as "not confirmed". An ops escape hatch exists for emergency
+    incident response (C-2): BOTH ``BUDDI_PHI_PROCESSING_ENFORCEMENT`` and
+    ``BUDDI_BAA_INGEST_ENFORCEMENT`` must be ``disabled``, a future
+    ``BUDDI_BREAKGLASS_UNTIL`` ISO-8601 timestamp must be set, and
+    production additionally requires ``BUDDI_ALLOW_PROD_BREAKGLASS=1``.
+    Every activation logs CRITICAL. It should never be set under normal
+    operation.
     """
 
     try:

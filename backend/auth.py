@@ -30,7 +30,29 @@ from core.database import SessionLocal
 from core.models import TenantApiKey
 
 bearer_scheme = HTTPBearer(auto_error=False)
-_password_hasher = PasswordHasher() if PasswordHasher is not None else None
+
+# QW-3 (M-10): pin Argon2id parameters explicitly instead of relying on
+# argon2-cffi library defaults, which can drift across major versions.
+# Values follow RFC 9106's recommended profile (and match argon2-cffi
+# 23.1.0 defaults, so previously stored hashes verify unchanged — the
+# parameter set travels inside each encoded hash).
+_ARGON2_TIME_COST = 3
+_ARGON2_MEMORY_COST_KIB = 65536  # 64 MiB — OWASP/RFC 9106 target
+_ARGON2_PARALLELISM = 4
+_ARGON2_HASH_LEN = 32
+_ARGON2_SALT_LEN = 16
+
+_password_hasher = (
+    PasswordHasher(
+        time_cost=_ARGON2_TIME_COST,
+        memory_cost=_ARGON2_MEMORY_COST_KIB,
+        parallelism=_ARGON2_PARALLELISM,
+        hash_len=_ARGON2_HASH_LEN,
+        salt_len=_ARGON2_SALT_LEN,
+    )
+    if PasswordHasher is not None
+    else None
+)
 
 
 class AuthenticatedClient(str):
@@ -99,6 +121,8 @@ def _test_mode_static_fallback(request: Request, presented_key: str | None) -> A
 
     if os.getenv("ENVIRONMENT", "production").lower() == "production":
         return None  # Security: never allow plaintext test-mode API-key fallback in production.
+    if os.getenv("K_SERVICE"):
+        return None  # C-3: never allow the plaintext fallback on Cloud Run, any environment label.
     api_key = settings.API_KEY or os.getenv("API_KEY")
     if os.getenv("BUDDI_TEST_MODE") != "1" or not api_key or not presented_key:
         return None

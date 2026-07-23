@@ -22,6 +22,15 @@ from core.safety import redact_for_logs
 
 logger = logging.getLogger(__name__)
 POLL_INTERVAL_SECONDS = float(os.getenv("BUDDI_WORKER_POLL_INTERVAL", "2"))
+# I-1/QW-9: when the queue is empty the poll interval backs off exponentially
+# up to this ceiling, so an idle worker stops costing ~43k queries/day.
+POLL_MAX_INTERVAL_SECONDS = float(os.getenv("BUDDI_WORKER_POLL_MAX_INTERVAL", "30"))
+
+
+def next_idle_delay(idle_streak: int) -> float:
+    """Exponential backoff for empty-queue polls (2s → 4s → 8s → … → max)."""
+
+    return min(POLL_INTERVAL_SECONDS * (2 ** max(idle_streak, 0)), POLL_MAX_INTERVAL_SECONDS)
 
 
 async def process_job(agent: Agent, job: Job, input_payload: dict[str, Any]) -> dict[str, Any]:
@@ -39,7 +48,12 @@ async def process_job(agent: Agent, job: Job, input_payload: dict[str, Any]) -> 
 async def worker_loop(agent: Agent, stop_event: asyncio.Event | None = None) -> None:
     """Continuously polls for pending jobs until stopped or cancelled."""
 
-    logger.info("Buddi worker loop started (poll_interval=%.1fs)", POLL_INTERVAL_SECONDS)
+    logger.info(
+        "Buddi worker loop started (poll_interval=%.1fs, max_idle_interval=%.1fs)",
+        POLL_INTERVAL_SECONDS,
+        POLL_MAX_INTERVAL_SECONDS,
+    )
+    idle_streak = 0
     while True:
         if stop_event and stop_event.is_set():
             break
@@ -56,8 +70,10 @@ async def worker_loop(agent: Agent, stop_event: asyncio.Event | None = None) -> 
             if job is None:
                 stamper.remove(db)
                 db.close()
-                await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                await asyncio.sleep(next_idle_delay(idle_streak))
+                idle_streak += 1
                 continue
+            idle_streak = 0
             db.commit()
             logger.info(
                 "Processing job id=%s type=%s tenant=%s",

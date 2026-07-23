@@ -115,6 +115,25 @@ class RateLimitConfig:
         "/openapi.json",
     )
 
+    #: H-1: LLM/cost-heavy route prefixes. When the limiter backend errors
+    #: repeatedly these paths fail CLOSED (429) instead of open, so a Redis
+    #: outage cannot turn into unbounded LLM spend and worker backlog. Cheap
+    #: paths keep failing open to preserve availability.
+    expensive_path_prefixes: Tuple[str, ...] = (
+        "/api/shadow",
+        "/shadow",
+        "/api/prior-auth",
+        "/prior-auth",
+        "/api/ingest",
+        "/ingest",
+        "/api/fhir",
+        "/api/chat",
+        "/chat",
+    )
+
+    #: Consecutive storage errors before expensive paths fail closed.
+    max_consecutive_storage_errors: int = 3
+
     #: Redis storage URI. ``None`` means resolve from ``REDIS_URL`` env at
     #: middleware construction (the normal production path); tests pass an
     #: explicit value to point at a fakeredis instance.
@@ -162,8 +181,22 @@ def validate_trusted_proxy_cidrs() -> Tuple[ipaddress.IPv4Network, ...]:
 
     cidrs = _trusted_proxy_cidrs()
     logger.info("Trusted proxy CIDRs: %s", [str(n) for n in cidrs])
+    environment = os.getenv("ENVIRONMENT", "production").strip().lower()
+    world = [n for n in cidrs if n.prefixlen == 0]
+    if world:
+        # QW-2 (H-2): 0.0.0.0/0 or ::/0 means "trust X-Forwarded-For from
+        # anyone", which lets every client mint a fresh rate-limit bucket
+        # per request. Refuse to boot in that state.
+        message = (
+            "TRUSTED_PROXY_CIDRS contains a world route "
+            f"({', '.join(str(n) for n in world)}). Trusting X-Forwarded-For "
+            "from every peer defeats rate limiting — narrow it to the actual "
+            "proxy ranges (e.g. '127.0.0.1/32' or your load balancer CIDRs)."
+        )
+        if environment != "development":
+            raise ValueError(message)
+        logger.warning("%s Permitted only because ENVIRONMENT=development.", message)
     if not cidrs:
-        environment = os.getenv("ENVIRONMENT", "production").strip().lower()
         if environment != "development":
             raise ValueError(
                 "TRUSTED_PROXY_CIDRS parsed to zero valid networks in a "
@@ -229,6 +262,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._config = config or RateLimitConfig()
         self._trusted = _trusted_proxy_cidrs()
         self._enabled = os.getenv("BUDDI_RATE_LIMIT_DISABLED", "").strip() not in {"1", "true", "yes"}
+        # H-1: consecutive storage-error streak driving the expensive-path
+        # fail-closed behaviour in _check(). Reset on any successful hit.
+        self._consecutive_storage_errors = 0
 
         storage_uri = self._config.storage_uri or os.getenv("REDIS_URL", DEFAULT_REDIS_URL)
         # slowapi's Limiter owns the connection pool and the moving-window
@@ -263,7 +299,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         key = _client_identity(request, self._trusted)
-        allowed, retry_after = self._check(key)
+        allowed, retry_after = self._check(key, path)
         if not allowed:
             request_id = getattr(request.state, "request_id", None)
             logger.info(
@@ -290,19 +326,37 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
         return await call_next(request)
 
-    def _check(self, key: str) -> Tuple[bool, float]:
+    def _check(self, key: str, path: str = "") -> Tuple[bool, float]:
         """Consume one token for ``key``. Returns ``(allowed, retry_after)``.
 
-        Fails open on Redis errors: a Redis outage must not take the API
-        offline. We log loudly so the on-call dashboard can alarm on it.
+        H-1: cheap paths fail open on storage errors (a Redis outage must
+        not take the API offline), but after
+        ``config.max_consecutive_storage_errors`` consecutive failures the
+        LLM/cost-heavy prefixes in ``config.expensive_path_prefixes`` fail
+        CLOSED — unbounded Anthropic spend is the worse outage. Either way
+        we log loudly so the on-call dashboard can alarm on it.
         """
 
         strategy = self._slow.limiter
         try:
             allowed = strategy.hit(self._rate_item, key, cost=1)
         except Exception:
+            self._consecutive_storage_errors += 1
+            fail_closed = (
+                self._consecutive_storage_errors >= self._config.max_consecutive_storage_errors
+                and any(path.startswith(prefix) for prefix in self._config.expensive_path_prefixes)
+            )
+            if fail_closed:
+                logger.exception(
+                    "Rate-limit storage error #%d — failing CLOSED for expensive path=%s key=%s",
+                    self._consecutive_storage_errors,
+                    path,
+                    key,
+                )
+                return False, float(self._config.window_seconds)
             logger.exception("Rate-limit storage error — failing open for key=%s", key)
             return True, 0.0
+        self._consecutive_storage_errors = 0
 
         if allowed:
             return True, 0.0

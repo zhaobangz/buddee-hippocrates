@@ -94,14 +94,20 @@ async function streamShadowJob(jobId, onProgress) {
   return pollShadowJob(jobId, onProgress);
 }
 
+// I-8/QW-8: exponential backoff (1s → 2s → 4s → 5s cap) inside a 150s
+// budget instead of a fixed 1s × 60 loop — fewer HTTP calls per job, and a
+// deadline that tolerates real LLM latency instead of a hardcoded count.
 async function pollShadowJob(jobId, onProgress) {
-  for (let i = 0; i < 60; i += 1) {
+  const deadline = Date.now() + 150_000;
+  let delay = 1_000;
+  while (Date.now() < deadline) {
     const resp = await api.get(`/jobs/${jobId}`);
     const { status, result, error } = resp.data || {};
     if (status && SHADOW_PROGRESS_LABELS[status]) onProgress(SHADOW_PROGRESS_LABELS[status]);
     if (status === 'completed') return result;
     if (status === 'failed') throw new Error(error || 'Shadow audit failed');
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 2, 5_000);
   }
   throw new Error('Shadow audit timed out');
 }

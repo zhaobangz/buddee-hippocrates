@@ -320,6 +320,27 @@ async def _openai_chat(
 # ---------------------------------------------------------------------------
 
 
+def _default_timeout_seconds() -> float:
+    """Resolve the default LLM client timeout (audit H-4 / QW-6).
+
+    30s was too tight for adaptive-thinking reasoning calls (Opus), which
+    degraded into silent demo/error fallbacks. The default is now 90s so the
+    reasoning tier fits comfortably inside the worker's 300s Cloud Run
+    ceiling; synchronous API paths remain bounded by the 60s request
+    timeout regardless. Override via ``BUDDI_LLM_TIMEOUT_SECONDS``.
+    """
+
+    raw = os.getenv("BUDDI_LLM_TIMEOUT_SECONDS", "").strip()
+    if raw:
+        try:
+            value = float(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            logger.warning("Ignoring invalid BUDDI_LLM_TIMEOUT_SECONDS=%r", raw)
+    return 90.0
+
+
 class LLMManager:
     """Thin async adapter for healthcare-grade LLM endpoints.
 
@@ -327,9 +348,9 @@ class LLMManager:
     safe to share across concurrent requests.
     """
 
-    def __init__(self, memory=None, timeout: float = 30.0):
+    def __init__(self, memory=None, timeout: float | None = None):
         self.memory = memory
-        self._timeout = timeout
+        self._timeout = float(timeout) if timeout is not None else _default_timeout_seconds()
         self._provider = _resolve_provider()
         self._model = _resolve_model_for_provider(self._provider)
         self._reasoning_model = os.getenv("ANTHROPIC_ROUTING_MODEL", "claude-opus-4-8")

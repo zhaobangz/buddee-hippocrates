@@ -16,6 +16,8 @@ from typing import List, Optional
 from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.secrets_loader import load_secrets_dir
+
 
 class Settings(BaseSettings):
     """Single source of truth for runtime configuration.
@@ -158,16 +160,57 @@ class Settings(BaseSettings):
         return [o.strip() for o in raw.split(",") if o.strip()]
 
 
+def _assert_test_mode_allowed() -> None:
+    """C-3: refuse test mode on any deployed, reachable environment.
+
+    ``BUDDI_TEST_MODE=1`` injects well-known secrets and (outside production)
+    enables a plaintext static API-key fallback. That is safe for local dev
+    and CI, but catastrophic on a deployed container. Hard-fail when running
+    on Cloud Run (``K_SERVICE`` is always present there) or when
+    ``ENVIRONMENT`` is explicitly ``production`` / ``staging``. An unset
+    ``ENVIRONMENT`` (local scripts, CI jobs) is tolerated but still triggers
+    the startup warning in ``_load_settings``.
+    """
+
+    if os.getenv("BUDDI_TEST_MODE") != "1":
+        return
+    if os.getenv("K_SERVICE"):
+        raise RuntimeError(
+            "BUDDI_TEST_MODE=1 is set on Cloud Run (K_SERVICE is present). "
+            "Test mode injects well-known secrets and enables a static "
+            "API-key fallback. Remove BUDDI_TEST_MODE from the service "
+            "manifest — production must load secrets via SECRETS_DIR."
+        )
+    environment = os.getenv("ENVIRONMENT", "").strip().lower()
+    if environment in {"production", "staging"}:
+        raise RuntimeError(
+            f"BUDDI_TEST_MODE=1 is set with ENVIRONMENT={environment!r}. "
+            "Test mode is only permitted for local development and CI "
+            "(ENVIRONMENT must be 'test' or 'development')."
+        )
+
+
 def _load_settings() -> Settings:
     """Load settings with a test-mode escape hatch so unit tests don't need
     real production secrets, while production startup still fails loudly if
     ``SECRET_KEY`` / ``BUDDI_STORAGE_KEY`` are missing."""
+    # C-1: map Cloud Run file-mounted secrets into the environment *before*
+    # validation, so the service boots from Secret Manager mounts instead of
+    # plaintext env vars (see core/secrets_loader.py).
+    load_secrets_dir()
+    _assert_test_mode_allowed()
     if os.getenv("BUDDI_TEST_MODE") == "1" and not os.getenv("CI") and "pytest" not in sys.modules:
         warnings.warn(
             "BUDDI_TEST_MODE=1 is set outside CI — ensure this is not production.",
             stacklevel=2,
         )  # Security: surface accidental test-mode auth bypasses during startup.
-    if os.getenv("BUDDI_TEST_MODE") == "1":
+    if os.getenv("BUDDI_TEST_MODE") == "1" and not (
+        os.getenv("CI") and "pytest" not in sys.modules
+    ):
+        # C-3: never inject well-known secrets into a CI process that is not
+        # actually running pytest (e.g. a smoke container built by CI). Such
+        # processes must receive real secrets via env / SECRETS_DIR — and
+        # Settings() below fails loudly when they don't.
         os.environ.setdefault(
             "SECRET_KEY",
             "test-only-secret-key-not-for-production-use-0123456789abcdef",

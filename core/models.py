@@ -315,7 +315,10 @@ class WebhookEndpoint(Base):
 
     __tablename__ = "webhook_endpoints"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    # I-5/QW-11: hot tenant filter — the index already exists via migration
+    # d4e5f6a7b8c9 (ix_webhook_endpoints_tenant_id); index=True keeps the
+    # ORM metadata aligned with it.
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
     url = Column(Text, nullable=False)
     secret = Column(Text, nullable=False)  # SecureStorage-encrypted signing secret
     events = Column(ARRAY(Text), nullable=False)

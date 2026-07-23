@@ -567,10 +567,29 @@ class MerkleSigner:
 
     @classmethod
     def _dev_hmac_signer(cls) -> "MerkleSigner":
-        # Use BUDDI_STORAGE_KEY so we don't introduce yet another env var
-        # for the dev fallback. The algorithm string is explicit so
-        # nobody mistakes this for production-grade signing.
-        secret = os.getenv("BUDDI_STORAGE_KEY", "buddi-dev-storage-key")
+        # M-6: no hardcoded fallback key. An explicit BUDDI_STORAGE_KEY is
+        # required even for the dev signer, so a misconfigured shared
+        # environment can never seal audit roots with a publicly known key.
+        # The algorithm string stays explicit so nobody mistakes this for
+        # production-grade signing.
+        secret = os.getenv("BUDDI_STORAGE_KEY")
+        if not secret:
+            raise RuntimeError(
+                "BUDDI_STORAGE_KEY is required for the dev HMAC Merkle signer. "
+                "Configure a KMS/PEM signer (BUDDI_AUDIT_KMS_PROVIDER / "
+                "BUDDI_AUDIT_ROOT_SIGNING_KEY_PATH) for any shared environment."
+            )
+        environment = os.getenv("ENVIRONMENT", "").strip().lower()
+        if environment not in {"test", "development"}:
+            # QW-10: from_env() hard-refuses this signer when
+            # ENVIRONMENT=production; any *other* non-dev label (staging,
+            # unset) still gets through — scream so log alerts fire on
+            # non-production-grade seals.
+            logger.critical(
+                "hmac-sha256-dev Merkle signer active with ENVIRONMENT=%r — "
+                "audit seals are not production-grade; configure Cloud KMS.",
+                environment or "unset",
+            )
         key_bytes = secret.encode("utf-8")
         key_id = hashlib.sha256(b"dev-hmac::" + key_bytes).hexdigest()[:16]
 

@@ -29,6 +29,7 @@ spec:
           buddi-storage-key=/secrets/storage-key:latest
           buddi-api-key=/secrets/api-key:latest
           buddi-anthropic-key=/secrets/anthropic-key:latest
+          buddi-redis-url=/secrets/redis-url:latest
     spec:
       containerConcurrency: 80
       timeoutSeconds: 60
@@ -54,8 +55,15 @@ spec:
               value: "0"   # ⛔  Flip to "1" ONLY after counsel confirms BAAs.
             - name: LLM_PROVIDER
               value: anthropic
-            # Secrets are mounted as files by the annotation above.
-            # The app reads /secrets/<name> via its SECRETS_DIR convention.
+            # Secrets are mounted as files by the annotation above. At boot,
+            # core/secrets_loader.py maps them into the environment:
+            #   database-url→DATABASE_URL  secret-key→SECRET_KEY
+            #   storage-key→BUDDI_STORAGE_KEY  api-key→API_KEY
+            #   anthropic-key→ANTHROPIC_API_KEY  redis-url→REDIS_URL
+            # (QW-5) REDIS_URL feeds the rate limiter — point the
+            # buddi-redis-url secret at Memorystore (redis://<ip>:6379/0).
+            # ⛔ BUDDI_TEST_MODE must never be set here: the app refuses to
+            # boot with it on Cloud Run (C-3).
             - name: SECRETS_DIR
               value: /secrets
           startupProbe:
