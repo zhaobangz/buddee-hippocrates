@@ -3,6 +3,7 @@ import {
   BrowserRouter as Router,
   Routes,
   Route,
+  Navigate,
   useLocation,
   useNavigate,
 } from 'react-router-dom';
@@ -13,7 +14,9 @@ import Dashboard from './pages/Dashboard';
 import ChatPage from './pages/ChatPage';
 import ShadowPage from './pages/ShadowPage';
 import AuditPage from './pages/AuditPage';
-import useStore, { subscribeApiKey, getRuntimeApiKey } from './store/useStore';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import useStore, { subscribeApiKey, getRuntimeApiKey, getRuntimeSession } from './store/useStore';
 
 /**
  * Full-page sign-in / connect screen.
@@ -201,15 +204,49 @@ function PatientBootstrap() {
  * crash the entire app. The boundary renders a fallback UI and leaves the
  * router / layout in a usable state.
  */
+/**
+ * Portal auth gate: the operator UI requires a live identity — a portal
+ * session (human lane), an API key (machine lane), or the public synthetic
+ * demo (`?demo=true`). Anything else is redirected to the login page.
+ */
+function RequireAuth({ children }) {
+  const session = useStore((state) => state.session);
+  const preferApiKey = useStore((state) => state.preferApiKey);
+  const location = useLocation();
+  const isDemo = new URLSearchParams(location.search).get('demo') === 'true';
+  if (session || getRuntimeSession() || getRuntimeApiKey() || preferApiKey || isDemo) {
+    return children;
+  }
+  return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+}
+
+/** The legacy API-key overlay stays available off the auth pages only. */
+function ConditionalApiKeyPrompt() {
+  const location = useLocation();
+  if (location.pathname.startsWith('/login') || location.pathname.startsWith('/signup')) {
+    return null;
+  }
+  return <ApiKeyPrompt />;
+}
+
 function App() {
   return (
     <Router>
-      <ApiKeyPrompt />
+      <ConditionalApiKeyPrompt />
       <PatientBootstrap />
       <DemoQueryHandler />
       <ErrorBoundary>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
             <Route
               index
               element={

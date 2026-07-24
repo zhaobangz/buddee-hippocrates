@@ -98,6 +98,27 @@ def set_worker_context(db: Session, enabled: bool) -> None:
         )
 
 
+def set_auth_bypass(db: Session, enabled: bool) -> None:
+    """Stamp the pre-auth marker used by the users/invites/refresh-token RLS
+    policies (migration ``h8i9j0k1l2m3``).
+
+    Login, signup, and token-refresh must look up credentials *before* a
+    tenant context exists. Only ``backend/auth_users.py`` routes and the JWT
+    branch of ``require_api_client`` ever enable this, on their own
+    short-lived sessions — authenticated portal routes never stamp it, so
+    tenant isolation is untouched everywhere else.
+    """
+
+    payload = "1" if enabled else ""
+    try:
+        db.execute(text("SELECT set_config('app.auth_bypass', :val, true)"), {"val": payload})
+    except SQLAlchemyError as e:
+        logger.warning(
+            "Failed to set Postgres app.auth_bypass GUC (pre-auth RLS degraded): %s",
+            e,
+        )
+
+
 class GucStamper:
     """Re-stamp the RLS GUCs at the start of *every* transaction on a session.
 
@@ -116,9 +137,15 @@ class GucStamper:
     surviving any number of mid-request commits.
     """
 
-    def __init__(self, tenant_id: Optional[uuid.UUID] = None, worker_mode: bool = False):
+    def __init__(
+        self,
+        tenant_id: Optional[uuid.UUID] = None,
+        worker_mode: bool = False,
+        auth_bypass: bool = False,
+    ):
         self.tenant_id = tenant_id
         self.worker_mode = worker_mode
+        self.auth_bypass = auth_bypass
 
     # -- listener --------------------------------------------------------
     def _after_begin(self, session: Session, transaction, connection) -> None:
@@ -137,6 +164,10 @@ class GucStamper:
                 text("SELECT set_config('app.worker_mode', :val, true)"),
                 {"val": "1" if self.worker_mode else ""},
             )
+            connection.execute(
+                text("SELECT set_config('app.auth_bypass', :val, true)"),
+                {"val": "1" if self.auth_bypass else ""},
+            )
         except SQLAlchemyError as e:
             logger.warning("GUC re-stamp failed (RLS defense-in-depth degraded): %s", e)
 
@@ -146,6 +177,7 @@ class GucStamper:
         # Stamp the current/first transaction immediately as well.
         set_tenant_context(db, self.tenant_id)
         set_worker_context(db, self.worker_mode)
+        set_auth_bypass(db, self.auth_bypass)
 
     def remove(self, db: Session) -> None:
         try:
@@ -192,8 +224,42 @@ def tenant_scoped_session(request: Request) -> Generator[Session, None, None]:
         db.close()
 
 
+def auth_flow_session() -> Generator[Session, None, None]:
+    """FastAPI dependency for the *pre-auth* routes (login/signup/refresh).
+
+    Stamps ``app.auth_bypass='1'`` so the RLS policies on ``users``,
+    ``tenant_invites`` and ``auth_refresh_tokens`` permit credential lookups
+    before any tenant context exists. Once the handler knows the tenant
+    (from the looked-up user/invite row) it should call
+    ``stamper.set_tenant`` — or simply rely on the application-side filter —
+    before touching any other tenant-scoped table (e.g. audit events, which
+    have no auth_bypass clause and therefore still require the tenant GUC).
+
+    The bypass never escapes these routes: it is stamped on a dedicated
+    short-lived session and cleared before the connection returns to the
+    pool.
+    """
+
+    db = SessionLocal()
+    stamper = GucStamper(tenant_id=None, worker_mode=False, auth_bypass=True)
+    try:
+        stamper.install(db)
+        yield db, stamper
+    finally:
+        stamper.remove(db)
+        try:
+            set_tenant_context(db, None)
+            set_worker_context(db, False)
+            set_auth_bypass(db, False)
+        except SQLAlchemyError:
+            logger.warning("Failed to clear GUCs before returning connection to pool")
+        db.close()
+
+
 __all__ = [
     "GucStamper",
+    "auth_flow_session",
+    "set_auth_bypass",
     "set_tenant_context",
     "set_worker_context",
     "tenant_scoped_session",

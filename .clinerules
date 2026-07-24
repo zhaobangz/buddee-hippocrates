@@ -1,0 +1,44 @@
+# Cline workspace rules — buddee-health-hippocrates
+
+## graphify (code knowledge graph)
+
+This project has a knowledge graph at `graphify-out/` with god nodes,
+community structure, and cross-file relationships. Use it as the FIRST stop
+for codebase questions — it returns a scoped subgraph that is usually much
+smaller and more precise than raw grep output.
+
+Rules:
+- For codebase questions, first query the graph. Prefer the graphify MCP
+  tools when the graphify MCP server is connected (`query_graph`,
+  `get_neighbors`, `shortest_path`, `get_community`); otherwise run the CLI:
+  `~/.local/bin/graphify query "<question>"`.
+- Use `~/.local/bin/graphify path "<A>" "<B>"` (or MCP `shortest_path`) for
+  relationships between two symbols/files and
+  `~/.local/bin/graphify explain "<concept>"` for focused concepts.
+- If `graphify-out/wiki/index.md` exists, use it for broad navigation instead
+  of raw source browsing.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or
+  when query/path/explain do not surface enough context.
+- After modifying code, run `~/.local/bin/graphify update .` to keep the
+  graph current (AST-only extraction, no LLM/API cost).
+- If `graphify-out/graph.json` is missing or the CLI is unavailable, fall
+  back to search_codebase / grep and mention that the graph needs a rebuild.
+
+## Security posture (do not regress)
+
+- This is a HIPAA-adjacent clinical coding platform. Never weaken the BAA /
+  PHI gates in `core/phi_guard.py`, the prompt-boundary escaping in
+  `core/agent.py`, or the tenant RLS + `GucStamper` pattern in
+  `core/db_session.py` without explicit instruction and a matching test.
+- Every auth-relevant change (login, invites, API keys, scopes, JWT) must
+  ship with tests, including at least one adversarial case in
+  `tests/test_adversarial_probe.py` style.
+- Secrets never go into the repo. `BUDDI_BAA_CONFIRMED` stays `0` everywhere
+  except the counsel-cleared production PHI tier.
+
+## Validation before declaring done
+
+- Backend: `./venv/bin/python -m pytest tests/ -q` must pass; new modules
+  must pass `./venv/bin/python -m ruff check <files>`.
+- Frontend: `cd frontend && npx eslint <changed files>` and
+  `npm run build` must pass.

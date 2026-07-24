@@ -119,6 +119,9 @@ class RateLimitConfig:
     #: repeatedly these paths fail CLOSED (429) instead of open, so a Redis
     #: outage cannot turn into unbounded LLM spend and worker backlog. Cheap
     #: paths keep failing open to preserve availability.
+    #: ``/api/auth`` is included for a different reason: credential endpoints
+    #: are the highest-value brute-force target on the internet surface, so
+    #: their limiter must never silently drop open.
     expensive_path_prefixes: Tuple[str, ...] = (
         "/api/shadow",
         "/shadow",
@@ -129,6 +132,7 @@ class RateLimitConfig:
         "/api/fhir",
         "/api/chat",
         "/chat",
+        "/api/auth",
     )
 
     #: Consecutive storage errors before expensive paths fail closed.

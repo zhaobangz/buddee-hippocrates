@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover - keeps test-mode fallback importable
 
 from core.config import settings
 from core.database import SessionLocal
-from core.models import TenantApiKey
+from core.models import TenantApiKey, User
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -107,6 +107,17 @@ def verify_api_key_hash(api_key: str, hashed_key: str) -> bool:
         return False
 
 
+# Portal user passwords use the same pinned Argon2id hasher as tenant API
+# keys — one reviewed parameter set (RFC 9106 profile) for every credential
+# in the system. Aliased for call-site readability.
+def hash_password(password: str) -> str:
+    return hash_api_key(password)
+
+
+def verify_password_hash(password: str, hashed: str) -> bool:
+    return verify_api_key_hash(password, hashed)
+
+
 def _presented_api_key(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials],
@@ -142,6 +153,56 @@ def _test_mode_static_fallback(request: Request, presented_key: str | None) -> A
     return AuthenticatedClient("api-key", tenant_id=fallback_tid, scopes=request.state.scopes)
 
 
+def _looks_like_jwt(value: str) -> bool:
+    """Portal session JWTs are compact JWS (header.payload.signature).
+    Tenant API keys never contain dots (``secrets.token_urlsafe`` alphabet),
+    so this cleanly separates the human lane from the machine lane."""
+
+    return value.count(".") == 2
+
+
+def _jwt_authenticated_client(request: Request, presented_key: str) -> AuthenticatedClient | None:
+    """Verify a portal session JWT and load the owning user row.
+
+    The user lookup runs under the pre-auth RLS bypass on a short-lived
+    session; the tenant context is then derived FROM the user row (the
+    authoritative source), not merely trusted from the token claims.
+    """
+
+    from core.db_session import set_auth_bypass
+    from core.user_auth import verify_access_token
+
+    claims = verify_access_token(presented_key)
+    if claims is None:
+        return None
+    try:
+        user_uuid = uuid.UUID(str(claims.get("sub")))
+        uuid.UUID(str(claims.get("tenant_id")))  # shape check only
+    except (TypeError, ValueError):
+        return None
+    db = SessionLocal()
+    try:
+        set_auth_bypass(db, True)
+        user = db.query(User).filter(User.id == user_uuid).first()
+    except SQLAlchemyError:
+        db.rollback()
+        return None
+    finally:
+        db.close()
+    if user is None or not user.is_active:
+        return None
+    scopes = list(claims.get("scopes") or [])
+    request.state.tenant_id = user.tenant_id
+    request.state.scopes = scopes
+    request.state.user_id = user.id
+    request.state.api_key_id = None
+    return AuthenticatedClient(
+        f"user:{user.id}",
+        tenant_id=user.tenant_id,
+        scopes=scopes,
+    )
+
+
 async def require_api_client(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
@@ -155,6 +216,20 @@ async def require_api_client(
 
     # 1) Tenant API-key header: ``X-API-Key`` or ``Authorization: Bearer <key>``.
     if presented_key:
+        # Human lane: portal session JWT. A JWT-shaped credential that fails
+        # verification is an immediate 401 — never downgraded into the
+        # API-key lookup path.
+        if _looks_like_jwt(presented_key):
+            client = _jwt_authenticated_client(request, presented_key)
+            if client is not None:
+                return client
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired or invalid — please sign in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Machine lane: tenant API key.
         db = SessionLocal()
         try:
             key_row = (

@@ -371,6 +371,14 @@ app.add_middleware(
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RequestIDMiddleware)
 
+# Portal user-auth routes (invite-only email+password+hCaptcha login). The
+# router lives in its own module to keep this file's route table readable;
+# it late-imports log_audit_event_postgres inside handlers to avoid a
+# circular import at app-build time.
+from backend import auth_users  # noqa: E402
+
+app.include_router(auth_users.router)
+
 
 # --- Request/response models --------------------------------------------
 class PayloadRequest(BaseModel):

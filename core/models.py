@@ -338,3 +338,76 @@ class RecoveryEvent(Base):
     patient_id = Column(String)
     recovered_revenue = Column(Float)
     timestamp = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class User(Base):
+    """Human portal account (invite-only signup — see backend/auth_users.py).
+
+    Machine integrations keep using ``TenantApiKey``; this model is for people
+    logging into the operator portal with email + password + hCaptcha.
+
+    ``email`` is stored normalised (strip + lowercase) at write time so the
+    plain unique constraint is case-insensitive in practice — avoids a CITEXT
+    extension dependency. ``password_hash`` is Argon2id via the pinned hasher
+    in ``backend/auth.py`` (same parameters as tenant API keys). Account
+    lockout (``failed_login_attempts`` / ``locked_until``) blunts online
+    brute force; the counter resets on a successful login.
+    """
+
+    __tablename__ = "users"
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
+    email = Column(String(320), nullable=False, unique=True, index=True)
+    password_hash = Column(Text, nullable=False)
+    full_name = Column(String(255), nullable=True)
+    # Canonical roles: admin | clinician | billing. Role → scope mapping lives
+    # in core/user_auth.ROLE_SCOPES; JWTs carry the derived scopes.
+    role = Column(String(32), nullable=False, server_default="clinician")
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    failed_login_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class AuthRefreshToken(Base):
+    """Rotating refresh token for portal sessions.
+
+    Only the SHA-256 digest of the token is stored — a DB read never yields a
+    usable credential. Every refresh rotates (old row revoked, new row in the
+    same ``family_id``); presenting an already-revoked token means theft, so
+    the whole family is revoked (RFC 6819 §5.2.2.3 reuse detection).
+    """
+
+    __tablename__ = "auth_refresh_tokens"
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    family_id = Column(PG_UUID(as_uuid=True), nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_ip = Column(String(64), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class TenantInvite(Base):
+    """Invite-only onboarding token (admin-generated).
+
+    Only the SHA-256 digest of the invite token is stored. ``email`` is an
+    optional binding: when set, the signup call must present the same address
+    so a leaked invite link cannot onboard a different person. An invite is
+    single-use (``used_at``) and time-bounded (``expires_at``).
+    """
+
+    __tablename__ = "tenant_invites"
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(PG_UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
+    email = Column(String(320), nullable=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    role = Column(String(32), nullable=False, server_default="clinician")
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(PG_UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)

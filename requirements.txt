@@ -17,6 +17,7 @@ requests==2.33.0
 # --- Security / Encryption ---
 cryptography==48.0.1
 argon2-cffi==23.1.0
+PyJWT==2.10.1
 
 # --- LLM / AI ---
 # Anthropic Claude is the primary clinical-reasoning provider per

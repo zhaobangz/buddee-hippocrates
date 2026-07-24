@@ -1,11 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, Bell, Sun, Moon, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import useStore from '../store/useStore';
 
 const TopBar = ({ dark, onToggleTheme }) => {
   const navigate = useNavigate();
+  const user = useStore((state) => state.user);
+  const logout = useStore((state) => state.logout);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef(null);
+
+  const handleSignOut = useCallback(async () => {
+    setShowUserMenu(false);
+    await logout();
+    navigate('/login', { replace: true });
+  }, [logout, navigate]);
 
   // Close user menu on outside click
   useEffect(() => {
@@ -118,13 +127,13 @@ const TopBar = ({ dark, onToggleTheme }) => {
                   className="text-sm font-semibold"
                   style={{ color: 'var(--color-ink)' }}
                 >
-                  Operator
+                  {user?.full_name || user?.email || 'Operator'}
                 </p>
                 <p
                   className="text-xs"
                   style={{ color: 'var(--color-muted)' }}
                 >
-                  Coding Specialist
+                  {user?.role ? `${user.role} · ${user.email}` : 'API key session'}
                 </p>
               </div>
               <button
@@ -138,6 +147,7 @@ const TopBar = ({ dark, onToggleTheme }) => {
                 Settings
               </button>
               <button
+                onClick={handleSignOut}
                 className="w-full text-left px-4 py-2 text-sm transition-colors"
                 style={{ color: 'var(--color-secondary)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-fill)'; }}

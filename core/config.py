@@ -56,6 +56,27 @@ class Settings(BaseSettings):
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
 
+    # --- Portal user auth (invite-only email+password+hCaptcha login) ---
+    # Dedicated JWT signing secret for portal session tokens. Optional: when
+    # unset, a domain-separated key is derived from SECRET_KEY (see
+    # core/user_auth._signing_key) so existing deployments keep working; set
+    # it explicitly to rotate portal sessions independently of anything else
+    # signed with SECRET_KEY.
+    BUDDI_JWT_SECRET: Optional[str] = Field(
+        default=None,
+        description="HS256 signing secret for portal session JWTs.",
+    )
+    BUDDI_JWT_ACCESS_MINUTES: int = 15
+    BUDDI_JWT_REFRESH_DAYS: int = 14
+    # hCaptcha secret for the siteverify call on login/signup. Required in
+    # production — the verifier fails closed without it. In
+    # development/test, BUDDI_CAPTCHA_DISABLED=1 skips verification (that
+    # flag is ignored when ENVIRONMENT=production, mirroring the phi_guard
+    # break-glass discipline).
+    HCAPTCHA_SECRET_KEY: str = ""
+    HCAPTCHA_SITEKEY: str = ""
+    BUDDI_INVITE_EXPIRY_HOURS: int = 48
+
     # --- CORS (SEC-01) ---
     CORS_ORIGINS: str = ""
 

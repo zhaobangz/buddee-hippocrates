@@ -215,6 +215,17 @@ audit — no LLM key required.
 | POST | `/api/encounter/{id}/process` | Clinician | Queue encounter processing |
 | GET | `/api/billing/suggest` | API key | Get HCC suggestions for tenant |
 
+### Portal auth (invite-only email+password+hCaptcha)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/login` | None (captcha) | Email+password login → access JWT + rotating refresh token |
+| POST | `/api/auth/signup` | None (invite+captcha) | Redeem admin invite → account + session |
+| POST | `/api/auth/refresh` | Refresh token | Rotate refresh, new access JWT (reuse revokes family) |
+| POST | `/api/auth/logout` | Refresh token | Revoke refresh token (idempotent) |
+| GET | `/api/auth/me` | User JWT | Current portal user profile |
+| POST | `/api/auth/invites` | Admin | Generate single-use invite (raw token returned once) |
+
 ### Prior authorization
 
 | Method | Path | Auth | Description |

@@ -36,6 +36,40 @@ export function subscribeApiKey(cb) {
   return () => apiKeyListeners.delete(cb);
 }
 
+// ---------------------------------------------------------------------------
+// Portal session (human lane) — email+password+hCaptcha login issues a
+// short-lived access JWT plus a rotating refresh token. Both live in module
+// memory ONLY (same posture as the API key: nothing in localStorage), so a
+// browser refresh simply means signing in again.
+// ---------------------------------------------------------------------------
+let runtimeSession = null;
+const sessionListeners = new Set();
+function setRuntimeSession(session) {
+  runtimeSession = session || null;
+  sessionListeners.forEach((cb) => cb(runtimeSession));
+}
+export function getRuntimeSession() {
+  return runtimeSession;
+}
+export function subscribeSession(cb) {
+  sessionListeners.add(cb);
+  return () => sessionListeners.delete(cb);
+}
+function applySessionPayload(data) {
+  if (!data || !data.access_token) {
+    setRuntimeSession(null);
+    return null;
+  }
+  const session = {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    user: data.user || null,
+    expiresIn: data.expires_in,
+  };
+  setRuntimeSession(session);
+  return session;
+}
+
 // Dedicated axios instance so auth headers (Track 1 / Step 3) and request IDs
 // (Track 2 Step 22) can be attached in a single place later.
 const api = axios.create({
@@ -113,19 +147,55 @@ async function pollShadowJob(jobId, onProgress) {
 }
 
 api.interceptors.request.use((config) => {
-  if (runtimeApiKey) {
-    config.headers = config.headers || {};
+  config.headers = config.headers || {};
+  // Human lane wins when a portal session exists; machine lane (API key)
+  // covers integrations and the "use an API key instead" path.
+  if (runtimeSession?.accessToken) {
+    config.headers['Authorization'] = `Bearer ${runtimeSession.accessToken}`;
+  } else if (runtimeApiKey) {
     config.headers['X-API-Key'] = runtimeApiKey;
   }
   return config;
 });
 
+// Attempt one silent token refresh on 401 (non-auth endpoints), then retry
+// the original request with the new access token. Uses a bare axios call so
+// the refresh itself cannot re-enter this interceptor.
+let refreshInFlight = null;
+async function trySilentRefresh() {
+  if (!runtimeSession?.refreshToken) return false;
+  if (!refreshInFlight) {
+    refreshInFlight = axios
+      .post(`${API_BASE}/auth/refresh`, { refresh_token: runtimeSession.refreshToken })
+      .then((resp) => applySessionPayload(resp.data))
+      .catch(() => null)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  const session = await refreshInFlight;
+  return Boolean(session);
+}
+
 // On 401, surface a flag to the UI so it can prompt for a key once.
 api.interceptors.response.use(
   (resp) => resp,
-  (err) => {
-    if (err?.response?.status === 401) {
+  async (err) => {
+    const status = err?.response?.status;
+    const url = err?.config?.url || '';
+    const isAuthEndpoint = url.includes('/auth/');
+    if (status === 401 && !isAuthEndpoint && !err.config.__retriedAfterRefresh) {
+      const refreshed = await trySilentRefresh();
+      if (refreshed) {
+        err.config.__retriedAfterRefresh = true;
+        return api.request(err.config);
+      }
+    }
+    if (status === 401) {
       apiKeyListeners.forEach((cb) => cb(null, { unauthorized: true }));
+      if (!isAuthEndpoint) {
+        setRuntimeSession(null);
+      }
     }
     return Promise.reject(err);
   },
@@ -388,6 +458,51 @@ const useStore = create((set, get) => ({
     set({ apiKey: key });
   },
 
+  // --- Portal session (human lane: email + password + hCaptcha) ---
+  // Session tokens live in module memory only; the store mirrors them for
+  // reactive UI. `preferApiKey` lets a user explicitly choose the machine
+  // lane from the login page (kept out of the guard's way).
+  session: null,
+  user: null,
+  preferApiKey: false,
+  setPreferApiKey: (value) => set({ preferApiKey: Boolean(value) }),
+  login: async ({ email, password, captchaToken }) => {
+    const resp = await api.post('/auth/login', {
+      email,
+      password,
+      captcha_token: captchaToken || null,
+    });
+    const session = applySessionPayload(resp.data);
+    set({ session, user: session?.user || null, preferApiKey: false });
+    return session;
+  },
+  signup: async ({ inviteToken, email, password, fullName, captchaToken }) => {
+    const resp = await api.post('/auth/signup', {
+      invite_token: inviteToken,
+      email,
+      password,
+      full_name: fullName || null,
+      captcha_token: captchaToken || null,
+    });
+    const session = applySessionPayload(resp.data);
+    set({ session, user: session?.user || null, preferApiKey: false });
+    return session;
+  },
+  logout: async () => {
+    const refreshToken = runtimeSession?.refreshToken;
+    try {
+      if (refreshToken) {
+        await api.post('/auth/logout', { refresh_token: refreshToken });
+      }
+    } catch (err) {
+      // Logout must succeed locally even if the revoke call fails.
+      console.warn('Refresh-token revoke failed (signing out locally anyway)', err);
+    } finally {
+      applySessionPayload(null);
+      set({ session: null, user: null });
+    }
+  },
+
   // Demo-mode bootstrap: load synthetic patient + run one shadow audit.
   // Used by `?demo=true` and the "Try Sample Patient" CTA. Idempotent.
   runDemoBootstrap: async () => {
@@ -400,6 +515,12 @@ const useStore = create((set, get) => ({
     }
   },
 }));
+
+// Keep zustand state mirrored when the session changes outside store actions
+// (silent refresh success, or the 401 interceptor clearing a dead session).
+subscribeSession((session) => {
+  useStore.setState({ session, user: session?.user || null });
+});
 
 export default useStore;
 export { API_BASE, api };
